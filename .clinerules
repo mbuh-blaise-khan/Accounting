@@ -1,0 +1,52 @@
+# Project: Universal Accounting Learning & Practice Platform
+
+You are working on a bilingual (English/French, later Pidgin) accounting
+learning-and-practice web platform. Read PROGRESS_LOG.md before starting any
+task — it tells you exactly what session we're on and what already exists.
+Never assume; check the actual files on disk before writing code.
+
+## Non-negotiable rules for every session
+
+- Stack: React + Tailwind CSS (frontend), FastAPI + Pydantic + SQLAlchemy or
+  SQLModel + Alembic (backend), PostgreSQL (database).
+- The accounting engine must be deterministic. No AI-based logic decides a
+  debit/credit outcome. That is out of scope entirely for now.
+- OHADA and IFRS are separate, configurable "framework" contexts. Never merge
+  them into one generic chart of accounts. Never generate an "official"
+  OHADA chart of accounts from memory or training data — use a small,
+  clearly-labeled ILLUSTRATIVE/DEMO chart of accounts only, and say so in
+  code comments and seed data.
+- Every posted double-entry transaction must balance: total debits = total
+  credits. Enforce this at the database/service layer, not only in the UI.
+- Posted records are immutable or corrected via reversing entries — never
+  silently edited or deleted.
+- Currency: default XAF/FCFA, zero decimal places, but store currency and
+  precision as explicit configurable fields, not hard-coded assumptions.
+- Every backend change to accounting logic needs an automated test written
+  in the same session — do not defer testing to later.
+- Keep services separated and independently testable: transaction_service,
+  posting_service, ledger_service, trial_balance_service,
+  financial_statement_service, account_service, framework_service.
+- Repository layout: frontend/src/{components,pages,layouts,features,
+  services,hooks,i18n,utils}, backend/app/{api,core,models,schemas,services,
+  repositories,accounting,learning,tests}, backend/alembic/, docs/, scripts/,
+  .env.example, README.md.
+- UI must be usable on a phone-width browser from the start. This is a
+  responsive web app, NOT a native mobile app.
+- Store English/French strings separately from application logic (i18n
+  folder), even before full translation content exists.
+
+## Working style
+
+- Only work on the session I explicitly tell you to work on. Do not jump
+  ahead to future sessions even if it seems efficient.
+- Before writing code, briefly restate your plan for the session and wait
+  for me to confirm, unless I've told you to proceed directly.
+- At the end of every session, update PROGRESS_LOG.md yourself: add a new
+  entry with the date, session number, what was built, what decisions were
+  made, and what the next session should do. This is the most important
+  step — do not skip it even if I forget to ask.
+- If you hit a rate limit or get cut off mid-task, the next thing that
+  happens (even in a new chat, even with a different model) should be able
+  to read PROGRESS_LOG.md and continue correctly. Write the log entry with
+  that in mind.
