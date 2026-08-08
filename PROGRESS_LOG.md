@@ -16,9 +16,19 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 0 — Product Definition & Repo
-**Next session to run:** Session 1 — Local Development Environment
-**Blockers / open questions:** (none)
+**Last completed session:** Session 1 — Local Development Environment (partially built)
+**Next session to run:** Session 2 — Project Skeleton
+**Blockers / open questions:**
+- `pip install -r backend/requirements.txt` and `frontend/npm install` could NOT
+  be executed by the agent — the build environment has no working network route
+  to PyPI/npm (installs hang, no packages download). This is unrelated to the
+  project files (shell + venv work fine). The USER must run these installs
+  locally per README "Getting Started" and confirm.
+- PostgreSQL is NOT installed on this machine (psql/pg_ctl/createdb absent). The
+  USER must install PG and run the create-user/database commands from README.
+- No code app written yet — `backend/app/main.py` and the api service come in
+  Session 2. Session 2 cannot run/verify against the DB until PG + installs are
+  done.
 
 ---
 
@@ -48,7 +58,42 @@ HOW TO USE THIS FILE:
     README.md "Getting Started" + troubleshooting.
 
 ### Session 1 — Local Development Environment
-- Status: NOT STARTED
+- Status: PARTIALLY BUILT — scaffolding/config complete; installs + DB pending
+  user action
+- Date completed: 2026-08-08
+- What was built:
+  - Backend venv created at `backend/.venv` (Python 3.12.8 confirmed working).
+  - `backend/requirements.txt` (fastapi, uvicorn[standard], sqlalchemy, alembic,
+    psycopg2-binary, python-dotenv, pydantic, pydantic-settings,
+    passlib[bcrypt], python-jose[cryptography], python-multipart, pytest, httpx).
+  - `backend/.env.example` (DATABASE_URL, SECRET_KEY, ENV, FRONTEND_ORIGIN).
+  - Frontend scaffolded manually (Vite + React + Tailwind v4): `package.json`,
+    `vite.config.js`, `index.html`, `src/main.jsx`, `src/App.jsx`,
+    `src/index.css`. Uses Tailwind v4 via the `@tailwindcss/vite` plugin (no
+    postcss/tailwind.config needed).
+  - README.md rewritten with full "Getting Started" (exact commands for venv,
+    deps, Postgres install + create user/db, running backend + frontend) plus a
+    Windows/Mac/Linux troubleshooting section for Postgres errors.
+  - Fixed a stray-quote typo in docs/blueprint-summary.md MVP-definition line.
+  - Added scripts/.gitkeep (scripts/ dir was empty).
+- Decisions made:
+  - SQLAlchemy 2.0 (declarative) chosen (requirements.txt). Alembic for
+    migrations.
+  - JWT: passlib[bcrypt] + python-jose[cryptography]; SECRET_KEY/60-min defaults
+    recorded in .env.example (finalized in Session 3).
+  - Tailwind v4 + @tailwindcss/vite plugin (no tailwind.config.js).
+  - Default local DB/user: `uap_dev` / `uap`, password `uap_dev_password`,
+    DATABASE_URL port 5432.
+- What Session 2 needs to know:
+  - Session 2 builds backend/app/main.py (CORS for http://localhost:5173),
+    database connection from backend/.env DATABASE_URL, Alembic initial empty
+    migration, GET /health with real DB ping, frontend api service calling
+    /health, + one pytest.
+  - Before Session 2 can be verified, user must run: venv activation + pip
+    install, PostgreSQL install + create user/db, and npm install (all commands
+    in README).
+  - The `scripts/` folder may be used to store helper scripts (seeds, run
+    helpers) later.
 
 ### Session 2 — Project Skeleton
 - Status: NOT STARTED

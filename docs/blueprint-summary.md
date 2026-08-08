@@ -49,8 +49,8 @@ transaction  →  journal  →  ledger  →  trial balance  →  financial state
 
 ## 4. MVP definition
 
-The Minimum Viable Product (end of Session 11) is a used locally, where a user
-can:
+The Minimum Viable Product (end of Session 11) is a usable local application, a web
+app where a user can:
 
 1. Register and pick English or French (toggle switches instantly).
 2. Create a workspace with an OHADA **or** IFRS framework and a currency.
