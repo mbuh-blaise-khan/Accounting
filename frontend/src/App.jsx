@@ -1,9 +1,28 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { fetchHealth } from './services/api.js'
 
-// Landing / placeholder page for Session 1.
-// The Dashboard that talks to the backend arrives in Session 2.
+// Landing page. On load it calls the backend /health endpoint and shows
+// whether the API is up and the PostgreSQL database is reachable.
 function App() {
-  const [count, setCount] = useState(0)
+  const [health, setHealth] = useState(null) // { status, db }
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    fetchHealth()
+      .then((data) => {
+        if (!cancelled) setHealth(data)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const backendUp = health !== null && health.status === 'ok'
+  const dbUp = health?.db === true
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-6">
@@ -12,19 +31,44 @@ function App() {
           Universal Accounting Platform
         </h1>
         <p className="text-slate-600 mb-6">
-          React + Vite + Tailwind are working. Backend hookup comes in Session 2.
+          Frontend ↔ Backend ↔ Database connectivity check
         </p>
 
-        <button
-          type="button"
-          onClick={() => setCount((c) => c + 1)}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-white font-medium hover:bg-blue-700"
-        >
-          Tailwind button — click {count} time{count === 1 ? '' : 's'}
-        </button>
+        {/* Backend status */}
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 mb-3 text-left">
+          <span className="text-sm font-medium text-slate-700">API (FastAPI)</span>
+          <span
+            className={`text-sm font-semibold ${
+              error ? 'text-red-600' : backendUp ? 'text-green-600' : 'text-slate-400'
+            }`}
+          >
+            {error ? 'Unreachable' : health ? 'Connected ✓' : 'Loading…'}
+          </span>
+        </div>
+
+        {/* Database status */}
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 mb-6 text-left">
+          <span className="text-sm font-medium text-slate-700">Database (PostgreSQL)</span>
+          <span
+            className={`text-sm font-semibold ${
+              health ? (dbUp ? 'text-green-600' : 'text-red-600') : 'text-slate-400'
+            }`}
+          >
+            {health ? (dbUp ? 'Connected ✓' : 'Down ✗') : '—'}
+          </span>
+        </div>
+
+        {error && (
+          <p className="text-xs text-red-500 mb-4">
+            Is the backend running?{' '}
+            <code className="bg-slate-100 px-1 rounded">
+              cd backend &amp;&amp; uvicorn app.main:app --reload --port 8000
+            </code>
+          </p>
+        )}
 
         <p className="mt-6 text-xs text-slate-400">
-          Session 1 · Local development environment
+          Session 2 · Project skeleton — frontend, backend &amp; database connected
         </p>
       </div>
     </div>
@@ -32,3 +76,4 @@ function App() {
 }
 
 export default App
+

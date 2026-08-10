@@ -135,17 +135,29 @@ npm install
 ### 4. Run the backend dev server
 
 ```bash
-# from the project root, with the venv activated (step 1)
-uvicorn backend.app.main:app --reload --port 8000
+# with the venv activated (step 1), cd into backend/ and run:
+cd backend
+uvicorn app.main:app --reload --port 8000
 ```
 
 - API lives at http://localhost:8000
+- Health check: GET http://localhost:8000/health → `{"status":"ok","db":true|false}`
 - Interactive docs at http://localhost:8000/docs
 
-> `backend/app/main.py` is created in **Session 2**. Until then you can verify
-> the Python/tooling is installed and healthy with the checks in step 1
-> (`uvicorn --version`, `python -c "..."`). Once Session 2 lands, the command
-> above runs the real app.
+**Run backend tests (pytest):**
+
+```bash
+cd backend   # with venv activated
+python -m pytest app/tests -v
+```
+
+**Run database migrations (Alembic):**
+
+```bash
+cd backend   # with venv activated
+python -m alembic upgrade head       # apply pending migrations
+python -m alembic revision --autogenerate -m "describe change"   # new migration (Session 3+)
+```
 
 ### 5. Run the frontend dev server
 
@@ -155,7 +167,8 @@ cd frontend
 npm run dev
 ```
 
-Open http://localhost:5173 — you should see the placeholder landing page.
+Open http://localhost:5173 — the landing page calls the backend `/health`
+endpoint on load and shows whether the API and database are connected.
 
 ---
 

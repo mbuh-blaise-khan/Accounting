@@ -16,23 +16,65 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 1 — Local Development Environment (partially built)
-**Next session to run:** Session 2 — Project Skeleton
+**Last completed session:** Session 2 — Project Skeleton (frontend-backend-db connected)
+**Next session to run:** Session 3 — Authentication + Language Preference
 **Blockers / open questions:**
-- `pip install -r backend/requirements.txt` and `frontend/npm install` could NOT
-  be executed by the agent — the build environment has no working network route
-  to PyPI/npm (installs hang, no packages download). This is unrelated to the
-  project files (shell + venv work fine). The USER must run these installs
-  locally per README "Getting Started" and confirm.
-- PostgreSQL is NOT installed on this machine (psql/pg_ctl/createdb absent). The
-  USER must install PG and run the create-user/database commands from README.
-- No code app written yet — `backend/app/main.py` and the api service come in
-  Session 2. Session 2 cannot run/verify against the DB until PG + installs are
-  done.
+- RESOLVED during Session 2 prep: user installed backend deps + Postgres and ran
+  `npm install`. `backend/.env` exists (DATABASE_URL set). DB reachable
+  (`/health` → `db:true`). Alembic `0001` applied.
+- None outstanding.
 
 ---
 
 ## Session Log
+
+### Session 2 — Project Skeleton (frontend-backend-db connected)
+- Status: DONE
+- Date completed: 2026-08-10
+- What was built:
+  - Package structure: added `__init__.py` to `backend`, `backend/app` and all
+    backend subpackages so `app.*` is importable.
+  - `backend/app/core/config.py` — pydantic-settings `Settings` reading
+    `backend/.env` (DATABASE_URL, SECRET_KEY, ENV, FRONTEND_ORIGIN) with dev
+    defaults; path resolved from the file so it works from any cwd.
+  - `backend/app/core/database.py` — SQLAlchemy 2.0 engine (pool_pre_ping),
+    `SessionLocal`, declarative `Base`, `get_db` dependency, and
+    `check_db_connection()` (SELECT 1 probe) used by /health.
+  - `backend/app/main.py` — FastAPI app with CORS for the Vite origin
+    (http://localhost:5173) + a root "/" route.
+  - `backend/app/api/router.py` + `api/routes/health.py` — `GET /health`
+    returns `{"status":"ok","db":<bool from real DB ping>}`.
+  - Alembic wired: `backend/alembic.ini`, `alembic/env.py` (loads DATABASE_URL
+    from settings, wires Base.metadata), `script.py.mako`, and an EMPTY initial
+    migration `versions/0001_initial_empty.py`. `alembic upgrade head` applied
+    successfully (rc=0) — proves the migration pipeline + DB connection.
+  - Frontend: `frontend/src/services/api.js` (fetch-based client, `fetchHealth`,
+    API_BASE from `VITE_API_BASE` default http://localhost:8000); `App.jsx`
+    rewritten to call `/health` on load and show API + DB status.
+  - `backend/app/tests/test_health.py` — 3 tests (db up / db down via
+    monkeypatch, and a live-DB integration check that skips if unreachable).
+  - README: updated backend run/test/migrate commands (run from `backend/`),
+    added /health endpoint info.
+- Verification performed (all passed):
+  - `pytest app/tests` → 3 passed.
+  - `alembic upgrade head` → rc=0 (created alembic_version in Postgres).
+  - Live server boot via uvicorn → "Application startup complete".
+  - `/health` via TestClient → HTTP 200 `{"status":"ok","db":true}` (real DB ping).
+  - `npm run build` → BUILD_RC=0 (28 modules; Tailwind compiled).
+- Decisions made:
+  - Run backend (uvicorn, pytest, alembic) from the `backend/` directory so
+    imports are `app.*` (not `backend.app.*`). Documented in README.
+  - SQLAlchemy 2.0 declarative (`DeclarativeBase`) for all models.
+  - `/health` uses a live `SELECT 1` round-trip via `check_db_connection()`.
+  - Test the /health db flag by calling through the module
+    (`database.check_db_connection()`) so monkeypatch works.
+- What Session 3 needs to know:
+  - Models live in `app/models`, import `Base` from `app.core.database`.
+  - New migrations: `cd backend && python -m alembic revision --autogenerate -m "..."`.
+  - Add routers: create `app/api/routes/xxx.py` and include in `app/api/router.py`.
+  - Session 3 adds `users` table + auth (register/login/me), passlib[bcrypt] +
+    python-jose JWT, i18n skeleton + language toggle, protected Dashboard, and
+    auth tests.
 
 ### Session 0 — Product Definition & Repo
 - Status: DONE
@@ -94,9 +136,6 @@ HOW TO USE THIS FILE:
     in README).
   - The `scripts/` folder may be used to store helper scripts (seeds, run
     helpers) later.
-
-### Session 2 — Project Skeleton
-- Status: NOT STARTED
 
 ### Session 3 — Authentication + Language Preference
 - Status: NOT STARTED
