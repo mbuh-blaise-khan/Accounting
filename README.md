@@ -159,6 +159,21 @@ python -m alembic upgrade head       # apply pending migrations
 python -m alembic revision --autogenerate -m "describe change"   # new migration (Session 3+)
 ```
 
+**Backend API endpoints (so far):**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Service + DB status |
+| POST | `/auth/register` | Create account (sets httpOnly JWT cookie) |
+| POST | `/auth/login` | Log in (sets httpOnly JWT cookie) |
+| POST | `/auth/logout` | Clear auth cookie |
+| GET | `/me` | Current user (protected) |
+| PATCH | `/me` | Update display_name / language_preference |
+
+The auth JWT is stored in an **httpOnly cookie** set by the backend, so it is
+never readable by frontend JavaScript. The frontend sends it automatically via
+`credentials: 'include'`.
+
 ### 5. Run the frontend dev server
 
 ```bash

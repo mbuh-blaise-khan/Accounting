@@ -25,5 +25,12 @@ class Settings(BaseSettings):
     ENV: str = "development"
     FRONTEND_ORIGIN: str = "http://localhost:5173"
 
+    # Auth / JWT (Session 3)
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    COOKIE_NAME: str = "access_token"
+    # Set True only behind HTTPS (production). Kept False for local dev.
+    COOKIE_SECURE: bool = False
+
 
 settings = Settings()

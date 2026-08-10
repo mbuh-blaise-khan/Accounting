@@ -16,19 +16,69 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 2 — Project Skeleton (frontend-backend-db connected)
-**Next session to run:** Session 3 — Authentication + Language Preference
-**Blockers / open questions:**
-- RESOLVED during Session 2 prep: user installed backend deps + Postgres and ran
-  `npm install`. `backend/.env` exists (DATABASE_URL set). DB reachable
-  (`/health` → `db:true`). Alembic `0001` applied.
-- None outstanding.
+**Last completed session:** Session 3 — Authentication + Language Preference
+**Next session to run:** Session 4 — Workspace & Framework Selection
+**Blockers / open questions:** None outstanding. (Auth cookie choice locked:
+JWT in an httpOnly cookie — see Session 3 entry.)
 
 ---
 
 ## Session Log
 
+### Session 3 — Authentication + Language Preference
+- Status: DONE
+- Date completed: 2026-08-10
+- What was built:
+  - `users` table (migration `0002`) + `app/models/user.py`: id, email, hashed_password,
+    display_name, language_preference (SQLAlchemy Enum en/fr, native_enum=False so
+    "pidgin"/others can be added later without a schema change), created_at.
+  - `app/core/security.py`: password hashing + JWT create/decode.
+    IMPORTANT DECISION: uses the `bcrypt` library DIRECTLY, not passlib —
+    passlib 1.7.4 is incompatible with installed bcrypt 4.x (its backend probe
+    passes a >72-byte secret that bcrypt 4.x rejects, crashing hashing). Direct
+    bcrypt is stable. Passwords never stored in plaintext (bcrypt `$2b$` hashes).
+  - `POST /auth/register`, `POST /auth/login`, `POST /auth/logout` (auth router,
+    prefix /auth). Register/login set the JWT as an **httpOnly cookie**.
+  - `GET /me`, `PATCH /me` (users router, no prefix, per spec). PATCH persists
+    language_preference / display_name.
+  - `app/api/deps.py`: `get_current_user` protected-route dependency — reads JWT
+    from `Authorization: Bearer` header OR the httpOnly `access_token` cookie,
+    decodes, loads user, raises 401 otherwise.
+  - Frontend i18n: `src/i18n/{en,fr}.json` (nav + login + register + dashboard +
+    status strings), `src/i18n/index.jsx` (LanguageProvider + useLanguage + t),
+    `src/components/LanguageToggle.jsx` (instant EN<->FR switch, no reload).
+  - Frontend auth: `src/services/api.js` (register/login/logout/me/updateMe with
+    credentials:'include'), `src/context/AuthContext.jsx` (reloadUser on mount,
+    login/register/logout/setUserLanguage), pages LoginPage/RegisterPage/HomePage/
+    DashboardPage (mobile-responsive, Tailwind), App.jsx wires providers + a
+    lightweight view switch; **Dashboard only renders when authed**.
+  - Language toggle persists per-user: setUserLanguage → PATCH /me.
+  - Tests (`app/tests/test_auth.py`, SQLite in-memory isolation via conftest):
+    register success + cookie, password not plaintext ($2b$ hash), duplicate email
+    409, login success, login wrong password 401, login unknown email 401, /me with
+    valid token 200, /me missing token 401, /me invalid token 401.
+  - README + backend/.env.example updated (JWT settings, auth endpoint table,
+    httpOnly-cookie note).
+- Security/config decision (user-directed): JWT stored in an **httpOnly cookie**
+  set by backend rather than localStorage — reason: httpOnly cookies are not
+  readable by frontend JS, so a script-injection/XSS bug cannot exfiltrate the
+  token; safer default for this stage. Frontend sends it via credentials:'include'.
+- Verification:
+  - `pytest app/tests` → 12 passed.
+  - `alembic upgrade head` → applied 0002 (rc=0).
+  - Live end-to-end smoke vs real Postgres: register 200+cookie, /me 200,
+    /me w/o token 401, duplicate 409, login wrong pw 401, login ok 200+cookie;
+    test user cleaned up.
+  - `npm run build` → rc=0 (37 modules).
+- What Session 4 needs to know:
+  - Auth dependency `get_current_user` (app.api.deps) ready for protected org routes.
+  - `Base.metadata` includes users; new tables added to app/models and auto-migrated
+    via `python -m alembic revision --autogenerate -m "..."`.
+  - i18n + LanguageProvider are app-wide; add new strings to en.json/fr.json.
+  - Frontend has no router dependency yet — Session 4 may add pages/views through
+    the existing lightweight view switch or introduce react-router.
 ### Session 2 — Project Skeleton (frontend-backend-db connected)
+
 - Status: DONE
 - Date completed: 2026-08-10
 - What was built:
@@ -136,9 +186,6 @@ HOW TO USE THIS FILE:
     in README).
   - The `scripts/` folder may be used to store helper scripts (seeds, run
     helpers) later.
-
-### Session 3 — Authentication + Language Preference
-- Status: NOT STARTED
 
 ### Session 4 — Workspace & Framework Selection
 - Status: NOT STARTED

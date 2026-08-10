@@ -1,77 +1,117 @@
-import { useEffect, useState } from 'react'
-import { fetchHealth } from './services/api.js'
+import { useState } from 'react'
+import { AuthProvider, useAuth } from './context/AuthContext.jsx'
+import { LanguageProvider, useLanguage } from './i18n/index.jsx'
+import LanguageToggle from './components/LanguageToggle.jsx'
+import HomePage from './pages/HomePage.jsx'
+import LoginPage from './pages/LoginPage.jsx'
+import RegisterPage from './pages/RegisterPage.jsx'
+import DashboardPage from './pages/DashboardPage.jsx'
 
-// Landing page. On load it calls the backend /health endpoint and shows
-// whether the API is up and the PostgreSQL database is reachable.
-function App() {
-  const [health, setHealth] = useState(null) // { status, db }
-  const [error, setError] = useState(null)
+// Lightweight client-side view switch for the MVP (no router dependency yet).
+function AppShell() {
+  const { t } = useLanguage()
+  const { status } = useAuth()
+  const [view, setView] = useState('home') // 'home' | 'login' | 'register'
 
-  useEffect(() => {
-    let cancelled = false
-    fetchHealth()
-      .then((data) => {
-        if (!cancelled) setHealth(data)
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const goHome = () => setView('home')
+  const goLogin = () => setView('login')
+  const goRegister = () => setView('register')
 
-  const backendUp = health !== null && health.status === 'ok'
-  const dbUp = health?.db === true
+  // Protected: the Dashboard only renders when authenticated.
+  if (status === 'authed') {
+    return (
+      <div>
+        <Header />
+        <DashboardPage />
+      </div>
+    )
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-slate-500">{t('common.loading')}</p>
+      </div>
+    )
+  }
+
+  // Guest
+  return (
+    <div>
+      <Header onHome={goHome} onLogin={goLogin} onRegister={goRegister} />
+      {view === 'login' && <LoginPage onSwitchToRegister={goRegister} />}
+      {view === 'register' && <RegisterPage onSwitchToLogin={goLogin} />}
+      {view === 'home' && (
+        <HomePage onCreateAccount={goRegister} onLogin={goLogin} />
+      )}
+    </div>
+  )
+}
+
+function Header({ onHome, onLogin, onRegister }) {
+  const { t } = useLanguage()
+  const { status, logout } = useAuth()
+  const authed = status === 'authed'
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-6">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">
-          Universal Accounting Platform
-        </h1>
-        <p className="text-slate-600 mb-6">
-          Frontend ↔ Backend ↔ Database connectivity check
-        </p>
+    <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
+      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+        <button
+          type="button"
+          onClick={onHome}
+          className="text-base font-bold text-slate-900"
+        >
+          {t('app.title')}
+        </button>
 
-        {/* Backend status */}
-        <div className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 mb-3 text-left">
-          <span className="text-sm font-medium text-slate-700">API (FastAPI)</span>
-          <span
-            className={`text-sm font-semibold ${
-              error ? 'text-red-600' : backendUp ? 'text-green-600' : 'text-slate-400'
-            }`}
-          >
-            {error ? 'Unreachable' : health ? 'Connected ✓' : 'Loading…'}
-          </span>
+        <div className="flex items-center gap-2">
+          {authed ? (
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            >
+              {t('nav.logout')}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onHome}
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                {t('nav.home')}
+              </button>
+              <button
+                type="button"
+                onClick={onLogin}
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                {t('nav.login')}
+              </button>
+              <button
+                type="button"
+                onClick={onRegister}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                {t('nav.register')}
+              </button>
+            </>
+          )}
+          <LanguageToggle />
         </div>
-
-        {/* Database status */}
-        <div className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 mb-6 text-left">
-          <span className="text-sm font-medium text-slate-700">Database (PostgreSQL)</span>
-          <span
-            className={`text-sm font-semibold ${
-              health ? (dbUp ? 'text-green-600' : 'text-red-600') : 'text-slate-400'
-            }`}
-          >
-            {health ? (dbUp ? 'Connected ✓' : 'Down ✗') : '—'}
-          </span>
-        </div>
-
-        {error && (
-          <p className="text-xs text-red-500 mb-4">
-            Is the backend running?{' '}
-            <code className="bg-slate-100 px-1 rounded">
-              cd backend &amp;&amp; uvicorn app.main:app --reload --port 8000
-            </code>
-          </p>
-        )}
-
-        <p className="mt-6 text-xs text-slate-400">
-          Session 2 · Project skeleton — frontend, backend &amp; database connected
-        </p>
       </div>
-    </div>
+    </header>
+  )
+}
+
+function App() {
+  return (
+    <LanguageProvider>
+      <AuthProvider>
+        <AppShell />
+      </AuthProvider>
+    </LanguageProvider>
   )
 }
 

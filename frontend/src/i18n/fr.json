@@ -1,0 +1,41 @@
+{
+  "app.title": "Plateforme Universelle de Comptabilité",
+  "app.subtitle": "Apprenez et pratiquez la comptabilité en langage simple",
+
+  "nav.home": "Accueil",
+  "nav.login": "Connexion",
+  "nav.register": "Inscription",
+  "nav.dashboard": "Tableau de bord",
+  "nav.logout": "Déconnexion",
+
+  "landing.tagline": "Saisissez une opération, suivez-la jusqu'aux états financiers.",
+  "landing.ctaLogin": "Se connecter",
+  "landing.ctaRegister": "Créer un compte gratuit",
+
+  "login.title": "Bon retour",
+  "login.email": "Email",
+  "login.password": "Mot de passe",
+  "login.submit": "Se connecter",
+  "login.error": "Email ou mot de passe incorrect.",
+
+  "register.title": "Créer votre compte",
+  "register.email": "Email",
+  "register.password": "Mot de passe",
+  "register.confirmPassword": "Confirmer le mot de passe",
+  "register.displayName": "Nom d'affichage",
+  "register.language": "Langue préférée",
+  "register.submit": "S'inscrire",
+  "register.passwordMismatch": "Les mots de passe ne correspondent pas.",
+  "register.error": "Impossible de créer votre compte. Essayez un autre email.",
+
+  "dashboard.welcome": "Bienvenue",
+  "dashboard.subtitle": "Vous êtes connecté. Vos espaces de travail apparaîtront ici à la Session 4.",
+  "dashboard.language": "Langue",
+
+  "common.loading": "Chargement…",
+  "status.api": "API",
+  "status.database": "Base de données",
+  "status.connected": "Connecté",
+  "status.down": "Hors ligne",
+  "status.unreachable": "Injoignable"
+}

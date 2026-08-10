@@ -1,0 +1,41 @@
+{
+  "app.title": "Universal Accounting Platform",
+  "app.subtitle": "Learn & practice accounting in plain language",
+
+  "nav.home": "Home",
+  "nav.login": "Log in",
+  "nav.register": "Sign up",
+  "nav.dashboard": "Dashboard",
+  "nav.logout": "Log out",
+
+  "landing.tagline": "Enter a transaction, trace it to a financial statement.",
+  "landing.ctaLogin": "Log in",
+  "landing.ctaRegister": "Create a free account",
+
+  "login.title": "Welcome back",
+  "login.email": "Email",
+  "login.password": "Password",
+  "login.submit": "Log in",
+  "login.error": "Incorrect email or password.",
+
+  "register.title": "Create your account",
+  "register.email": "Email",
+  "register.password": "Password",
+  "register.confirmPassword": "Confirm password",
+  "register.displayName": "Display name",
+  "register.language": "Preferred language",
+  "register.submit": "Sign up",
+  "register.passwordMismatch": "Passwords do not match.",
+  "register.error": "Could not create your account. Try a different email.",
+
+  "dashboard.welcome": "Welcome",
+  "dashboard.subtitle": "You are signed in. Your workspaces will appear here in Session 4.",
+  "dashboard.language": "Language",
+
+  "common.loading": "Loading…",
+  "status.api": "API",
+  "status.database": "Database",
+  "status.connected": "Connected",
+  "status.down": "Down",
+  "status.unreachable": "Unreachable"
+}
