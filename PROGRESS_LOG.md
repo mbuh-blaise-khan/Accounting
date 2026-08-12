@@ -16,16 +16,64 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 3 — Authentication + Language Preference
-**Next session to run:** Session 4 — Workspace & Framework Selection
-**Blockers / open questions:** None outstanding. (Auth cookie choice locked:
-JWT in an httpOnly cookie — see Session 3 entry.)
+**Last completed session:** Session 4 — Workspace & Framework Selection
+**Next session to run:** Session 5 — Chart of Accounts
+**Blockers / open questions:** None outstanding.
 
 ---
 
 ## Session Log
 
+### Session 4 — Workspace & Framework Selection
+- Status: DONE
+- Date completed: 2026-08-10
+- What was built:
+  - `organizations` table (migration `0003`): id, name, owner_user_id (FK users),
+    framework (Enum OHADA/IFRS), currency (default XAF), is_demo (bool), created_at.
+  - `organization_members`: org_id/user_id/role (owner|member), unique (org,user).
+  - `frameworks` + `framework_versions`: generic registry (code, name,
+    description_en/fr, is_active; versions with version_label/is_current) so new
+    frameworks or versions need no schema change. `frameworks`/`organization`
+    share `FrameworkCode` enum (models/enums.py).
+  - `app/models/enums.py` (FrameworkCode, MembershipRole).
+  - Services: `framework_service.ensure_default_frameworks()` (idempotent seed:
+    OHADA "SYSCOHADA (revision 2017)", IFRS "IFRS consolidated (2023)", each with
+    EN/FR plain-language descriptions) + `scripts/seed_frameworks.py` runner;
+    `organization_service` (create -> always attaches creator as OWNER member,
+    list-scoped-to-user, get-with-membership-check raising 404).
+  - API (protected): POST /organizations (201), GET /organizations, GET
+    /organizations/{id}, GET /frameworks (with versions). Cross-org access
+    returns 404 (not 403) to avoid leaking existence.
+  - Frontend: services/api.js (+fetchOrganizations/fetchOrganization/
+    createOrganization/fetchFrameworks), components/CreateWorkspace.jsx
+    (name, framework radio with plain-language description per lang, currency
+    default XAF, and a "Use a sample demo business" button that creates an
+    is_demo workspace — account seed data lands in Session 5), DashboardPage
+    rewritten to load orgs+frameworks, show the create flow when empty, else
+    list workspaces; i18n strings EN/FR added.
+  - Tests (test_organizations.py): creator becomes owner member; default
+    currency XAF; list scoped to my memberships; cross-org access 404 + not in
+    list; demo flag; frameworks listed with descriptions + current version;
+    unauthenticated 401. (Test DB also seeds frameworks via conftest.)
+  - DECISION: bcrypt rounds made configurable (BCRYPT_ROUNDS=4 default) — keeps
+    local dev/tests fast; raise to >=12 before production. (Symptom fixed:
+    passlib/bcrypt slowness was timing out test runs.)
+- Verification:
+  - `pytest app/tests` → 19 passed (1.55s).
+  - `alembic upgrade head` → applied 0003 (rc=0); `seed_frameworks` OK (2 rows).
+  - Live smoke vs real Postgres: /frameworks ['OHADA','IFRS']; create org 201
+    (OHADA, XAF, owner set); list 200 (1); get 200; second user cross-org 404;
+    second user list empty; test data cleaned up.
+  - `npm run build` → rc=0 (38 modules).
+- What Session 5 needs to know:
+  - Organizations exist; `is_demo` flag marks workspaces for the demo chart seed.
+  - Add the demo/illustrative chart of accounts seed (clearly labeled as
+    illustrative — never an "official" fabricated OHADA chart), accounts table,
+    GET/POST/PATCH /accounts, and the Chart of Accounts frontend page.
+  - Framework registry is seeded; `frameworks` FK available for accounts rows.
+  - Existing users: run `python -m scripts.seed_frameworks` after fresh DB.
 ### Session 3 — Authentication + Language Preference
+
 - Status: DONE
 - Date completed: 2026-08-10
 - What was built:
@@ -186,9 +234,6 @@ JWT in an httpOnly cookie — see Session 3 entry.)
     in README).
   - The `scripts/` folder may be used to store helper scripts (seeds, run
     helpers) later.
-
-### Session 4 — Workspace & Framework Selection
-- Status: NOT STARTED
 
 ### Session 5 — Chart of Accounts
 - Status: NOT STARTED

@@ -66,4 +66,24 @@ export function updateMe(data) {
   return request('/me', { method: 'PATCH', body: JSON.stringify(data) })
 }
 
+/** GET /organizations -> organizations the current user is a member of */
+export function fetchOrganizations() {
+  return request('/organizations')
+}
+
+/** GET /organizations/{id} -> single organization (member-only) */
+export function fetchOrganization(id) {
+  return request(`/organizations/${id}`)
+}
+
+/** POST /organizations -> create a workspace (creator becomes owner) */
+export function createOrganization(data) {
+  return request('/organizations', { method: 'POST', body: JSON.stringify(data) })
+}
+
+/** GET /frameworks -> available accounting frameworks with plain-language descriptions */
+export function fetchFrameworks() {
+  return request('/frameworks')
+}
+
 export default { fetchHealth }

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     COOKIE_NAME: str = "access_token"
     # Set True only behind HTTPS (production). Kept False for local dev.
     COOKIE_SECURE: bool = False
+    # bcrypt cost factor. Lower = faster hashing (useful for local dev/tests).
+    # Raise to >=12 before any production deployment.
+    BCRYPT_ROUNDS: int = 4
 
 
 settings = Settings()

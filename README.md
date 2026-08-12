@@ -169,6 +169,10 @@ python -m alembic revision --autogenerate -m "describe change"   # new migration
 | POST | `/auth/logout` | Clear auth cookie |
 | GET | `/me` | Current user (protected) |
 | PATCH | `/me` | Update display_name / language_preference |
+| POST | `/organizations` | Create a workspace (creator becomes owner) |
+| GET | `/organizations` | My workspaces |
+| GET | `/organizations/{id}` | Workspace detail (members only) |
+| GET | `/frameworks` | Available accounting frameworks (descriptions + versions) |
 
 The auth JWT is stored in an **httpOnly cookie** set by the backend, so it is
 never readable by frontend JavaScript. The frontend sends it automatically via

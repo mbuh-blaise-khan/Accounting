@@ -20,6 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.core.database import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.services.framework_service import ensure_default_frameworks  # noqa: E402
 
 engine = create_engine(
     "sqlite://",
@@ -32,6 +33,12 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 @pytest.fixture(scope="session", autouse=True)
 def _test_schema():
     Base.metadata.create_all(bind=engine)
+    # Seed the framework registry once (OHADA + IFRS) for tests that read it.
+    session = TestingSessionLocal()
+    try:
+        ensure_default_frameworks(session)
+    finally:
+        session.close()
     yield
     Base.metadata.drop_all(bind=engine)
 
@@ -64,6 +71,8 @@ def _clean_users_between_tests():
     from sqlalchemy import text
 
     with engine.begin() as conn:
+        conn.execute(text("DELETE FROM organization_members"))
+        conn.execute(text("DELETE FROM organizations"))
         conn.execute(text("DELETE FROM users"))
 
 
