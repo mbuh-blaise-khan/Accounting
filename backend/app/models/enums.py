@@ -12,3 +12,25 @@ class FrameworkCode(str, enum.Enum):
 class MembershipRole(str, enum.Enum):
     owner = "owner"
     member = "member"
+
+
+class AccountClass(str, enum.Enum):
+    """High-level, plain-language account groups (kept non-accountant friendly).
+
+    These are NOT the numbered OHADA classes (1-8) — this is illustrative demo
+    data only. The account_class drives how the Chart of Accounts page groups
+    accounts and how normal_balance is inferred in the seed.
+    """
+
+    asset = "asset"
+    liability = "liability"
+    equity = "equity"
+    revenue = "revenue"
+    expense = "expense"
+
+
+class NormalBalance(str, enum.Enum):
+    """The side an account normally increases on (debit or credit)."""
+
+    debit = "debit"
+    credit = "credit"

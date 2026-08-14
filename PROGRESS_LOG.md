@@ -16,13 +16,81 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 4 — Workspace & Framework Selection
-**Next session to run:** Session 5 — Chart of Accounts
+**Last completed session:** Session 5 — Chart of Accounts
+**Next session to run:** Session 6 — First Transaction
 **Blockers / open questions:** None outstanding.
 
 ---
 
 ## Session Log
+
+### Session 5 — Chart of Accounts
+- Status: DONE
+- Date completed: 2026-08-14
+- What was built:
+  - `accounts` table (migration `0004`): id, organization_id (FK), framework
+    (Enum OHADA/IFRS), code, name_en, name_fr, account_class (plain classes:
+    asset/liability/equity/revenue/expense), parent_account_id (nullable
+    self-FK), normal_balance (debit/credit), is_system_default, active,
+    description, created_at. Unique constraint (organization_id, framework,
+    code) enforces "code unique within org+framework".
+  - New enums: `AccountClass`, `NormalBalance` (models/enums.py); new model
+    `app/models/account.py`.
+  - `app/services/account_service.py`: membership-scoped `list_accounts`,
+    `create_custom_account` (rejects duplicate code 409 + mismatched framework
+    400 + bad parent 400), `update_account` (edit names / toggle active) with
+    the "cannot deactivate an account with posted transactions" rule wired to
+    `has_posted_transactions()` — a PLACEHOLDER that returns False until
+    Session 6 adds transactions (todo noted).
+  - ILLUSTRATIVE/DEMO chart: `ILLUSTRATIVE_CHART` constant (18 plain-language
+    accounts: cash, bank, receivables, inventory, equipment, payables, loans,
+    capital, retained earnings, sales, service revenue, purchases, rent,
+    salaries, utilities, advertising, supplies, other expenses). normal_balance
+    is derived deterministically from account class. Clearly labeled
+    "illustrative demo data — replace with a reviewed/licensed official chart
+    before any real production or compliance use" (in code comments + seed
+    script + UI banner + acceptance criteria). NOT an official OHADA/IFRS chart.
+  - `seed_illustrative_chart()` service fn + `scripts/seed_coa.py` runner
+    (`python -m scripts.seed_coa <org_id> [--framework ...]`, idempotent).
+    Demo workspaces are now auto-seeded on creation (organization_service
+    create_organization calls seed when is_demo=True) — fulfills Session 4's
+    promised hook.
+  - API (protected, org-scoped): GET /accounts?organization_id=, POST
+    /accounts, PATCH /accounts/{id}?organization_id=. Cross-org access → 404
+    (not 403). Added to api/router.py.
+  - Frontend: `services/api.js` (+fetchAccounts/createAccount/updateAccount),
+    new `pages/ChartOfAccountsPage.jsx` (grouped by class, search, create /
+    edit / deactivate, plain labels + "System"/"Inactive" badges, EN/FR
+    names), DashboardPage opens a workspace's chart via an "Open chart of
+    accounts" button; i18n EN/FR strings added. Mobile-responsive Tailwind.
+  - Tests (test_accounts.py, 11 new): seed runs clean + idempotent; demo org
+    auto-seeds; duplicate code rejected (409); same code allowed across
+    frameworks; mismatched framework rejected; invalid normal_balance rejected
+    (422); account list scoped per org (cross-org 404 + empty for others);
+    PATCH edit name + toggle active; deactivation placeholder rule; custom
+    account not system default; unauth 401. conftest cleanup now also deletes
+    `accounts`.
+  - DECISIONS: (1) Same illustrative set for every framework label — the
+    `framework` column tags OHADA vs IFRS context rather than differing codes;
+    honest & safe given "never fabricate official chart". (2) account_class
+    uses plain non-accountant classes (asset/liability/equity/revenue/expense)
+    rather than numbered OHADA classes 1-8. (3) normal_balance auto-derived
+    from class in seed (deterministic).
+- Verification:
+  - `pytest app/tests` → 30 passed (1.48s).
+  - `alembic upgrade head --sql` → valid SQL for `accounts`.
+  - Live: `alembic upgrade head` applied 0004 on real Postgres (rc=0).
+  - Live: `seed_coa 2` → 18 rows on demo IFRS org; accounts present with
+    correct normal_balance + is_system_default.
+  - `npm run build` → rc=0 (39 modules).
+- What Session 6 needs to know:
+  - Account codes/classes established; `accounts.active` + `normal_balance`
+    available for posting. `has_posted_transactions(account_id)` in
+    account_service is a placeholder — implement it in Session 6 (join
+    transaction_lines → transactions where status='posted') so the
+    deactivation rule actually blocks once transactions exist, then extend
+    its placeholder test to assert a 409.
+
 
 ### Session 4 — Workspace & Framework Selection
 - Status: DONE
@@ -236,7 +304,7 @@ HOW TO USE THIS FILE:
     helpers) later.
 
 ### Session 5 — Chart of Accounts
-- Status: NOT STARTED
+- Status: DONE (see full entry at the top of the session log)
 
 ### Session 6 — First Transaction
 - Status: NOT STARTED
@@ -270,4 +338,5 @@ here once decided, so a new tool doesn't quietly redo it differently:)
 - JWT strategy used (library, token lifetime) — (python-jose, HS256, 60 min in
   .env.example; Session 3)
 - Illustrative chart-of-accounts account codes chosen in Session 5 — (decide in
-  Session 5)
+  Session 5) → latest Session 5 entry above: same plain-language set for both
+  OHADA/IFRS labels; never claims to be official.

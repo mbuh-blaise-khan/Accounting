@@ -6,6 +6,7 @@ import { fetchFrameworks, fetchOrganizations } from '../services/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useLanguage } from '../i18n/index.jsx'
 import CreateWorkspace from '../components/CreateWorkspace.jsx'
+import ChartOfAccountsPage from './ChartOfAccountsPage.jsx'
 
 export default function DashboardPage() {
   const { t } = useLanguage()
@@ -13,6 +14,7 @@ export default function DashboardPage() {
   const [orgs, setOrgs] = useState(null) // null = loading
   const [frameworks, setFrameworks] = useState([])
   const [error, setError] = useState(null)
+  const [activeOrg, setActiveOrg] = useState(null) // set -> showing chart of accounts
 
   async function load() {
     setError(null)
@@ -31,6 +33,10 @@ export default function DashboardPage() {
   useEffect(() => {
     load()
   }, [])
+
+  if (activeOrg) {
+    return <ChartOfAccountsPage org={activeOrg} onBack={() => setActiveOrg(null)} />
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
@@ -89,6 +95,13 @@ export default function DashboardPage() {
                       <dd className="font-medium text-slate-800">{org.currency}</dd>
                     </div>
                   </dl>
+                  <button
+                    type="button"
+                    onClick={() => setActiveOrg(org)}
+                    className="mt-3 w-full rounded-lg border border-blue-600 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50"
+                  >
+                    {t('dashboard.openChart')}
+                  </button>
                 </li>
               ))}
             </ul>

@@ -45,13 +45,13 @@
 - [ ] Tests: creator becomes owner; cross-org access rejected (authorization)
 
 ## Session 5 — Chart of Accounts
-- [ ] `accounts` table: id, organization_id, framework, code, name_en, name_fr, account_class, parent_account_id, normal_balance, is_system_default, active, description
-- [ ] Seed script for a small ILLUSTRATIVE chart (10–20 accounts) for BOTH OHADA- and IFRS-labeled sets
-- [ ] Seed data clearly labeled "illustrative demo data — replace before production/compliance use"
-- [ ] API: GET /accounts (scoped), POST /accounts, PATCH /accounts/{id}
-- [ ] Frontend Chart of Accounts page: grouped by class, search, create/edit/deactivate; plain labels
-- [ ] Validation: code unique per org+framework; normal_balance ∈ {debit, credit}; cannot deactivate account with posted transactions (rule + placeholder)
-- [ ] Tests: seed runs clean, duplicate code rejected, list scoped per org
+- [x] `accounts` table: id, organization_id, framework, code, name_en, name_fr, account_class, parent_account_id, normal_balance, is_system_default, active, description
+- [x] Seed script for a small ILLUSTRATIVE chart (10–20 accounts) for BOTH OHADA- and IFRS-labeled sets
+- [x] Seed data clearly labeled "illustrative demo data — replace before production/compliance use"
+- [x] API: GET /accounts (scoped), POST /accounts, PATCH /accounts/{id}
+- [x] Frontend Chart of Accounts page: grouped by class, search, create/edit/deactivate; plain labels
+- [x] Validation: code unique per org+framework; normal_balance ∈ {debit, credit}; cannot deactivate account with posted transactions (rule + placeholder)
+- [x] Tests: seed runs clean, duplicate code rejected, list scoped per org
 
 ## Session 6 — First Transaction
 - [ ] `transactions` + `transaction_lines` tables (≥2 lines, non-negative amounts, balance enforced before posted)

@@ -72,6 +72,7 @@ def _clean_users_between_tests():
 
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM organization_members"))
+        conn.execute(text("DELETE FROM accounts"))
         conn.execute(text("DELETE FROM organizations"))
         conn.execute(text("DELETE FROM users"))
 

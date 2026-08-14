@@ -38,6 +38,14 @@ def create_organization(
     db.add(membership)
     db.commit()
     db.refresh(org)
+
+    # Demo workspaces get the ILLUSTRATIVE chart of accounts immediately so the
+    # user can explore without a blank chart. (Session 5.)
+    if is_demo:
+        from app.services.account_service import seed_illustrative_chart
+
+        seed_illustrative_chart(db, org.id)
+
     return org
 
 

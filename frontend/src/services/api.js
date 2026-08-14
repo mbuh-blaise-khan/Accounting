@@ -86,4 +86,22 @@ export function fetchFrameworks() {
   return request('/frameworks')
 }
 
+/** GET /accounts?organization_id={id} -> the org's chart of accounts */
+export function fetchAccounts(organizationId) {
+  return request(`/accounts?organization_id=${organizationId}`)
+}
+
+/** POST /accounts -> create a user-defined custom account */
+export function createAccount(data) {
+  return request('/accounts', { method: 'POST', body: JSON.stringify(data) })
+}
+
+/** PATCH /accounts/{id}?organization_id={id} -> edit name / toggle active */
+export function updateAccount(accountId, organizationId, data) {
+  return request(`/accounts/${accountId}?organization_id=${organizationId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
 export default { fetchHealth }
