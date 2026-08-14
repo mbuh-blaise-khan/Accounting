@@ -71,6 +71,8 @@ def _clean_users_between_tests():
     from sqlalchemy import text
 
     with engine.begin() as conn:
+        conn.execute(text("DELETE FROM transaction_lines"))
+        conn.execute(text("DELETE FROM transactions"))
         conn.execute(text("DELETE FROM organization_members"))
         conn.execute(text("DELETE FROM accounts"))
         conn.execute(text("DELETE FROM organizations"))

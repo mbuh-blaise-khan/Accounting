@@ -9,8 +9,9 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.account import Account
-from app.models.enums import AccountClass, FrameworkCode, NormalBalance
+from app.models.enums import AccountClass, FrameworkCode, NormalBalance, TransactionStatus
 from app.models.organization import Organization, OrganizationMember
+from app.models.transaction import Transaction, TransactionLine
 from app.models.user import User
 
 # ---------------------------------------------------------------------------
@@ -204,17 +205,22 @@ def create_custom_account(
 
 
 def has_posted_transactions(db: Session, account_id: int) -> bool:
-    """Return True if the account appears in any posted transaction line.
+    """Return True if the account appears in a transaction that has been posted.
 
-    PLACEHOLDER (Session 5): the `transactions` / `transaction_lines` tables
-    are built in Session 6, so this always returns False for now. When those
-    tables exist, reimplement by joining transaction_lines -> transactions where
-    status == 'posted'. The PATCH handler below already rejects deactivation
-    when this returns True, so the rule is enforced as soon as data exists.
-
-    TODO(Session 6): real implementation after transactions table is added.
+    A draft transaction does not count — the account can still be deactivated
+    while only referenced by drafts. Once posted (or reversed), the account has
+    accounting history and must not be deactivated.
     """
-    return False
+    line = (
+        db.query(TransactionLine)
+        .join(Transaction, Transaction.id == TransactionLine.transaction_id)
+        .filter(
+            TransactionLine.account_id == account_id,
+            Transaction.status != TransactionStatus.draft,
+        )
+        .first()
+    )
+    return line is not None
 
 
 def update_account(

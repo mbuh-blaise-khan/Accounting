@@ -16,13 +16,70 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 5 — Chart of Accounts
-**Next session to run:** Session 6 — First Transaction
+**Last completed session:** Session 6 — First Transaction Entry & Posting
+**Next session to run:** Session 7 — Cash Book and Journal
 **Blockers / open questions:** None outstanding.
 
 ---
 
 ## Session Log
+
+### Session 6 — First Transaction Entry & Posting
+- Status: DONE
+- Date completed: 2026-08-14
+- What was built:
+  - `transactions` + `transaction_lines` tables (migration `0005`). Transaction:
+    org, plain-language description, status (draft/posted/reversed), posted_at,
+    created_by, created_at. Line: txn FK (cascade), account FK, non-negative
+    debit/credit (Numeric(16,2)), DB check constraints (amounts >= 0; a line
+    cannot be both zero). `TransactionStatus` enum added.
+  - `app/services/transaction_service.py`: create_draft_transaction (org-scoped;
+    enforces >=2 lines, non-negative amounts, exactly-one-side-per-line, lines
+    reference known + active accounts in the same org), list_transactions,
+    get_transaction (org-scoped), assert_editable (immutability guard), and a
+    serializer that denormalizes account code/name onto line output.
+  - `app/services/posting_service.py`: `post_transaction` RE-VERIFIES the
+    balance IN THE SERVICE LAYER (sum debits == sum credits) and rejects an
+    unbalanced draft with a clear 400 before marking it posted + posted_at
+    (immutable thereafter). `reverse_transaction` STUB: only a posted tx can be
+    reversed (409 otherwise); marks status 'reversed'. Real offsetting entries
+    deferred to the corrections work later.
+  - API (`api/routes/transactions.py`): POST /transactions (draft, 201), GET
+    /transactions?organization_id=, POST /transactions/{id}/post,
+    POST /transactions/{id}/reverse. All org-scoped (cross-org → 404). Wired
+    into api/router.py.
+  - Closed Session-5 handoff: `account_service.has_posted_transactions()` is now
+    REAL — joins transaction_lines→transactions where status != draft, so
+    deactivation of an account used in a posted tx is blocked (409). Updated the
+    old placeholder test and added blocking/draft scenarios.
+  - Frontend: `NewTransactionPage.jsx` beginner flow — plain-language
+    description → pick account + side (debit/credit) + amount per line → live
+    running totals with balanced/unbalanced indicator → review the D/C lines →
+    confirm post (UI only enables posting when balanced; backend independently
+    enforces) → "What happened / What this means for your accounts" success
+    screen (uses account normal_balance to say an account went up/down).
+    `api.js` +createTransaction/fetchTransactions/postTransaction. DashboardPage
+    now shows a workspace shell with tabs (Home / Chart of Accounts / New
+    Transaction) + cards. i18n EN/FR added.
+  - Tests (test_transactions.py, 14 new): draft creation; balanced posts;
+    unbalanced REJECTED at service (400, "balanced" error); >=2 lines required;
+    line cannot be both sides/neither; lines must reference known + active
+    accounts (inactive → 422); posted cannot be re-posted (409); immutability
+    guard rejects posted (assert_editable raises 409) while drafts stay
+    editable; reversal of a posted tx; draft/re-reversed reversal rejected (409);
+    list scoped per org; deactivation blocked once posted (409) but allowed for
+    draft-only usage. conftest cleanup now also deletes transaction tables.
+- Verification:
+  - `pytest app/tests` → 45 passed (2.79s) (30 prior + 15 new/updated).
+  - Live: `alembic upgrade head` applied 0005 on real Postgres (rc=0).
+  - `npm run build` → rc=0 (40 modules).
+- What Session 7 needs to know:
+  - Transactions carry status (posted/reversed) + posted_at and lines link to
+    accounts, so the journal read view can be built directly on top.
+  - Reversal is still a stub (marks reversed only) — real reversing entries are
+    part of the corrections work in a later session.
+  - No date column on transactions yet; decide whether the journal/cashbook
+    needs an entry date (then add it) or will use created_at for now.
 
 ### Session 5 — Chart of Accounts
 - Status: DONE
@@ -307,7 +364,7 @@ HOW TO USE THIS FILE:
 - Status: DONE (see full entry at the top of the session log)
 
 ### Session 6 — First Transaction
-- Status: NOT STARTED
+- Status: DONE (see full entry at the top of the session log)
 
 ### Session 7 — Cash Book and Journal
 - Status: NOT STARTED

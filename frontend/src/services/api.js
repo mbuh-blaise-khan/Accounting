@@ -104,4 +104,21 @@ export function updateAccount(accountId, organizationId, data) {
   })
 }
 
+/** POST /transactions -> create a draft transaction */
+export function createTransaction(data) {
+  return request('/transactions', { method: 'POST', body: JSON.stringify(data) })
+}
+
+/** GET /transactions?organization_id={id} -> list the org's transactions */
+export function fetchTransactions(organizationId) {
+  return request(`/transactions?organization_id=${organizationId}`)
+}
+
+/** POST /transactions/{id}/post?organization_id={id} -> post a draft (immutable) */
+export function postTransaction(organizationId, transactionId) {
+  return request(`/transactions/${transactionId}/post?organization_id=${organizationId}`, {
+    method: 'POST',
+  })
+}
+
 export default { fetchHealth }

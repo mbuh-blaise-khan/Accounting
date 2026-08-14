@@ -34,3 +34,16 @@ class NormalBalance(str, enum.Enum):
 
     debit = "debit"
     credit = "credit"
+
+
+class TransactionStatus(str, enum.Enum):
+    """Lifecycle of a transaction.
+
+    draft   -> editable, not yet verified/posted
+    posted  -> balanced, immutable (only correctable via a reversal)
+    reversed-> a reversing entry has been applied (stub in Session 6)
+    """
+
+    draft = "draft"
+    posted = "posted"
+    reversed = "reversed"

@@ -54,13 +54,13 @@
 - [x] Tests: seed runs clean, duplicate code rejected, list scoped per org
 
 ## Session 6 — First Transaction
-- [ ] `transactions` + `transaction_lines` tables (≥2 lines, non-negative amounts, balance enforced before posted)
-- [ ] Separate `transaction_service` and `posting_service` modules
-- [ ] API: POST /transactions (draft), POST /transactions/{id}/post (validate, mark posted, immutable), GET /transactions
-- [ ] Frontend New Transaction form: plain-language description → pick accounts/amounts → review D/C lines → confirm
-- [ ] "What happened / what this means" explanation after posting
-- [ ] SERVICE-layer rejection of unbalanced posting with clear error
-- [ ] Tests: balanced posts; unbalanced rejected; posted can't be edited/deleted (reversal stub); lines reference valid, active accounts
+- [x] `transactions` + `transaction_lines` tables (≥2 lines, non-negative amounts, balance enforced before posted)
+- [x] Separate `transaction_service` and `posting_service` modules
+- [x] API: POST /transactions (draft), POST /transactions/{id}/post (validate, mark posted, immutable), GET /transactions
+- [x] Frontend New Transaction form: plain-language description → pick accounts/amounts → review D/C lines → confirm
+- [x] "What happened / what this means" explanation after posting
+- [x] SERVICE-layer rejection of unbalanced posting with clear error
+- [x] Tests: balanced posts; unbalanced rejected; posted can't be edited/deleted (reversal stub); lines reference valid, active accounts
 
 ## Session 7 — Cash Book and Journal
 - [ ] Journal read view: date, reference, description, account number/name, debit, credit, narration, source, posting status, created by/timestamp

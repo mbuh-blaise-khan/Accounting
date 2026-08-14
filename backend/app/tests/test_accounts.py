@@ -141,21 +141,19 @@ def test_patch_edits_name_and_toggles_active(client):
     assert resp.json()["active"] is True
 
 
-def test_cannot_deactivate_account_with_posted_transactions_placeholder(
+def test_cannot_deactivate_account_with_no_posted_transactions(
     client, test_db_session
 ):
-    """Deactivation rule is wired; the check passes today (no transactions yet).
+    """An account with no posted transactions can be deactivated.
 
-    PLACEHOLDER: the `transactions` table does not exist until Session 6, so
-    has_posted_transactions() returns False and deactivation succeeds. When
-    transactions land, extend this test to assert a 409 when a posted
-    transaction references the account.
+    The rule that blocks deactivation once posted transactions exist is covered
+    in test_transactions.py (test_deactivate_account_blocked_after_posting).
     """
     _register(client)
     org = _create_org(client, is_demo=True).json()
     first = client.get(f"/accounts?organization_id={org['id']}").json()[0]
 
-    # The rule helper currently reports no posted transactions (TODO Session 6).
+    # No transaction references this account yet -> the rule allows deactivation.
     assert has_posted_transactions(test_db_session, first["id"]) is False
 
     resp = client.patch(

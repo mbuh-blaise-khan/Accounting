@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useLanguage } from '../i18n/index.jsx'
 import CreateWorkspace from '../components/CreateWorkspace.jsx'
 import ChartOfAccountsPage from './ChartOfAccountsPage.jsx'
+import NewTransactionPage from './NewTransactionPage.jsx'
 
 export default function DashboardPage() {
   const { t } = useLanguage()
@@ -14,7 +15,8 @@ export default function DashboardPage() {
   const [orgs, setOrgs] = useState(null) // null = loading
   const [frameworks, setFrameworks] = useState([])
   const [error, setError] = useState(null)
-  const [activeOrg, setActiveOrg] = useState(null) // set -> showing chart of accounts
+  const [activeOrg, setActiveOrg] = useState(null) // set -> inside a workspace
+  const [section, setSection] = useState('home') // home | accounts | newTransaction
 
   async function load() {
     setError(null)
@@ -35,7 +37,17 @@ export default function DashboardPage() {
   }, [])
 
   if (activeOrg) {
-    return <ChartOfAccountsPage org={activeOrg} onBack={() => setActiveOrg(null)} />
+    return (
+      <WorkSpace
+        org={activeOrg}
+        section={section}
+        onSectionChange={setSection}
+        onExit={() => {
+          setActiveOrg(null)
+          setSection('home')
+        }}
+      />
+    )
   }
 
   return (
@@ -109,5 +121,98 @@ export default function DashboardPage() {
         )}
       </div>
     </div>
+  )
+}
+
+function NavBtn({ active, onClick, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
+        active ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'
+      }`}
+    >
+      {label}
+    </button>
+  )
+}
+
+function WorkSpace({ org, section, onSectionChange, onExit }) {
+  const { t } = useLanguage()
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <nav className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-2 backdrop-blur">
+        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={onExit}
+            className="text-sm font-medium text-slate-600 hover:text-slate-900"
+          >
+            {org.name} — {t('dashboard.workspaces')}
+          </button>
+          <div className="flex gap-1">
+            <NavBtn active={section === 'home'} onClick={() => onSectionChange('home')} label={t('ws.home')} />
+            <NavBtn active={section === 'newTransaction'} onClick={() => onSectionChange('newTransaction')} label={t('ws.newTransaction')} />
+            <NavBtn active={section === 'accounts'} onClick={() => onSectionChange('accounts')} label={t('ws.accounts')} />
+          </div>
+        </div>
+      </nav>
+      <main>
+        {section === 'home' && (
+          <OrgHome
+            org={org}
+            onAccounts={() => onSectionChange('accounts')}
+            onNewTransaction={() => onSectionChange('newTransaction')}
+          />
+        )}
+        {section === 'accounts' && (
+          <ChartOfAccountsPage org={org} onBack={() => onSectionChange('home')} />
+        )}
+        {section === 'newTransaction' && (
+          <NewTransactionPage org={org} onBack={() => onSectionChange('home')} />
+        )}
+      </main>
+    </div>
+  )
+}
+
+function OrgHome({ org, onAccounts, onNewTransaction }) {
+  const { t } = useLanguage()
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-8">
+      <h2 className="text-2xl font-bold text-slate-900">{org.name}</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        {t('dashboard.framework')} {org.framework} · {t('dashboard.currency')} {org.currency}
+      </p>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <BigCard
+          title={t('ws.newTransactionTitle')}
+          desc={t('ws.newTransactionDesc')}
+          action={t('ws.newTransaction')}
+          onClick={onNewTransaction}
+        />
+        <BigCard
+          title={t('ws.accountsTitle')}
+          desc={t('ws.accountsDesc')}
+          action={t('ws.accounts')}
+          onClick={onAccounts}
+        />
+      </div>
+    </div>
+  )
+}
+
+function BigCard({ title, desc, action, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-blue-300"
+    >
+      <h3 className="font-semibold text-slate-900">{title}</h3>
+      <p className="mt-1 text-sm text-slate-600">{desc}</p>
+      <span className="mt-3 inline-block text-sm font-medium text-blue-600">{action} →</span>
+    </button>
   )
 }
