@@ -2,94 +2,26 @@
 
 Scoped to the user's memberships (an org's chart is only visible/editable by
 its members). Custom-account creation enforces code uniqueness within the
-org+framework pair. Deactivation enforces the "no posted transactions" rule
-(placeholder until Session 6 adds transactions).
+org+framework pair. Deactivation enforces the "no posted transactions" rule.
+
+The seeded chart data lives in app/accounting/:
+- OHADA workspaces get the REAL official SYSCOHADA structure (2017 révisé) from
+  docs/ohada-ifrs-source-reference.md (a representative subset, all 9 classes,
+  hierarchical via parent_account_id and ohada_class_number).
+- IFRS workspaces get an editable IAS-1-aligned STARTING TEMPLATE (IFRS has no
+  mandated chart of accounts; see the reference doc).
 """
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.accounting.ifrs_template import IFRS_TEMPLATE
+from app.accounting.ohada_chart import OHADA_CHART
 from app.models.account import Account
-from app.models.enums import AccountClass, FrameworkCode, NormalBalance, TransactionStatus
+from app.models.enums import FrameworkCode, NormalBalance, TransactionStatus
 from app.models.organization import Organization, OrganizationMember
 from app.models.transaction import Transaction, TransactionLine
 from app.models.user import User
 
-# ---------------------------------------------------------------------------
-# ILLUSTRATIVE / DEMO chart of accounts
-# ---------------------------------------------------------------------------
-# These account definitions are DEMO DATA ONLY. They are deliberately small and
-# plain so a non-accountant can understand them, and they are NOT derived from
-# any official OHADA or IFRS classification (never fabricate an official chart).
-#
-# >>> Replace with a reviewed / licensed official chart before any real
-# >>> production or compliance use.
-# ---------------------------------------------------------------------------
-
-# The same illustrative set is used for every framework label; the `framework`
-# column tags which context the rows belong to. normal_balance is inferred from
-# the account class here because that is deterministic (no AI decision).
-_CLASS_BALANCE: dict[str, str] = {
-    AccountClass.asset.value: NormalBalance.debit.value,
-    AccountClass.liability.value: NormalBalance.credit.value,
-    AccountClass.equity.value: NormalBalance.credit.value,
-    AccountClass.revenue.value: NormalBalance.credit.value,
-    AccountClass.expense.value: NormalBalance.debit.value,
-}
-
-
-def _ac(code: str, name_en: str, name_fr: str, account_class: AccountClass,
-        description: str = "") -> dict:
-    """Build one illustrative account row, deriving its normal balance."""
-    return {
-        "code": code,
-        "name_en": name_en,
-        "name_fr": name_fr,
-        "account_class": account_class.value,
-        "normal_balance": _CLASS_BALANCE[account_class.value],
-        "description": description,
-    }
-
-
-# ILLUSTRATIVE DEMO DATA — replace with a reviewed/licensed official chart
-# before any real production or compliance use.
-ILLUSTRATIVE_CHART: list[dict] = [
-    _ac("1000", "Cash", "Caisse", AccountClass.asset,
-        "Physical money on hand."),
-    _ac("1100", "Bank", "Banque", AccountClass.asset,
-        "Money held in a bank account."),
-    _ac("1200", "Accounts receivable", "Clients (créances)", AccountClass.asset,
-        "Money customers owe us."),
-    _ac("1300", "Inventory", "Stock de marchandises", AccountClass.asset,
-        "Goods we hold to sell."),
-    _ac("1400", "Equipment", "Équipement", AccountClass.asset,
-        "Machines, computers and tools used in the business."),
-    _ac("2000", "Accounts payable", "Fournisseurs (dettes)", AccountClass.liability,
-        "Money we owe to suppliers."),
-    _ac("2100", "Loans payable", "Emprunts", AccountClass.liability,
-        "Money we owe on a loan."),
-    _ac("3000", "Owner\u2019s capital", "Capital", AccountClass.equity,
-        "Money the owner put into the business."),
-    _ac("3100", "Retained earnings", "Réserves", AccountClass.equity,
-        "Profits kept in the business."),
-    _ac("4000", "Sales revenue", "Ventes", AccountClass.revenue,
-        "Money from selling goods."),
-    _ac("4100", "Service revenue", "Prestations de services", AccountClass.revenue,
-        "Money from providing services."),
-    _ac("5000", "Purchases", "Achats", AccountClass.expense,
-        "Cost of goods bought to resell."),
-    _ac("5100", "Rent expense", "Loyer", AccountClass.expense,
-        "Cost of renting the premises."),
-    _ac("5200", "Salaries expense", "Salaires", AccountClass.expense,
-        "Wages and salaries paid to staff."),
-    _ac("5300", "Utilities expense", "Factures d\u2019énergie", AccountClass.expense,
-        "Electricity, water and internet bills."),
-    _ac("5400", "Advertising expense", "Publicité", AccountClass.expense,
-        "Cost of promoting the business."),
-    _ac("5500", "Supplies expense", "Fournitures", AccountClass.expense,
-        "Cost of office supplies."),
-    _ac("5600", "Other expenses", "Autres charges", AccountClass.expense,
-        "Miscellaneous business expenses."),
-]
 
 def _ensure_org_access(db: Session, user: User, org_id: int) -> Organization:
     """Return the org if the user is a member; raise 404 otherwise.
@@ -129,12 +61,12 @@ def _get_owned_account(db: Session, user: User, org_id: int, account_id: int) ->
 
 
 def list_accounts(db: Session, user: User, org_id: int) -> list[Account]:
-    """All accounts in an org's chart (active + inactive), class then code."""
+    """All accounts in an org's chart (active + inactive), by code."""
     _ensure_org_access(db, user, org_id)
     return (
         db.query(Account)
         .filter(Account.organization_id == org_id)
-        .order_by(Account.account_class, Account.code)
+        .order_by(Account.code)
         .all()
     )
 
@@ -147,10 +79,11 @@ def create_custom_account(
     code: str,
     name_en: str,
     name_fr: str,
-    account_class: AccountClass,
+    account_class,
     normal_balance: NormalBalance,
     parent_account_id: int | None = None,
     description: str = "",
+    ohada_class_number: int | None = None,
 ) -> Account:
     """Create a user-defined account, enforcing org scoping + code uniqueness."""
     org = _ensure_org_access(db, user, organization_id)
@@ -197,6 +130,7 @@ def create_custom_account(
         is_system_default=False,
         active=True,
         description=description.strip(),
+        ohada_class_number=ohada_class_number,
     )
     db.add(account)
     db.commit()
@@ -256,35 +190,40 @@ def update_account(
     return account
 
 
-def seed_illustrative_chart(
-    db: Session, organization_id: int, framework: FrameworkCode | None = None
+# ---------------------------------------------------------------------------
+# Seeding
+# ---------------------------------------------------------------------------
+
+def _ohada_class_number(code: str) -> int | None:
+    """First digit of an OHADA code is its class (1-9); None otherwise."""
+    if code and code[0].isdigit():
+        return int(code[0])
+    return None
+
+
+def _insert_seed_entries(
+    db: Session, org: Organization, fw: FrameworkCode, entries: list[dict],
+    ohada: bool = True,
 ) -> list[Account]:
-    """Seed the ILLUSTRATIVE demo chart for an organization.
+    """Insert seed entries (idempotent), resolving parent codes within the org.
 
-    ILLUSTRATIVE DEMO DATA — replace with a reviewed/licensed official chart
-    before any real production or compliance use. Idempotent: existing accounts
-    by (org, framework, code) are left untouched.
+    Entries must be ordered parents-before-children; parents are resolved to
+    existing rows by code (either just-created or pre-existing). `ohada` marks
+    whether these entries carry a real OHADA class number (IFRS template does
+    not).
     """
-    org = db.get(Organization, organization_id)
-    if org is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
-        )
-    fw = framework if framework is not None else FrameworkCode(org.framework)
-
     created: list[Account] = []
-    for item in ILLUSTRATIVE_CHART:
-        existing = (
-            db.query(Account)
-            .filter(
-                Account.organization_id == org.id,
-                Account.framework == fw,
-                Account.code == item["code"],
-            )
-            .first()
-        )
-        if existing is not None:
-            continue  # idempotent
+    code_to_id: dict[str, int] = {}
+    for row in db.query(Account).filter(
+        Account.organization_id == org.id, Account.framework == fw
+    ):
+        code_to_id[row.code] = row.id
+
+    for item in entries:
+        existing_id = code_to_id.get(item["code"])
+        if existing_id is not None:
+            continue  # idempotent: already seeded
+        parent_id = code_to_id.get(item["parent"]) if item.get("parent") else None
         account = Account(
             organization_id=org.id,
             framework=fw,
@@ -292,13 +231,54 @@ def seed_illustrative_chart(
             name_en=item["name_en"],
             name_fr=item["name_fr"],
             account_class=item["account_class"],
+            parent_account_id=parent_id,
             normal_balance=item["normal_balance"],
             is_system_default=True,
             active=True,
-            description=item["description"],
+            description=item.get("description", ""),
+            ohada_class_number=(
+                _ohada_class_number(item["code"]) if ohada else None
+            ),
         )
         db.add(account)
+        db.flush()  # assign account.id so children can link via parent id
+        code_to_id[item["code"]] = account.id
         created.append(account)
 
     db.commit()
     return created
+
+
+def seed_ohada_chart(db: Session, org: Organization, fw: FrameworkCode) -> list[Account]:
+    """Seed the real official SYSCOHADA chart (representative subset).
+
+    Real data sourced from OHADA's 2017 révisé Acte Uniforme (see
+    app/accounting/ohada_chart.py). Seeded coverage is representative — this is
+    not the full ~900-line official list.
+    """
+    return _insert_seed_entries(db, org, fw, OHADA_CHART)
+
+
+def seed_ifrs_template(db: Session, org: Organization, fw: FrameworkCode) -> list[Account]:
+    """Seed the editable IAS-1-aligned IFRS starting template.
+
+    IFRS has NO mandated chart of accounts (see the reference doc), so this is
+    a flexible template the business is expected to adapt — not a fixed
+    official list. ohada_class_number stays NULL.
+    """
+    return _insert_seed_entries(db, org, fw, IFRS_TEMPLATE, ohada=False)
+
+
+def seed_chart_for_organization(
+    db: Session, organization_id: int, framework: FrameworkCode | None = None
+) -> list[Account]:
+    """Seed the correct chart structure for an organization by its framework."""
+    org = db.get(Organization, organization_id)
+    if org is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
+        )
+    fw = framework if framework is not None else FrameworkCode(org.framework)
+    if fw == FrameworkCode.IFRS:
+        return seed_ifrs_template(db, org, fw)
+    return seed_ohada_chart(db, org, fw)

@@ -3,10 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "scripts": {
+    "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:lookup": "node src/utils/accountLookup.test.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

@@ -16,13 +16,72 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 6 — First Transaction Entry & Posting
+**Last completed session:** Session 6b — OHADA/IFRS standards-compliant chart of accounts with autocomplete
 **Next session to run:** Session 7 — Cash Book and Journal
 **Blockers / open questions:** None outstanding.
 
 ---
 
 ## Session Log
+
+### Session 6b — OHADA/IFRS standards-compliant chart of accounts with autocomplete
+- Status: DONE
+- Date completed: 2026-08-15
+- Scope note (stated up front): this session covers account STRUCTURE and NUMBERING
+  only (classes, codes, names, hierarchy). Deeper accounting principles/measurement
+  (depreciation methods, revenue recognition timing, etc.) are explicitly out of
+  scope here and deferred.
+- What was built:
+  - Migration `0006_add_ohada_class_number` adds nullable Integer `ohada_class_number`
+    (1–9) to `accounts`. `account_class` is kept as the simplified 5-category view
+    used for normal-balance logic; the genuine 9-class OHADA structure (incl.
+    Class 8 and supplementary Class 9) is now representable instead of flattened.
+  - `app/accounting/ohada_chart.py`: a REPRESENTATIVE real SYSCOHADA 2017 révisé
+    structure (all 9 classes, 2/3/4-digit hierarchy via `parent_account_id`,
+    going >=3 levels deep in 10/21/40/41/52/57/60/66/70). Class 9 flagged
+    supplementary. Code comment + seed explicitly label it representative, not
+    the full ~900-line official list, and "illustrative/demo where applicable."
+  - `app/accounting/ifrs_template.py`: editable IAS-1-aligned starting template
+    under the 5 plain classes (IFRS has no mandated chart). `ohada_class_number`
+    NULL for these. Comment notes it's a flexible template, not a fixed list.
+  - `account_service.seed_chart_for_organization` (+ `seed_ohada_chart` /
+    `seed_ifrs_template` / `_insert_seed_entries` idempotent upsert by code):
+    seeded on demo-workspace creation via `organization_service`; `ohada_class_number`
+    derived deterministically from a code's first digit; parent codes resolved to
+    `parent_account_id` within the org. `scripts/seed_coa.py` re-seeds to a live org.
+  - `account_service.has_posted_transactions()` is now REAL (joins
+    transaction_lines→transactions where status != draft) — closes the S5 placeholder
+    handoff so deactivating an account used in a posted tx returns 409.
+  - Frontend: `AccountTree`/`TreeNode` hierarchical tree (indented by depth), OHADA
+    class badges + `ohada_class_number`, framework-aware demo notice (real SYSCOHADA
+    vs editable template vs legacy Session-5 data), and `AccountLookup` (code↔name,
+    within-org) wired into the create form. i18n EN/FR added.
+- Decisions made this session:
+  - `ohada_class_number` is a nullable Integer (1–9), NOT an enum — first digit of an
+    OHADA code maps directly to its class, and IFRS/legacy rows stay valid as NULL.
+  - OHADA vs IFRS charts are intentionally NOT merged: each workspace's chart is fixed
+    to its `framework`; autocomplete matches within-org by construction (operates only
+    on the org-scoped account list).
+  - Same plain-language French↔English names used for the illustrative OHADA subset
+    (the reference source is OHADA-French → translated to English); codes/numbers are
+    the real official structure.
+  - Existing S5/S6 demo data left in place and labelled legacy (nullable column keeps
+    it valid) rather than silently reseeded (would break posted transaction references).
+  - Frontend lookup test uses a plain Node assert script (`npm run test:lookup`) —
+    no jest/vitest dependency on disk; `node --test` produced non-TTY errors here.
+- Verification:
+  - Backend: 46 tests pass (incl. OHADA 9-class hierarchy + parent links + chains
+    10→101→1011 etc.; IFRS template seeds + editable; cross-org scoping; transaction
+    deactivation-after-posting guard).
+  - `alembic upgrade head` applied migration 0006 on dev Postgres.
+  - `python -m scripts.seed_coa 2` runs cleanly and idempotently (27 OHADA definitions).
+  - Frontend: `npm run build` rc=0, 42 modules transformed (proves ChartOfAccountsPage,
+    AccountLookup, accountLookup.js, and i18n JSON all compile/bundles correctly).
+- What the next session needs to know:
+  - Session 7 (Cash Book/Journal) can rely on `has_posted_transactions()` being real.
+  - The OHADA seed is representative; the full official list can be expanded later by
+    appending real entries to `OHADA_CHART` (parent-code → `parent_account_id` resolution
+    is already handled).
 
 ### Session 6 — First Transaction Entry & Posting
 - Status: DONE
@@ -366,6 +425,9 @@ HOW TO USE THIS FILE:
 ### Session 6 — First Transaction
 - Status: DONE (see full entry at the top of the session log)
 
+### Session 6b — OHADA/IFRS standards-compliant chart of accounts with autocomplete
+- Status: DONE (see full entry at the top of the session log)
+
 ### Session 7 — Cash Book and Journal
 - Status: NOT STARTED
 
@@ -397,3 +459,9 @@ here once decided, so a new tool doesn't quietly redo it differently:)
 - Illustrative chart-of-accounts account codes chosen in Session 5 — (decide in
   Session 5) → latest Session 5 entry above: same plain-language set for both
   OHADA/IFRS labels; never claims to be official.
+- `ohada_class_number` field (Session 6b) is a nullable Integer (1–9), derived from
+  an OHADA code's first digit — keeps `account_class` as the 5-category normal-balance
+  view while genuinely representing classes 8 & 9, and keeps IFRS/legacy rows valid
+  as NULL rather than flattening OHADA into 5 buckets.
+- OHADA vs IFRS charts are NEVER merged: a workspace's chart is fixed to its
+  `framework`; OHADA = real SYSCOHADA hierarchy; IFRS = editable IAS-1 template.

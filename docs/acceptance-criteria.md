@@ -51,6 +51,22 @@
 - [x] API: GET /accounts (scoped), POST /accounts, PATCH /accounts/{id}
 - [x] Frontend Chart of Accounts page: grouped by class, search, create/edit/deactivate; plain labels
 - [x] Validation: code unique per org+framework; normal_balance ∈ {debit, credit}; cannot deactivate account with posted transactions (rule + placeholder)
+<br>
+> **Note:** Session 5's illustrative chart (above) is superseded by **Session 6b**, which
+> replaces it with the real OHADA SYSCOHADA 2017 révisé structure and an editable IFRS
+> template. The Session 5 items remain historically checked (they were built in S5) but the
+> seed data, structure, and frontend rendering were upgraded in S6b.
+
+## Session 6b — OHADA/IFRS standards-compliant chart of accounts with autocomplete
+- [x] Migration `0006_add_ohada_class_number` adds nullable `ohada_class_number` (Integer 1–9) to `accounts`; the simplified `account_class` enum (asset/liability/equity/revenue/expense) is retained for normal-balance logic only.
+- [x] OHADA workspaces seeded with a **representative real SYSCOHADA (2017 révisé)** structure: all 9 classes, real hierarchical codes (2/3/4-digit via `parent_account_id`, 3+ levels deep in the common sub-classes), `ohada_class_number` = first digit; Class 9 marked supplementary (off-balance-sheet/CAGE), not part of core statements. Source: `docs/ohada-ifrs-source-reference.md` only — NOT fabricated from memory. Labeled as a representative subset, not the full ~900-line official list.
+- [x] IFRS workspaces seeded with an **editable IAS-1-aligned starting template** under the 5 plain classes (no mandated IFRS chart per IAS 1); `ohada_class_number` stays NULL.
+- [x] Demo workspaces auto-seeded with their framework's structure on creation; `scripts/seed_coa.py` idempotent (safe to re-run).
+- [x] API unchanged (GET/POST/PATCH /accounts, org-scoped) but now serves real hierarchical OHADA data; PATCH still only edits name_en/name_fr/active.
+- [x] Frontend Chart of Accounts page: hierarchical tree (indented by depth via `parent_account_id`), OHADA class badges + class number column, framework-aware demo notice (real SYSCOHADA vs editable template vs legacy Session-5 data).
+- [x] Bidirectional `AccountLookup` component (and `accountLookup.js` util): search by code OR name (EN + FR), scoped to the org's own accounts (no cross-workspace leakage). Wired into the create form to auto-fill parent + names.
+- [x] Existing Session 5/6 data preserved: legacy flat chart left as-is and labelled; `ohada_class_number` nullable so old rows remain valid; posted transactions (referencing accounts by id) untouched.
+- [x] Tests: OHADA seed produces correct 9-class hierarchy/parent links/class numbers; IFRS template seeds + editable; autocomplete matches by code or name and stays within-org only; legacy compatibility (no breakage of existing S5/S6 demo data); 46 backend tests pass; `npm run build` rc=0.
 - [x] Tests: seed runs clean, duplicate code rejected, list scoped per org
 
 ## Session 6 — First Transaction

@@ -1,8 +1,11 @@
-"""Tests for Session 5 chart of accounts: seed, CRUD, validation, authorization."""
+"""Tests for the chart of accounts: OHADA real structure, IFRS template,
+seed, CRUD, validation, authorization. (Session 5 + Session 6b.)"""
+from app.accounting.ifrs_template import IFRS_TEMPLATE
+from app.accounting.ohada_chart import OHADA_CHART
+from app.models.account import Account
 from app.services.account_service import (
-    ILLUSTRATIVE_CHART,
     has_posted_transactions,
-    seed_illustrative_chart,
+    seed_chart_for_organization,
 )
 
 
@@ -39,42 +42,97 @@ def _post_account(client, org_id, framework="OHADA", code="9999", **overrides):
     return client.post("/accounts", json=data)
 
 
-def test_seed_illustrative_chart_runs_cleanly(client, test_db_session):
-    _register(client)
-    org = _create_org(client, is_demo=False).json()
-
-    created = seed_illustrative_chart(test_db_session, org["id"])
-    # Idempotent: a second run adds nothing.
-    again = seed_illustrative_chart(test_db_session, org["id"])
-
-    assert len(created) == len(ILLUSTRATIVE_CHART)
-    assert again == []
-    for acc in test_db_session.query(type(created[0])).all():
-        assert acc.is_system_default is True
-        assert acc.active is True
-        assert acc.normal_balance in ("debit", "credit")
-    # Every class + normal balance pair is internally consistent in the seed.
-    for item in ILLUSTRATIVE_CHART:
-        assert item["normal_balance"] in ("debit", "credit")
-
-
-def test_demo_org_auto_seeds_illustrative_chart(client):
-    """Creating a demo workspace seeds its chart immediately (Session 5 hook)."""
-    _register(client)
-    org = _create_org(client, is_demo=True).json()
-
-    resp = client.get(f"/accounts?organization_id={org['id']}")
+def _accounts_map(client, org_id):
+    resp = client.get(f"/accounts?organization_id={org_id}")
     assert resp.status_code == 200
-    accounts = resp.json()
-    assert len(accounts) == len(ILLUSTRATIVE_CHART)
+    return {a["code"]: a for a in resp.json()}
+
+
+def test_ohada_seed_produces_real_hierarchy(client, test_db_session):
+    """The OHADA seed is hierarchical, all 9 classes present, parents linked."""
+    _register(client)
+    org = _create_org(client, framework="OHADA", is_demo=False).json()
+
+    created = seed_chart_for_organization(test_db_session, org["id"])
+    assert len(created) == len(OHADA_CHART)
+    # Idempotent: a second run adds nothing.
+    assert seed_chart_for_organization(test_db_session, org["id"]) == []
+
+    rows = test_db_session.query(Account).all()
+    by_code = {a.code: a for a in rows}
+    assert len(by_code) == len(OHADA_CHART)
+
+    # Every OHADA account carries its real class number 1-9.
+    classes = {a.ohada_class_number for a in rows}
+    assert classes == {1, 2, 3, 4, 5, 6, 7, 8, 9}
+
+    # Parent pointers are valid within the same org and are real rows.
+    for a in rows:
+        assert a.is_system_default is True
+        assert a.framework == "OHADA"
+        if a.parent_account_id is not None:
+            parent = test_db_session.get(Account, a.parent_account_id)
+            assert parent is not None
+            assert parent.organization_id == a.organization_id
+            assert parent.code in by_code
+
+    # Required sub-classes go >=3 levels deep (2 -> 3 -> 4 digit chains).
+    for chain in (
+        ("10", "101", "1011"),  # Capital
+        ("21", "212", "2121"),  # Intangible fixed assets
+        ("40", "401", "4011"),  # Suppliers
+        ("41", "411", "4111"),  # Customers
+        ("52", "521", "5211"),  # Banks
+        ("57", "571", "5711"),  # Cash
+        ("60", "601", "6011"),  # Purchases
+        ("66", "661", "6611"),  # Personnel costs
+        ("70", "701", "7011"),  # Sales
+    ):
+        parent = by_code[chain[0]]
+        child = by_code[chain[1]]
+        grandchild = by_code[chain[2]]
+        assert child.parent_account_id == parent.id
+        assert grandchild.parent_account_id == child.id
+
+
+def test_ifrs_template_seeds_flat_and_editable(client):
+    """IFRS workspace gets a flat editable template; no OHADA class numbers."""
+    _register(client)
+    org = _create_org(client, framework="IFRS", is_demo=True).json()
+
+    accounts = client.get(f"/accounts?organization_id={org['id']}").json()
+    assert len(accounts) == len(IFRS_TEMPLATE)
+    assert all(a["ohada_class_number"] is None for a in accounts)
     assert all(a["is_system_default"] for a in accounts)
+    # Template items are editable (it is a starting point the business adapts).
+    first = accounts[0]
+    resp = client.patch(
+        f"/accounts/{first['id']}?organization_id={org['id']}",
+        json={"name_en": "Cash (adapted)"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["name_en"] == "Cash (adapted)"
+
+
+def test_demo_org_auto_seeds_chart_per_framework(client):
+    """Demo workspaces auto-seed the right structure for their framework."""
+    _register(client)
+    ohada = _create_org(client, framework="OHADA", is_demo=True).json()
+    ifrs = _create_org(client, framework="IFRS", is_demo=True).json()
+
+    ohada_accounts = client.get(f"/accounts?organization_id={ohada['id']}").json()
+    ifrs_accounts = client.get(f"/accounts?organization_id={ifrs['id']}").json()
+    assert len(ohada_accounts) == len(OHADA_CHART)
+    assert len(ifrs_accounts) == len(IFRS_TEMPLATE)
+    assert all(a["ohada_class_number"] is not None for a in ohada_accounts)
+    assert all(a["ohada_class_number"] is None for a in ifrs_accounts)
 
 
 def test_duplicate_code_rejected_within_framework(client):
     _register(client)
     org = _create_org(client, is_demo=True).json()
 
-    dup = _post_account(client, org["id"], code=ILLUSTRATIVE_CHART[0]["code"])
+    dup = _post_account(client, org["id"], code=OHADA_CHART[0]["code"])
     assert dup.status_code == 409
 
 
@@ -168,10 +226,13 @@ def test_custom_account_is_not_system_default(client):
     _register(client)
     org = _create_org(client, is_demo=True).json()
 
-    resp = _post_account(client, org["id"], code="6969")
+    resp = _post_account(client, org["id"], code="6969", ohada_class_number=6)
     assert resp.status_code == 201
-    assert resp.json()["is_system_default"] is False
-    assert resp.json()["active"] is True
+    body = resp.json()
+    assert body["is_system_default"] is False
+    assert body["active"] is True
+    # Custom OHADA accounts may carry the real class number too.
+    assert body["ohada_class_number"] == 6
 
 
 def test_unauthenticated_account_access_rejected(client):

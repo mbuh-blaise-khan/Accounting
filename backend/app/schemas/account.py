@@ -24,6 +24,8 @@ class AccountCreate(BaseModel):
     parent_account_id: Optional[int] = None
     normal_balance: NormalBalance
     description: str = Field(default="", max_length=2000)
+    # Only meaningful for OHADA-framework accounts (real class 1-9).
+    ohada_class_number: Optional[int] = Field(default=None, ge=1, le=9)
 
 
 class AccountUpdate(BaseModel):
@@ -53,4 +55,5 @@ class AccountOut(BaseModel):
     is_system_default: bool
     active: bool
     description: str
+    ohada_class_number: Optional[int] = None
     created_at: datetime

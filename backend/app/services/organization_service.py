@@ -39,12 +39,13 @@ def create_organization(
     db.commit()
     db.refresh(org)
 
-    # Demo workspaces get the ILLUSTRATIVE chart of accounts immediately so the
-    # user can explore without a blank chart. (Session 5.)
+    # Demo workspaces get their framework's proper chart structure immediately so
+    # the user can explore without a blank chart (OHADA = real SYSCOHADA subset;
+    # IFRS = editable IAS-1 template). Session 6b.
     if is_demo:
-        from app.services.account_service import seed_illustrative_chart
+        from app.services.account_service import seed_chart_for_organization
 
-        seed_illustrative_chart(db, org.id)
+        seed_chart_for_organization(db, org.id)
 
     return org
 

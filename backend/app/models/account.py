@@ -60,6 +60,11 @@ class Account(Base):
     is_system_default: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+    # Real OHADA class number (1-9) for OHADA-framework accounts; NULL for IFRS
+    # accounts. The `account_class` enum stays as the simplified 5-category view
+    # used for normal-balance logic; this field keeps the genuine 9-class OHADA
+    # structure representable (including Class 8 and supplementary Class 9).
+    ohada_class_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Soft-delete flag: inactive accounts are hidden from posting flows but kept.
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     description: Mapped[str] = mapped_column(Text, default="", nullable=False)

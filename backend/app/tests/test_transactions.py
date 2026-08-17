@@ -54,8 +54,8 @@ def _make_txn(client, org_id, lines, description="Sold goods for cash"):
 def _balanced_lines(acc):
     """A classic example: debit Cash 50,000, credit Sales 50,000."""
     return [
-        {"account_id": acc["1000"]["id"], "debit": 50000, "credit": 0},
-        {"account_id": acc["4000"]["id"], "debit": 0, "credit": 50000},
+        {"account_id": acc["57"]["id"], "debit": 50000, "credit": 0},
+        {"account_id": acc["70"]["id"], "debit": 0, "credit": 50000},
     ]
 
 
@@ -92,8 +92,8 @@ def test_unbalanced_transaction_cannot_be_posted(client):
     acc = _accounts_by_code(client, org["id"])
 
     unbalanced = [
-        {"account_id": acc["1000"]["id"], "debit": 50000, "credit": 0},
-        {"account_id": acc["4000"]["id"], "debit": 0, "credit": 40000},
+        {"account_id": acc["57"]["id"], "debit": 50000, "credit": 0},
+        {"account_id": acc["70"]["id"], "debit": 0, "credit": 40000},
     ]
     txn = _make_txn(client, org["id"], unbalanced).json()
 
@@ -109,7 +109,7 @@ def test_transaction_needs_at_least_two_lines(client):
     acc = _accounts_by_code(client, org["id"])
 
     resp = _make_txn(
-        client, org["id"], [{"account_id": acc["1000"]["id"], "debit": 100, "credit": 0}]
+        client, org["id"], [{"account_id": acc["57"]["id"], "debit": 100, "credit": 0}]
     )
     assert resp.status_code == 422
 
@@ -124,8 +124,8 @@ def test_line_cannot_be_both_sides_or_neither(client):
         client,
         org["id"],
         [
-            {"account_id": acc["1000"]["id"], "debit": 100, "credit": 0},
-            {"account_id": acc["4000"]["id"], "debit": 100, "credit": 100},
+            {"account_id": acc["57"]["id"], "debit": 100, "credit": 0},
+            {"account_id": acc["70"]["id"], "debit": 100, "credit": 100},
         ],
     )
     assert resp.status_code == 422
@@ -142,13 +142,13 @@ def test_lines_must_reference_known_and_active_accounts(client):
         org["id"],
         [
             {"account_id": 999999, "debit": 100, "credit": 0},
-            {"account_id": acc["4000"]["id"], "debit": 0, "credit": 100},
+            {"account_id": acc["70"]["id"], "debit": 0, "credit": 100},
         ],
     )
     assert resp.status_code == 422
 
     # Inactive account -> rejected.
-    first = acc["1000"]
+    first = acc["57"]
     client.patch(
         f"/accounts/{first['id']}?organization_id={org['id']}", json={"active": False}
     )
@@ -157,7 +157,7 @@ def test_lines_must_reference_known_and_active_accounts(client):
         org["id"],
         [
             {"account_id": first["id"], "debit": 100, "credit": 0},
-            {"account_id": acc["4000"]["id"], "debit": 0, "credit": 100},
+            {"account_id": acc["70"]["id"], "debit": 0, "credit": 100},
         ],
     )
     assert resp.status_code == 422
@@ -269,7 +269,7 @@ def test_deactivate_account_blocked_after_posting(client):
     txn = client.get(f"/transactions?organization_id={org['id']}").json()[0]
     client.post(f"/transactions/{txn['id']}/post?organization_id={org['id']}")
 
-    cash = acc["1000"]
+    cash = acc["57"]
     resp = client.patch(
         f"/accounts/{cash['id']}?organization_id={org['id']}", json={"active": False}
     )
@@ -284,7 +284,7 @@ def test_draft_reference_does_not_block_deactivation(client):
     acc = _accounts_by_code(client, org["id"])
     _make_txn(client, org["id"], _balanced_lines(acc))  # stays draft
 
-    cash = acc["1000"]
+    cash = acc["57"]
     resp = client.patch(
         f"/accounts/{cash['id']}?organization_id={org['id']}", json={"active": False}
     )

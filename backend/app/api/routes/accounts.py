@@ -40,6 +40,7 @@ def create_account(
         normal_balance=payload.normal_balance,
         parent_account_id=payload.parent_account_id,
         description=payload.description,
+        ohada_class_number=payload.ohada_class_number,
     )
 
 

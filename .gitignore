@@ -86,3 +86,7 @@ lerna-debug.log*
 *.sqlite3
 *.db
 .DS_Store
+
+# ---- Cline/temp verification artifacts ----
+*.flag
+out.txt
