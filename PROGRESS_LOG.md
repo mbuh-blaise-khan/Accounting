@@ -16,13 +16,73 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 6b — OHADA/IFRS standards-compliant chart of accounts with autocomplete
+**Last completed session:** Session 6c — OHADA-standard journal entry UI + account selector bug fix
 **Next session to run:** Session 7 — Cash Book and Journal
 **Blockers / open questions:** None outstanding.
 
 ---
 
 ## Session Log
+
+### Session 6c — OHADA-standard journal entry UI + account selector bug fix
+- Status: DONE
+- Date completed: 2026-08-16
+- Bug fixed (investigated first, per the brief):
+  - The Session 6 New Transaction form used a plain `<select>` for account
+    selection. It was never upgraded to the `AccountLookup` autocomplete
+    component built in Session 6b, so after the 6b account-model changes (real
+    SYSCOHADA hierarchy, `ohada_class_number`) it showed a flat list of ALL
+    accounts (including inactive ones the backend rejects) with no search or
+    hierarchy support. The controlled-select value binding (`value={a.id}` is a
+    number but `line.account_id` starts as `''`) also produced an
+    empty-looking/unusable dropdown in browsers.
+  - Root cause confirmed via a manual check against existing demo orgs: the
+    live DB org 4 (OHADA demo) still had the old Session 5 flat 18-account
+    chart (codes 1000/1100…, `ohada_class_number` NULL) — never reseeded after
+    6b — while a fresh demo OHADA org returns the real 87-account hierarchy
+    (57/Cash, 70/Sales, 5711, 7011 with class numbers 5/7). The API itself was
+    fine; the frontend selector was the broken layer.
+- What was built:
+  - `AccountLookup` gained a `compact` prop (smaller input + dropdown) so it
+    fits inline in a journal-entry grid row — no duplicate lookup component.
+  - `NewTransactionPage.jsx` redesigned as a real OHADA journal-entry grid:
+    Date | N° compte (AccountLookup) | Intitulé (read-only, auto-filled from
+    selection) | Libellé | Débit | Crédit. Debit lines first, credits after;
+    running totals + balanced/unbalanced indicator update live; Post button
+    only enables when balanced. The plain-language "what happened?" step stays
+    above the grid, and the "what happened / what this means" explanation
+    after posting is unchanged.
+  - Only ACTIVE accounts are offered in the lookup (the backend rejects
+    inactive accounts at draft creation). Lookup stays within-org (operates on
+    the org-scoped account list).
+  - Mobile-responsive: desktop = 12-column grid aligned with a header row;
+    phone-width = each line stacks into a card (no horizontal scrolling).
+  - `frontend/src/utils/txnCalculations.js`: pure, testable helpers (totals,
+    balanced, canPost, toPayload). Date field auto-fills to today (editable).
+  - i18n EN/FR keys added (tx.date, tx.accountName, tx.libelle,
+    tx.libellePlaceholder, tx.debitCol, tx.creditCol, tx.noAccounts).
+- Decisions / notes:
+  - The backend `Transaction` model has no user-editable date column (it uses
+    `created_at`); the grid's date is UI-only for journal presentation. Adding
+    a `transaction_date` column is a schema change deferred to a future
+    session (explicitly out of scope for 6c).
+  - No backend changes were needed: the bug was purely frontend. The
+    transaction/transaction_line schema, posting_service balance validation,
+    and the transaction API are untouched.
+- Verification:
+  - `node src/utils/txnCalculations.test.mjs` → 14 checks pass (totals update
+    live, balanced check, canPost, payload mapping).
+  - `npm run test:lookup` → 5 checks pass (unchanged).
+  - `npm run build` → rc=0, 43 modules transformed.
+  - Backend `pytest app/tests -q` → 46 passed (unchanged count — no backend
+    logic touched).
+  - End-to-end (TestClient against a fresh demo OHADA org): 87 accounts
+    returned, real OHADA codes present with correct class numbers, draft
+    created + posted successfully (balanced 50,000 debit / 50,000 credit).
+- What Session 7 needs to know:
+  - The journal-entry grid now matches the OHADA layout, so Session 7's
+    journal/cashbook read views can build directly on it (they will read the
+    posted transaction lines the same way).
 
 ### Session 6b — OHADA/IFRS standards-compliant chart of accounts with autocomplete
 - Status: DONE
@@ -426,6 +486,9 @@ HOW TO USE THIS FILE:
 - Status: DONE (see full entry at the top of the session log)
 
 ### Session 6b — OHADA/IFRS standards-compliant chart of accounts with autocomplete
+- Status: DONE (see full entry at the top of the session log)
+
+### Session 6c — OHADA-standard journal entry UI + account selector bug fix
 - Status: DONE (see full entry at the top of the session log)
 
 ### Session 7 — Cash Book and Journal

@@ -78,6 +78,16 @@
 - [x] SERVICE-layer rejection of unbalanced posting with clear error
 - [x] Tests: balanced posts; unbalanced rejected; posted can't be edited/deleted (reversal stub); lines reference valid, active accounts
 
+## Session 6c — OHADA-standard journal entry UI + account selector bug fix
+- [x] Bug fixed: transaction account selector now uses the Session 6b `AccountLookup` (compact mode) instead of a plain `<select>`. Root cause (confirmed via manual check of existing demo orgs + a fresh demo OHADA org): the plain select was never upgraded after 6b's account-model changes, showed all accounts (incl. inactive, which the backend rejects) with no search/hierarchy, and degraded to an empty-looking dropdown due to a number-vs-string controlled-select value mismatch.
+- [x] New Transaction form redesigned as a real OHADA journal-entry grid: Date | N° compte (AccountLookup autocomplete) | Intitulé (auto-filled, read-only) | Libellé | Débit | Crédit — debit lines first, credit lines after, totals equal before posting.
+- [x] Plain-language "what happened?" description step kept above the grid; running debit/credit totals + balanced/unbalanced indicator update live as the user types.
+- [x] Service-layer balance enforcement unchanged (not weakened) — posting_service untouched.
+- [x] Mobile-responsive: desktop = 12-column grid aligned with a header row; phone-width = each line stacks into a card (no horizontal scroll).
+- [x] Account lookup is within-org only (reuses the org-scoped account list); only active accounts are selectable.
+- [x] Date field auto-fills to today and is editable (UI-only; backend uses created_at — a transaction_date column is deferred to a future session).
+- [x] Tests: new `txnCalculations.test.mjs` (14 checks: live totals, balanced check, canPost, payload mapping); `accountLookup.test.mjs` unchanged; `npm run build` rc=0 (43 modules); backend pytest unchanged at 46 passed; end-to-end fresh demo OHADA org verification passed.
+
 ## Session 7 — Cash Book and Journal
 - [ ] Journal read view: date, reference, description, account number/name, debit, credit, narration, source, posting status, created by/timestamp
 - [ ] Cash Book view filtered to cash/bank movements

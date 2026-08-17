@@ -15,6 +15,7 @@ export default function AccountLookup({
   onChange,
   label,
   placeholder,
+  compact = false,
 }) {
   const { t } = useLanguage()
   const [query, setQuery] = useState(
@@ -53,9 +54,15 @@ export default function AccountLookup({
     onChange(account)
   }
 
+  // In compact mode the label is shown as placeholder text inside the input
+  // (used for inline journal-entry grid rows).
+  const inputCls = compact
+    ? 'w-full rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none'
+    : 'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none'
+
   return (
     <div ref={wrapperRef} className="relative">
-      {label && (
+      {label && !compact && (
         <label className="block text-sm font-medium text-slate-700">{label}</label>
       )}
       <input
@@ -67,15 +74,17 @@ export default function AccountLookup({
           setHighlight(0)
         }}
         onFocus={() => setOpen(true)}
-        placeholder={placeholder || t('coa.lookupPlaceholder')}
-        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                placeholder={placeholder || t('coa.lookupPlaceholder')}
+        className={inputCls}
         aria-autocomplete="list"
         aria-expanded={open}
       />
-      {open && matches.length > 0 && (
+            {open && matches.length > 0 && (
         <ul
           role="listbox"
-          className="absolute z-10 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+          className={`absolute z-10 mt-1 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg ${
+            compact ? 'max-h-40' : 'max-h-64'
+          }`}
         >
           {matches.map((a, i) => (
             <li
@@ -88,15 +97,15 @@ export default function AccountLookup({
                 pick(a)
               }}
               onMouseEnter={() => setHighlight(i)}
-              className={`cursor-pointer px-3 py-1.5 text-sm ${
+              className={`cursor-pointer px-2 py-1 ${
+                compact ? 'text-xs' : 'text-sm'
+              } ${
                 i === highlight || selected?.id === a.id
                   ? 'bg-blue-50 font-medium'
                   : 'hover:bg-slate-50'
               }`}
             >
-              <span className="font-mono text-xs text-slate-500">
-                {a.code}
-              </span>
+              <span className="font-mono text-xs text-slate-500">{a.code}</span>
               {' — '}
               <span className="text-slate-800">{a.name_en}</span>
               <span className="mx-1 text-slate-400">·</span>
@@ -106,7 +115,7 @@ export default function AccountLookup({
         </ul>
       )}
       {open && query.trim() && matches.length === 0 && (
-        <p className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-500 shadow-lg">
+        <p className="absolute z-10 mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-500 shadow-lg">
           {t('coa.noResults')}
         </p>
       )}
