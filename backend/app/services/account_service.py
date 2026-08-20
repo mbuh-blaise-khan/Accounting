@@ -76,7 +76,7 @@ def create_custom_account(
     user: User,
     organization_id: int,
     framework: FrameworkCode,
-    code: str,
+    code: str | None = None,
     name_en: str,
     name_fr: str,
     account_class,
@@ -85,7 +85,13 @@ def create_custom_account(
     description: str = "",
     ohada_class_number: int | None = None,
 ) -> Account:
-    """Create a user-defined account, enforcing org scoping + code uniqueness."""
+    """Create a user-defined account, enforcing org scoping + code uniqueness.
+
+    Part B: only OHADA accounts carry a code. OHADA REQUIRES a code (real
+    SYSCOHADA numbering); IFRS accounts never store one — any supplied code is
+    ignored and the `code` column is stored NULL (IFRS has no mandated chart of
+    accounts / numbering).
+    """
     org = _ensure_org_access(db, user, organization_id)
 
     # A custom account's framework must match the org's chosen framework.
@@ -95,20 +101,31 @@ def create_custom_account(
             detail="Account framework must match the organization's framework",
         )
 
-    existing = (
-        db.query(Account)
-        .filter(
-            Account.organization_id == organization_id,
-            Account.framework == framework,
-            Account.code == code.strip(),
-        )
-        .first()
-    )
-    if existing is not None:
+    is_ohada = FrameworkCode(framework) == FrameworkCode.OHADA
+    code_value = code.strip() if code is not None else None
+    if is_ohada and not code_value:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this code already exists for this framework",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="An OHADA account requires a code",
         )
+    if not is_ohada:
+        code_value = None  # IFRS accounts never store a code
+
+    if code_value is not None:
+        existing = (
+            db.query(Account)
+            .filter(
+                Account.organization_id == organization_id,
+                Account.framework == framework,
+                Account.code == code_value,
+            )
+            .first()
+        )
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An account with this code already exists for this framework",
+            )
 
     if parent_account_id is not None:
         parent = db.get(Account, parent_account_id)
@@ -121,7 +138,7 @@ def create_custom_account(
     account = Account(
         organization_id=organization_id,
         framework=framework,
-        code=code.strip(),
+        code=code_value,
         name_en=name_en.strip(),
         name_fr=name_fr.strip(),
         account_class=account_class,
@@ -209,25 +226,36 @@ def _insert_seed_entries(
 
     Entries must be ordered parents-before-children; parents are resolved to
     existing rows by code (either just-created or pre-existing). `ohada` marks
-    whether these entries carry a real OHADA class number (IFRS template does
-    not).
+    whether these entries carry a real OHADA class number and use code-keyed
+    idempotency.
+
+    Part B: IFRS accounts have NO codes. The IFRS template is seeded with
+    `code=NULL` (the shared `accounts.code` column is kept for OHADA), keyed for
+    idempotency by `name_en` (unique in the template), and has no parents.
     """
     created: list[Account] = []
-    code_to_id: dict[str, int] = {}
+    existing: dict[str, int] = {}
     for row in db.query(Account).filter(
         Account.organization_id == org.id, Account.framework == fw
     ):
-        code_to_id[row.code] = row.id
+        if ohada:
+            if row.code is not None:
+                existing[row.code] = row.id
+        else:
+            existing[row.name_en] = row.id
 
     for item in entries:
-        existing_id = code_to_id.get(item["code"])
+        key = item["code"] if ohada else item["name_en"]
+        existing_id = existing.get(key)
         if existing_id is not None:
             continue  # idempotent: already seeded
-        parent_id = code_to_id.get(item["parent"]) if item.get("parent") else None
+        parent_id = None
+        if ohada and item.get("parent"):
+            parent_id = existing.get(item["parent"])
         account = Account(
             organization_id=org.id,
             framework=fw,
-            code=item["code"],
+            code=item.get("code") if ohada else None,
             name_en=item["name_en"],
             name_fr=item["name_fr"],
             account_class=item["account_class"],
@@ -242,7 +270,7 @@ def _insert_seed_entries(
         )
         db.add(account)
         db.flush()  # assign account.id so children can link via parent id
-        code_to_id[item["code"]] = account.id
+        existing[key] = account.id
         created.append(account)
 
     db.commit()

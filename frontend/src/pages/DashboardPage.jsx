@@ -8,6 +8,8 @@ import { useLanguage } from '../i18n/index.jsx'
 import CreateWorkspace from '../components/CreateWorkspace.jsx'
 import ChartOfAccountsPage from './ChartOfAccountsPage.jsx'
 import NewTransactionPage from './NewTransactionPage.jsx'
+import JournalPage from './JournalPage.jsx'
+import CashBookPage from './CashBookPage.jsx'
 
 export default function DashboardPage() {
   const { t } = useLanguage()
@@ -16,7 +18,7 @@ export default function DashboardPage() {
   const [frameworks, setFrameworks] = useState([])
   const [error, setError] = useState(null)
   const [activeOrg, setActiveOrg] = useState(null) // set -> inside a workspace
-  const [section, setSection] = useState('home') // home | accounts | newTransaction
+  const [section, setSection] = useState('home') // home | accounts | newTransaction | journal | cashbook
 
   async function load() {
     setError(null)
@@ -154,6 +156,8 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
           <div className="flex gap-1">
             <NavBtn active={section === 'home'} onClick={() => onSectionChange('home')} label={t('ws.home')} />
             <NavBtn active={section === 'newTransaction'} onClick={() => onSectionChange('newTransaction')} label={t('ws.newTransaction')} />
+            <NavBtn active={section === 'journal'} onClick={() => onSectionChange('journal')} label={t('ws.journal')} />
+            <NavBtn active={section === 'cashbook'} onClick={() => onSectionChange('cashbook')} label={t('ws.cashbook')} />
             <NavBtn active={section === 'accounts'} onClick={() => onSectionChange('accounts')} label={t('ws.accounts')} />
           </div>
         </div>
@@ -164,6 +168,8 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
             org={org}
             onAccounts={() => onSectionChange('accounts')}
             onNewTransaction={() => onSectionChange('newTransaction')}
+            onJournal={() => onSectionChange('journal')}
+            onCashBook={() => onSectionChange('cashbook')}
           />
         )}
         {section === 'accounts' && (
@@ -172,12 +178,18 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
         {section === 'newTransaction' && (
           <NewTransactionPage org={org} onBack={() => onSectionChange('home')} />
         )}
+        {section === 'journal' && (
+          <JournalPage org={org} onBack={() => onSectionChange('home')} />
+        )}
+        {section === 'cashbook' && (
+          <CashBookPage org={org} onBack={() => onSectionChange('home')} />
+        )}
       </main>
     </div>
   )
 }
 
-function OrgHome({ org, onAccounts, onNewTransaction }) {
+function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook }) {
   const { t } = useLanguage()
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -191,6 +203,18 @@ function OrgHome({ org, onAccounts, onNewTransaction }) {
           desc={t('ws.newTransactionDesc')}
           action={t('ws.newTransaction')}
           onClick={onNewTransaction}
+        />
+        <BigCard
+          title={t('ws.journalTitle')}
+          desc={t('ws.journalDesc')}
+          action={t('ws.journal')}
+          onClick={onJournal}
+        />
+        <BigCard
+          title={t('ws.cashbookTitle')}
+          desc={t('ws.cashbookDesc')}
+          action={t('ws.cashbook')}
+          onClick={onCashBook}
         />
         <BigCard
           title={t('ws.accountsTitle')}

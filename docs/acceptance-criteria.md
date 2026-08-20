@@ -89,11 +89,14 @@
 - [x] Tests: new `txnCalculations.test.mjs` (14 checks: live totals, balanced check, canPost, payload mapping); `accountLookup.test.mjs` unchanged; `npm run build` rc=0 (43 modules); backend pytest unchanged at 46 passed; end-to-end fresh demo OHADA org verification passed.
 
 ## Session 7 — Cash Book and Journal
-- [ ] Journal read view: date, reference, description, account number/name, debit, credit, narration, source, posting status, created by/timestamp
-- [ ] Cash Book view filtered to cash/bank movements
-- [ ] API: GET /journal-entries (filters), GET /cashbook
-- [ ] Frontend Journal + Cash Book pages with date filters and drill-down to transaction
-- [ ] Tests: journal totals match posted lines in period; cash book only cash/bank
+- [x] Part A: bugs fixed (Chart of Accounts showed no rows / search dead → `AccountTree` now renders every account incl. orphans; "Add a line" button unreactive → grid always rendered, not hidden behind loading/no-accounts). Root causes confirmed in the real files.
+- [x] IFRS code removal (Part B): IFRS accounts store no code (`accounts.code` nullable; IFRS seed/search/UI code-free); OHADA numbering unchanged.
+- [x] Description field modernized + real `posted_at` surfaced as the leading date everywhere a posted transaction appears (Part C).
+- [x] Journal read view: date (posted_at, first), reference, description, account number (OHADA only), account name, debit, credit, narration, source, posting status
+- [x] Cash Book view filtered to cash/bank movements
+- [x] API: GET /journal-entries (filters), GET /cashbook
+- [x] Frontend Journal + Cash Book pages with date filters and drill-down to transaction
+- [x] Tests: journal totals match posted lines in period; cash book only cash/bank; OHADA codes shown vs IFRS omitted
 
 ## Session 8 — General Ledger
 - [ ] `ledger_service`: opening balance, debit movements, credit movements, running/closing balance — derived from posted lines, not stored

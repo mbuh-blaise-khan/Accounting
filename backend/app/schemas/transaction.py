@@ -12,11 +12,13 @@ class TransactionLineIn(BaseModel):
     Each line is either a debit or a credit (exactly one side is positive).
     Amounts are non-negative. The overall balance (sum debits == sum credits)
     is required only at posting time — drafts may be unbalanced while building.
+    `narration` is the optional per-line description ("libellé").
     """
 
     account_id: int
     debit: Decimal = Field(default=Decimal(0))
     credit: Decimal = Field(default=Decimal(0))
+    narration: Optional[str] = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def _check_line(self):
@@ -43,6 +45,7 @@ class TransactionLineOut(BaseModel):
     account_id: int
     debit_amount: Decimal
     credit_amount: Decimal
+    narration: Optional[str] = None
     # Denormalized display fields (filled by the serializer from the account).
     account_code: Optional[str] = None
     account_name_en: Optional[str] = None

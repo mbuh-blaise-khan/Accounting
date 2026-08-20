@@ -173,18 +173,27 @@ export default function NewTransactionPage({ org, onBack }) {
           </p>
         )}
 
-        {/* Step 1: What happened? (plain language) */}
-        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        {/* Step 1: What happened? (plain language) — Part C: modernized
+            description field with clearer hierarchy and spacing. */}
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <label className="block">
-            <span className={LABEL_CLS}>{t('tx.description')}</span>
+            <span className="block text-base font-semibold text-slate-900">
+              {t('tx.description')}
+            </span>
+            <span className="mt-1 block text-sm text-slate-500">
+              {t('tx.descriptionHint')}
+            </span>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              rows={2}
+              rows={3}
               placeholder={t('tx.descriptionPlaceholder')}
-              className={INPUT_CLS}
+              className="mt-3 w-full resize-y rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-base text-slate-900 placeholder-slate-400 transition focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </label>
+          <p className="mt-2 text-right text-xs text-slate-400">
+            {description.trim().length} {t('tx.characters')}
+          </p>
         </div>
 
         {/* Step 2: Date (journal entry date; UI-only for now) */}
@@ -213,36 +222,53 @@ export default function NewTransactionPage({ org, onBack }) {
             </button>
           </div>
 
-          {loading ? (
-            <p className="mt-3 text-sm text-slate-500">{t('common.loading')}</p>
-          ) : activeAccounts.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-500">{t('tx.noAccounts')}</p>
-          ) : (
-            <>
-              {/* Desktop column header */}
-              <div className="mt-3 hidden border-b border-slate-200 pb-2 text-xs font-semibold uppercase text-slate-500 sm:grid sm:grid-cols-12 sm:gap-2">
-                <div className="col-span-4">{t('tx.account')}</div>
-                <div className="col-span-3">{t('tx.accountName')}</div>
-                <div className="col-span-3">{t('tx.libelle')}</div>
-                <div className="col-span-1">{t('tx.debitCol')}</div>
-                <div className="col-span-1">{t('tx.creditCol')}</div>
-              </div>
+          {/* Desktop column header — always rendered so rows added via the
+              "+ Add a line" button are immediately visible (Part A bug 3: the
+              grid used to be hidden behind the loading/no-accounts branch,
+              making the button look dead). */}
+          <div
+            className={`mt-3 hidden border-b border-slate-200 pb-2 text-xs font-semibold uppercase text-slate-500 sm:grid sm:gap-2 ${
+              org.framework === 'OHADA'
+                ? 'sm:grid-cols-12'
+                : 'sm:grid-cols-9'
+            }`}
+          >
+            {org.framework === 'OHADA' && (
+              <div className="col-span-4">{t('tx.account')}</div>
+            )}
+            <div className={org.framework === 'OHADA' ? 'col-span-3' : 'col-span-4'}>
+              {t('tx.accountName')}
+            </div>
+            <div className={org.framework === 'OHADA' ? 'col-span-3' : 'col-span-3'}>
+              {t('tx.libelle')}
+            </div>
+            <div className="col-span-1">{t('tx.debitCol')}</div>
+            <div className="col-span-1">{t('tx.creditCol')}</div>
+          </div>
 
-              <div className="mt-2 space-y-3">
-                {lines.map((line) => (
-                  <LineRow
-                    key={line.id}
-                    line={line}
-                    accounts={activeAccounts}
-                    nameOf={nameOf}
-                    onChange={updateLine}
-                    onRemove={removeLine}
-                    canRemove={lines.length > 2}
-                    t={t}
-                  />
-                ))}
-              </div>
-            </>
+          <div className="mt-2 space-y-3">
+            {lines.map((line) => (
+              <LineRow
+                key={line.id}
+                line={line}
+                accounts={activeAccounts}
+                framework={org.framework}
+                nameOf={nameOf}
+                onChange={updateLine}
+                onRemove={removeLine}
+                canRemove={lines.length > 2}
+                t={t}
+              />
+            ))}
+          </div>
+
+          {/* Inline notice: rows are still editable/visible while the account
+              list loads, or if the chart is empty (create accounts first). */}
+          {loading && (
+            <p className="mt-3 text-sm text-slate-500">{t('common.loading')}</p>
+          )}
+          {!loading && activeAccounts.length === 0 && (
+            <p className="mt-3 text-sm text-slate-500">{t('tx.noAccounts')}</p>
           )}
 
           {/* Running totals + balance indicator */}
@@ -288,21 +314,31 @@ export default function NewTransactionPage({ org, onBack }) {
   )
 }
 
-// A single journal-entry grid row. Desktop uses a 12-col grid aligned with the
-// header; mobile stacks the fields into a card.
-function LineRow({ line, accounts, nameOf, onChange, onRemove, canRemove, t }) {
+// A single journal-entry grid row. Desktop uses a 12-col (OHADA) or 9-col
+// (IFRS) grid aligned with the header; mobile stacks the fields into a card.
+//
+// Part B: IFRS workspaces have no account codes, so the row is
+//   Account (name lookup) | Libellé | Débit | Crédit
+// while OHADA keeps the classic journal layout
+//   Account (code lookup) | Account name | Libellé | Débit | Crédit.
+function LineRow({ line, accounts, framework = 'OHADA', nameOf, onChange, onRemove, canRemove, t }) {
   const selected = line.account
-
   const inputCls = INPUT_CLS // reuse shared input styling
+  const isOhada = framework === 'OHADA'
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
       {/* Desktop grid */}
-      <div className="hidden sm:grid sm:grid-cols-12 sm:gap-2 sm:items-end">
+      <div
+        className={`hidden sm:grid sm:gap-2 sm:items-end ${
+          isOhada ? 'sm:grid-cols-12' : 'sm:grid-cols-9'
+        }`}
+      >
         {/* Account (autocomplete) */}
-        <div className="col-span-4">
+        <div className={isOhada ? 'col-span-4' : 'col-span-4'}>
           <AccountLookup
             accounts={accounts}
+            framework={framework}
             value={selected}
             onChange={(acct) =>
               onChange(line.id, { account_id: acct.id, account: acct })
@@ -311,18 +347,21 @@ function LineRow({ line, accounts, nameOf, onChange, onRemove, canRemove, t }) {
             compact
           />
         </div>
-        {/* Account name (read-only, auto-filled from lookup) */}
-        <div className="col-span-3">
-          <input
-            type="text"
-            readOnly
-            value={selected ? nameOf(selected) : ''}
-            placeholder={t('tx.chooseAccount')}
-            className="w-full rounded-md border border-slate-200 bg-slate-100 px-2 py-1 text-xs text-slate-500"
-          />
-        </div>
+        {/* Account name (read-only, OHADA only — IFRS lookup already shows the
+            plain name and there is no code column). */}
+        {isOhada && (
+          <div className="col-span-3">
+            <input
+              type="text"
+              readOnly
+              value={selected ? nameOf(selected) : ''}
+              placeholder={t('tx.chooseAccount')}
+              className="w-full rounded-md border border-slate-200 bg-slate-100 px-2 py-1 text-xs text-slate-500"
+            />
+          </div>
+        )}
         {/* Libellé (per-line narration) */}
-        <div className="col-span-3">
+        <div className={isOhada ? 'col-span-3' : 'col-span-3'}>
           <input
             type="text"
             value={line.libelle || ''}
@@ -375,22 +414,13 @@ function LineRow({ line, accounts, nameOf, onChange, onRemove, canRemove, t }) {
           <span className="text-xs text-slate-500">{t('tx.account')}</span>
           <AccountLookup
             accounts={accounts}
+            framework={framework}
             value={selected}
             onChange={(acct) =>
               onChange(line.id, { account_id: acct.id, account: acct })
             }
             placeholder={t('tx.chooseAccount')}
             compact
-          />
-        </div>
-        <div>
-          <span className="text-xs text-slate-500">{t('tx.accountName')}</span>
-          <input
-            type="text"
-            readOnly
-            value={selected ? nameOf(selected) : ''}
-            placeholder={t('tx.chooseAccount')}
-            className="w-full rounded-md border border-slate-200 bg-slate-100 px-2 py-1 text-sm text-slate-500"
           />
         </div>
         <div>
@@ -460,13 +490,22 @@ function PostedExplanation({ org, result, accounts, nameOf, onBack, onNewEntry, 
     const amount = Number(
       side === 'debit' ? line.debit_amount : line.credit_amount
     )
+    // Part B: IFRS accounts have no code — show the plain name only.
+    const codePrefix =
+      org.framework === 'OHADA' && acct.code ? `${acct.code} ` : ''
     return {
-      label: `${acct.code} ${nameOf(acct)}`,
+      label: `${codePrefix}${nameOf(acct)}`,
       side,
       amount,
       effect: increasing ? t('tx.increased') : t('tx.decreased'),
     }
   }
+
+  // Part C: the real posting timestamp (backend sets posted_at on posting) is
+  // the FIRST date shown whenever a posted transaction is presented.
+  const postedDate = result.posted_at
+    ? new Date(result.posted_at).toLocaleString()
+    : '—'
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
@@ -485,6 +524,9 @@ function PostedExplanation({ org, result, accounts, nameOf, onBack, onNewEntry, 
           </h2>
           <p className="mt-1 text-sm text-green-800">
             {t('tx.balanceVerified')} — {org.currency}
+          </p>
+          <p className="mt-1 text-sm text-green-800">
+            {t('journal.postedAt')}: <span className="font-medium">{postedDate}</span>
           </p>
         </div>
 

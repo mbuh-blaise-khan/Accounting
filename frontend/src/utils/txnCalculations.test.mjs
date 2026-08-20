@@ -145,8 +145,8 @@ check('canPost: both sides filled on one line -> false', () => {
 // --- toPayload ---------------------------------------------------
 check('toPayload maps grid lines to backend shape', () => {
   const lines = [
-    { account_id: 5, debit: '50000', credit: '', account: { id: 5, code: '57', name_en: 'Cash' } },
-    { account_id: 9, debit: '', credit: '50000', account: { id: 9, code: '70', name_en: 'Sales' } },
+    { account_id: 5, debit: '50000', credit: '', account: { id: 5, code: '57', name_en: 'Cash' }, libelle: 'Cash sale' },
+    { account_id: 9, debit: '', credit: '50000', account: { id: 9, code: '70', name_en: 'Sales' }, libelle: '' },
   ]
   const payload = toPayload('Sold goods for cash', lines, 1)
   assert.equal(payload.organization_id, 1)
@@ -157,6 +157,9 @@ check('toPayload maps grid lines to backend shape', () => {
   assert.equal(payload.lines[0].credit, 0)
   assert.equal(payload.lines[1].credit, 50000)
   assert.equal(payload.lines[1].debit, 0)
+  // Session 7: the per-line libellé is carried through as `narration`.
+  assert.equal(payload.lines[0].narration, 'Cash sale')
+  assert.equal(payload.lines[1].narration, null)
 })
 
 if (failures > 0) {

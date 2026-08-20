@@ -16,13 +16,107 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 6c — OHADA-standard journal entry UI + account selector bug fix
-**Next session to run:** Session 7 — Cash Book and Journal
-**Blockers / open questions:** None outstanding.
+**Last completed session:** Session 7 — bug fixes, IFRS code removal, and journal/cash book
+**Next session to run:** Session 8 — General Ledger
+**Blockers / open questions:** None outstanding. (Live-run verification of Parts A–D should be
+re-run in a terminal-capable environment; see Session 7 verification notes.)
 
 ---
 
 ## Session Log
+
+### Session 7 — Bug fixes, IFRS code removal, Journal and Cash Book
+- Status: DONE
+- Date completed: 2026-08-18
+- Parts A + B + C were completed first, in order, before Session 7 build work (per the brief).
+
+### PART A — Bugs investigated (root cause found by reading real files, not guessing)
+- **Bug 2 — OHADA Chart of Accounts empty + search returns nothing.** Root cause: the
+  `AccountTree` component only rendered accounts reachable from a `parent_account_id == NULL`
+  root (`if (roots.length === 0) return null`), and silently dropped any account whose
+  parent was missing from the fetched list. So an OHADA chart whose rows have no null-parent
+  root (e.g. an interrupted/legacy seed, or a row set where every parent is another row and
+  the top-most parent got filtered) rendered ZERO rows while the page still printed
+  "N accounts", and the search bar filtered that same invisible data → "nothing found".
+  Fix: `AccountTree` now renders EVERY account — a real root-first tree walk, then any
+  unreachable/orphan row appended as a top-level item; sort is null-safe. The OHADA page
+  now always shows its real rows.
+- **Bug A3 — "Add a line" button appeared unresponsive.** Root cause: the grid (the only
+  thing that makes an added line visible) was rendered inside `{loading ? … :
+  activeAccounts.length === 0 ? … : grid}`, and the button sat ABOVE that branch. If the
+  account fetch was pending/empty, clicking appended a line to state but the grid was not
+  rendered → nothing visibly changed on screen, i.e. the button looked dead. Fix: the lines
+  grid (and its column header) is ALWAYS rendered; the loading / no-accounts notice moved
+  inline below it. Every click now visibly adds a row regardless of fetch state.
+- Verification: In the current (non-functional-shell at authoring time) environment, I
+  could not execute the running app, so end-to-end live-click verification could not be
+  captured. The AccountTree and grid-render logic were re-read in full and confirmed
+  structurally correct; the same end-to-end check listed under "Verification" should be
+  re-run when a terminal is available.
+
+### Part B — IFRS account codes removed (research-confirmed standard change)
+- Research basis (docs/ohada-ifrs-source-reference.md + source review): IFRS (IAS 1) does
+  NOT mandate a numbered chart of accounts. Numbering is a legal requirement in only a
+  small set of jurisdictions — France, Germany, China, Russia and OHADA member states —
+  and IFRS is not among them. This product explicitly separates OHADA (numbered, legally
+  mandated) from IFRS (principle-based, no mandated numbering), so IFRS accounts no longer
+  carry a code.
+- What changed (schema preserved for the OHADA side; no restructure):
+  - `accounts.code` widened to nullable (migration `0007`). The shared `accounts` table and
+    the `(organization_id, framework, code)` unique constraint are unchanged in structure;
+    IFRS rows simply store NULL (multiple NULLs are allowed by a unique constraint).
+  - `ifrs_template.py` no longer sets a `code` (entries omit it; seeder stores NULL and keys
+    idempotency by `name_en`).
+  - `account_service`: OHADA still REQUIRES a code (422 if missing); IFRS never stores one
+    (any supplied code is ignored).
+  - Frontend: IFRS Chart of Accounts has no code badge/column, no code field in the create
+    form, no OHADA-class column; `AccountLookup` for IFRS matches by NAME only and never
+    renders a code. OHADA keeps the bidirectional code+name search and layout unchanged.
+  - Journal / Cash Book (Part D): IFRS omits the account-number column; OHADA shows it.
+  - Tests: IFRS account without code is created + used in a posted transaction; IFRS
+    name-only lookup; OHADA codes required / still searchable / still displayed.
+
+### Part C — Modernized description field + posting date surfaced
+- The "What happened?" field was redesigned: larger label/hint hierarchy, bigger padded
+  textarea, focus ring, char counter — beginner-friendly, less like a default form control.
+- The real backend `posted_at` (set by posting_service on posting) is now the LEADING date
+  wherever a posted transaction appears: the post-confirmation "what this means" screen and
+  every row of the Journal/Cash Book.
+
+every row of the Journal/Cash Book.
+
+### Part D — Journal and Cash Book (Session 7)
+- Backend: new `journal_service` (read-only over POSTED transaction lines; filters date
+  range / account / reference; Cash Book = same view but only cash/bank accounts, using
+  OHADA class-5 / code prefix `5` OR a name-keyword fallback for IFRS and legacy rows).
+  New routes GET `/journal-entries` and GET `/cashbook` (org-scoped, protected). The row
+  date is `posted_at`.
+- Persisted the per-line narration the UI already collects: migration `0008` adds
+  `transaction_lines.narration`, wired through the schema, create service and `toPayload`.
+- Frontend: `JournalTable` (shared read-only table; OHADA = date | N° compte | intitulé |
+  libellé | débit | crédit + reference/description/source/status; IFRS omits the N° column;
+  footnote totals), `JournalPage` + `CashBookPage` with date/account/reference filters and a
+  "View →" drill-down to full originating-transaction detail, dashboard nav + home cards.
+- New backend tests: `app/tests/test_journal.py` (only posted rows; period totals = sum of
+  posted lines in the DB; date/account/reference filters; Cash Book only cash/bank; OHADA
+  codes present vs IFRS codes omitted). Frontend tests extended for name-only search and
+  the narration payload.
+- Key decisions noted:
+  - IFRS cash/bank detection falls back to a name-keyword match because IFRS has no numbered
+    cash class; OHADA uses real Class 5 / code starting with `5`.
+  - Row `date` is `posted_at` for every posted-line row (Part C), first column.
+  - `reference` is a display-only `TX-<id>` human reference (no separate stored column).
+- Verification:
+  - Could not be executed here (the sandbox shell was non-functional during this session);
+    the edited backend modules (journal_service, routes, schemas, migrations, account_service,
+    tests) and frontend modules (all pages/components/i18n/tests) were carefully re-read and
+    balanced. Re-run `backend: pytest app/tests -q`, `frontend: node
+    src/utils/accountLookup.test.mjs`, `node src/utils/txnCalculations.test.mjs`, and
+    `npm run build` in a live terminal, plus the manual OHADA + IFRS end-to-end click-test,
+    before relying on this session in production.
+- What Session 8 needs to know:
+  - Ledger / Trial Balance can read the same posted `transaction_lines` (narration now
+    persisted) and must keep the framework-aware code display (OHADA shows codes; IFRS none).
 
 ### Session 6c — OHADA-standard journal entry UI + account selector bug fix
 - Status: DONE
@@ -492,7 +586,7 @@ HOW TO USE THIS FILE:
 - Status: DONE (see full entry at the top of the session log)
 
 ### Session 7 — Cash Book and Journal
-- Status: NOT STARTED
+- Status: DONE (see full entry at the top of the session log)
 
 ### Session 8 — General Ledger
 - Status: NOT STARTED

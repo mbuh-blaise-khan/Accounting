@@ -42,7 +42,12 @@ class Account(Base):
     framework: Mapped[str] = mapped_column(
         Enum(FrameworkCode, native_enum=False, length=10), nullable=False
     )
-    code: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Account code (OHADA SYSCOHADA numbering, legally mandated). Part B:
+    # IFRS accounts have NO code — this column is kept on the shared table for
+    # the OHADA side and stored NULL for IFRS (IFRS has no mandated chart of
+    # accounts / numbering). The unique constraint still allows multiple NULLs,
+    # so many IFRS accounts can coexist without codes.
+    code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     name_en: Mapped[str] = mapped_column(String(160), nullable=False)
     name_fr: Mapped[str] = mapped_column(String(160), nullable=False)
     account_class: Mapped[str] = mapped_column(

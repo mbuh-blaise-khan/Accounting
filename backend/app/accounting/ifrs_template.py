@@ -6,10 +6,11 @@ inventories, trade receivables/payables, cash and equivalents, provisions,
 financial liabilities, tax assets/liabilities, share capital and reserves —
 but NO mandated account numbering. Companies design their own.
 
-So IFRS workspaces get an EDITABLE STARTING TEMPLATE organized under the plain
-5-class model (asset/liability/equity/revenue/expense), with friendly codes the
-business is expected to adapt to its own chart. `ohada_class` stays NULL for
-these accounts.
+Part B: IFRS accounts therefore carry NO code. Each entry omits `code`
+entirely; the seeder stores `code=NULL` (the shared `accounts.code` column is
+kept for the OHADA side, where numbering is legally mandated). The template is
+an EDITABLE STARTING TEMPLATE under the plain 5-class model
+(asset/liability/equity/revenue/expense); `ohada_class_number` stays NULL.
 """
 from app.models.enums import AccountClass as AC
 
@@ -22,9 +23,9 @@ _CLASS_BALANCE = {
 }
 
 
-def _o(code, name_en, name_fr, cls, desc=""):
+def _o(name_en, name_fr, cls, desc=""):
+    # No "code" key: IFRS accounts never get a code (Part B).
     return {
-        "code": code,
         "name_en": name_en,
         "name_fr": name_fr,
         "account_class": cls.value,
@@ -36,35 +37,35 @@ def _o(code, name_en, name_fr, cls, desc=""):
 
 IFRS_TEMPLATE: list[dict] = [
     # IAS 1.54-aligned asset categories
-    _o("1000", "Cash and cash equivalents", "Trésorerie et équivalents de trésorerie", AC.asset),
-    _o("1100", "Trade and other receivables", "Clients et autres créances", AC.asset),
-    _o("1200", "Inventories", "Stocks", AC.asset),
-    _o("1300", "Property, plant and equipment", "Immobilisations corporelles", AC.asset),
-    _o("1400", "Intangible assets", "Immobilisations incorporelles", AC.asset),
-    _o("1500", "Investments", "Placements", AC.asset),
-    _o("1600", "Current tax assets", "Créances d'impôt exigible", AC.asset),
-    _o("1700", "Prepayments", "Charges constatées d'avance", AC.asset),
+    _o("Cash and cash equivalents", "Trésorerie et équivalents de trésorerie", AC.asset),
+    _o("Trade and other receivables", "Clients et autres créances", AC.asset),
+    _o("Inventories", "Stocks", AC.asset),
+    _o("Property, plant and equipment", "Immobilisations corporelles", AC.asset),
+    _o("Intangible assets", "Immobilisations incorporelles", AC.asset),
+    _o("Investments", "Placements", AC.asset),
+    _o("Current tax assets", "Créances d'impôt exigible", AC.asset),
+    _o("Prepayments", "Charges constatées d'avance", AC.asset),
     # IAS 1.54-aligned liability categories
-    _o("2000", "Trade and other payables", "Fournisseurs et autres dettes", AC.liability),
-    _o("2100", "Provisions", "Provisions", AC.liability),
-    _o("2200", "Borrowings (financial liabilities)", "Emprunts (passifs financiers)", AC.liability),
-    _o("2300", "Current tax liabilities", "Dettes d'impôt exigible", AC.liability),
-    _o("2400", "Deferred tax liabilities", "Impôts différés", AC.liability),
-    _o("2500", "Accruals", "Dettes constatées d'avance", AC.liability),
+    _o("Trade and other payables", "Fournisseurs et autres dettes", AC.liability),
+    _o("Provisions", "Provisions", AC.liability),
+    _o("Borrowings (financial liabilities)", "Emprunts (passifs financiers)", AC.liability),
+    _o("Current tax liabilities", "Dettes d'impôt exigible", AC.liability),
+    _o("Deferred tax liabilities", "Impôts différés", AC.liability),
+    _o("Accruals", "Dettes constatées d'avance", AC.liability),
     # Equity
-    _o("3000", "Share capital", "Capital social", AC.equity),
-    _o("3100", "Share premium", "Primes d'émission", AC.equity),
-    _o("3200", "Retained earnings", "Résultats non distribués", AC.equity),
-    _o("3300", "Other reserves", "Autres réserves", AC.equity),
+    _o("Share capital", "Capital social", AC.equity),
+    _o("Share premium", "Primes d'émission", AC.equity),
+    _o("Retained earnings", "Résultats non distribués", AC.equity),
+    _o("Other reserves", "Autres réserves", AC.equity),
     # Revenue
-    _o("4000", "Sales revenue", "Produits des ventes", AC.revenue),
-    _o("4100", "Service revenue", "Produits des services", AC.revenue),
-    _o("4200", "Other income", "Autres produits", AC.revenue),
+    _o("Sales revenue", "Produits des ventes", AC.revenue),
+    _o("Service revenue", "Produits des services", AC.revenue),
+    _o("Other income", "Autres produits", AC.revenue),
     # Expenses
-    _o("5000", "Cost of sales", "Coût des ventes", AC.expense),
-    _o("5100", "Operating expenses", "Charges opérationnelles", AC.expense),
-    _o("5200", "Personnel costs", "Charges de personnel", AC.expense),
-    _o("5300", "Depreciation and amortisation", "Dotations aux amortissements", AC.expense),
-    _o("5400", "Finance costs", "Charges financières", AC.expense),
-    _o("5500", "Other expenses", "Autres charges", AC.expense),
+    _o("Cost of sales", "Coût des ventes", AC.expense),
+    _o("Operating expenses", "Charges opérationnelles", AC.expense),
+    _o("Personnel costs", "Charges de personnel", AC.expense),
+    _o("Depreciation and amortisation", "Dotations aux amortissements", AC.expense),
+    _o("Finance costs", "Charges financières", AC.expense),
+    _o("Other expenses", "Autres charges", AC.expense),
 ]

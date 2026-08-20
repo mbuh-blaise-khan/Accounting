@@ -96,7 +96,10 @@ def test_ohada_seed_produces_real_hierarchy(client, test_db_session):
 
 
 def test_ifrs_template_seeds_flat_and_editable(client):
-    """IFRS workspace gets a flat editable template; no OHADA class numbers."""
+    """IFRS workspace gets a flat editable template; no OHADA class numbers.
+
+    Part B: IFRS accounts carry NO code (IFRS has no mandated numbering).
+    """
     _register(client)
     org = _create_org(client, framework="IFRS", is_demo=True).json()
 
@@ -104,6 +107,7 @@ def test_ifrs_template_seeds_flat_and_editable(client):
     assert len(accounts) == len(IFRS_TEMPLATE)
     assert all(a["ohada_class_number"] is None for a in accounts)
     assert all(a["is_system_default"] for a in accounts)
+    assert all(a["code"] is None for a in accounts)
     # Template items are editable (it is a starting point the business adapts).
     first = accounts[0]
     resp = client.patch(
@@ -142,7 +146,43 @@ def test_same_code_allowed_in_different_framework(client):
     ifrs = _create_org(client, name="IFRS Co", framework="IFRS").json()
 
     assert _post_account(client, ohada["id"], framework="OHADA", code="7777").status_code == 201
-    assert _post_account(client, ifrs["id"], framework="IFRS", code="7777").status_code == 201
+    # Part B: an IFRS account is created WITHOUT a code (and ignores one if sent).
+    data = {
+        "organization_id": ifrs["id"],
+        "framework": "IFRS",
+        "code": "7777",
+        "name_en": "Custom account",
+        "name_fr": "Compte personnalisé",
+        "account_class": "expense",
+        "normal_balance": "debit",
+    }
+    resp = client.post("/accounts", json=data)
+    assert resp.status_code == 201
+    assert resp.json()["code"] is None
+
+
+def test_ifrs_account_requires_no_code_and_ohada_requires_one(client):
+    _register(client)
+    ifrs = _create_org(client, name="IFRS Co", framework="IFRS").json()
+    ohada = _create_org(client, name="OHADA Co", framework="OHADA").json()
+
+    # IFRS: no code is required (and a supplied code is ignored / stored NULL).
+    resp = _post_account(client, ifrs["id"], framework="IFRS", code=None)
+    assert resp.status_code == 201
+    assert resp.json()["code"] is None
+
+    # OHADA: a code is mandatory.
+    resp = _post_account(client, ohada["id"], framework="OHADA", code=None)
+    assert resp.status_code == 422
+
+
+def test_ifrs_seed_re_run_is_idempotent(client, test_db_session):
+    """Re-seeding an IFRS demo org adds nothing (name-keyed idempotency)."""
+    _register(client)
+    org = _create_org(client, framework="IFRS", is_demo=True).json()
+
+    created = seed_chart_for_organization(test_db_session, org["id"])
+    assert created == []  # already seeded by demo creation
 
 
 def test_custom_account_framework_must_match_org(client):

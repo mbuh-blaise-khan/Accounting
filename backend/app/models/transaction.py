@@ -15,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Numeric,
+    String,
     Text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -83,6 +84,8 @@ class TransactionLine(Base):
     credit_amount: Mapped[Decimal] = mapped_column(
         Numeric(16, 2), default=Decimal(0), nullable=False
     )
+    # Per-line narration ("libellé" in the journal grid / Journal column).
+    narration: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     transaction: Mapped["Transaction"] = relationship(back_populates="lines")
     # For eager loading of account names when serializing.

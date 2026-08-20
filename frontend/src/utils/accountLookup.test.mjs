@@ -56,6 +56,31 @@ check('does not leak accounts from another org', () => {
   )
 })
 
+check('byNameOnly (IFRS): matches NAME only, never by code', () => {
+  // IFRS accounts have no codes (Part B). A code-shaped query must NOT match,
+  // even though the legacy account fixture carries numeric codes.
+  assert.deepEqual(searchAccounts(acme, '571', { byNameOnly: true }), [])
+  assert.deepEqual(
+    searchAccounts(acme, 'caisse', { byNameOnly: true }).map((a) => a.id),
+    [1]
+  )
+  assert.deepEqual(
+    searchAccounts(acme, 'sales', { byNameOnly: true }).map((a) => a.name_en),
+    ['Sales of goods for resale']
+  )
+})
+
+check('byNameOnly tolerates accounts without a code (IFRS seed)', () => {
+  const ifrs = [
+    { id: 1, code: null, name_en: 'Cash and cash equivalents', name_fr: 'Trésorerie et équivalents' },
+    { id: 2, code: null, name_en: 'Sales revenue', name_fr: 'Produits des ventes' },
+  ]
+  assert.deepEqual(searchAccounts(ifrs, 'cash', { byNameOnly: true }).map((a) => a.name_en), [
+    'Cash and cash equivalents',
+  ])
+  assert.deepEqual(searchAccounts(ifrs, '1', { byNameOnly: true }), [])
+})
+
 if (failures > 0) {
   console.error(`${failures} check(s) failed`)
   process.exitCode = 1

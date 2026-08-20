@@ -5,6 +5,10 @@
 // Typing a code suggests the account with that code; typing a name (in either
 // language) suggests matching accounts and their codes. Matches are shown with
 // the code and both language names.
+//
+// Framework-aware (Part B): for IFRS there are no account codes, so the lookup
+// matches by NAME only and never renders a code — for OHADA the bidirectional
+// code+name search is unchanged.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLanguage } from '../i18n/index.jsx'
 import { searchAccounts } from '../utils/accountLookup.js'
@@ -16,19 +20,21 @@ export default function AccountLookup({
   label,
   placeholder,
   compact = false,
+  framework = 'OHADA',
 }) {
   const { t } = useLanguage()
-  const [query, setQuery] = useState(
-    selected ? `${selected.code} — ${selected.name_en}` : ''
-  )
+  const byNameOnly = framework !== 'OHADA'
+  const selectedText = (acct) =>
+    acct && !byNameOnly ? `${acct.code} — ${acct.name_en}` : acct ? acct.name_en : ''
+  const [query, setQuery] = useState(selectedText(selected))
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)
   const wrapperRef = useRef(null)
 
   const matches = useMemo(() => {
     if (!open) return []
-    return searchAccounts(accounts, query)
-  }, [accounts, query, open])
+    return searchAccounts(accounts, query, { byNameOnly })
+  }, [accounts, query, open, byNameOnly])
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -49,7 +55,7 @@ export default function AccountLookup({
   }, [])
 
   function pick(account) {
-    setQuery(`${account.code} — ${account.name_en}`)
+    setQuery(selectedText(account))
     setOpen(false)
     onChange(account)
   }
@@ -74,12 +80,15 @@ export default function AccountLookup({
           setHighlight(0)
         }}
         onFocus={() => setOpen(true)}
-                placeholder={placeholder || t('coa.lookupPlaceholder')}
+        placeholder={
+          placeholder ||
+          (byNameOnly ? t('coa.lookupPlaceholderName') : t('coa.lookupPlaceholder'))
+        }
         className={inputCls}
         aria-autocomplete="list"
         aria-expanded={open}
       />
-            {open && matches.length > 0 && (
+      {open && matches.length > 0 && (
         <ul
           role="listbox"
           className={`absolute z-10 mt-1 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg ${
@@ -105,8 +114,10 @@ export default function AccountLookup({
                   : 'hover:bg-slate-50'
               }`}
             >
-              <span className="font-mono text-xs text-slate-500">{a.code}</span>
-              {' — '}
+              {!byNameOnly && (
+                <span className="font-mono text-xs text-slate-500">{a.code}</span>
+              )}
+              {!byNameOnly && ' — '}
               <span className="text-slate-800">{a.name_en}</span>
               <span className="mx-1 text-slate-400">·</span>
               <span className="text-slate-500">{a.name_fr}</span>

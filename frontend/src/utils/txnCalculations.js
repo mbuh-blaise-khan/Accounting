@@ -50,7 +50,8 @@ export function canPost(description, lines) {
   return isBalanced(lines)
 }
 
-// Map grid lines → the { account_id, debit, credit } payload the backend expects.
+// Map grid lines → the { account_id, debit, credit, narration } payload the
+// backend expects. `narration` is the per-line "libellé" shown in the Journal.
 export function toPayload(description, lines, organizationId) {
   return {
     organization_id: organizationId,
@@ -59,6 +60,7 @@ export function toPayload(description, lines, organizationId) {
       account_id: Number(l.account_id),
       debit: toNumber(l.debit),
       credit: toNumber(l.credit),
+      narration: (l.libelle || '').trim() || null,
     })),
   }
 }

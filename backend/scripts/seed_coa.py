@@ -55,10 +55,16 @@ def main() -> None:
         db.close()
 
     definitions = len(OHADA_CHART) if framework_used != "IFRS" else len(IFRS_TEMPLATE)
-    print(
-        "Real official SYSCOHADA (2017 révisé) data — representative subset, not "
-        "the full ~900-line list. Not for compliance use without review."
-    )
+    if framework_used != "IFRS":
+        print(
+            "Real official SYSCOHADA (2017 révisé) data — representative subset, not "
+            "the full ~900-line list. Not for compliance use without review."
+        )
+    else:
+        print(
+            "IFRS editable starting template (IAS 1.54-aligned) — IFRS has no "
+            "mandated chart of accounts, so no account codes are stored (Part B)."
+        )
     print(
         f"Chart of accounts seed OK: {len(created)} new row(s) "
         f"(chart has {definitions} definitions total)."

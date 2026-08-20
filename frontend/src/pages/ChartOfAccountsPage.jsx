@@ -41,18 +41,24 @@ export default function ChartOfAccountsPage({ org, onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org.id])
 
-  // Client-side search over the (org-scoped) chart — matches code or names.
+  // Client-side search over the (org-scoped) chart.
+  // OHADA: match by code OR name (EN + FR) — codes are real SYSCOHADA numbers.
+  // IFRS: match by NAME only — IFRS accounts have no code (Part B), and a code
+  // would never be displayed or searched. Null-safe so a record with no code or
+  // a missing translation can never crash the page.
   const filtered = useMemo(() => {
     if (!accounts) return []
     const q = search.trim().toLowerCase()
     if (!q) return accounts
-    return accounts.filter(
-      (a) =>
-        a.code.toLowerCase().includes(q) ||
-        a.name_en.toLowerCase().includes(q) ||
-        a.name_fr.toLowerCase().includes(q)
-    )
-  }, [accounts, search])
+    const byNameOnly = org.framework !== 'OHADA'
+    return accounts.filter((a) => {
+      const nameHit =
+        (a.name_en || '').toLowerCase().includes(q) ||
+        (a.name_fr || '').toLowerCase().includes(q)
+      if (byNameOnly) return nameHit
+      return nameHit || (a.code || '').toLowerCase().includes(q)
+    })
+  }, [accounts, search, org.framework])
 
   // Legacy Session-5 flat chart check: OHADA workspaces whose seed accounts
   // lack ohada_class_number are the old illustrative set.
@@ -127,7 +133,11 @@ export default function ChartOfAccountsPage({ org, onBack }) {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={t('coa.searchPlaceholder')}
+            placeholder={
+              org.framework === 'OHADA'
+                ? t('coa.searchPlaceholder')
+                : t('coa.searchPlaceholderName')
+            }
             className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
           />
         </div>
@@ -155,6 +165,7 @@ export default function ChartOfAccountsPage({ org, onBack }) {
           <div className="mt-4 space-y-1">
             <AccountTree
               accounts={filtered}
+              framework={org.framework}
               lang={lang}
               onEdit={(a) => setEditing(a)}
               onToggleActive={(a) =>
@@ -181,7 +192,16 @@ export default function ChartOfAccountsPage({ org, onBack }) {
 
 // Hierarchical tree: render roots (no parent) then descendants, indented by
 // depth. OHADA sub-accounts (101, 1011, ...) nest under their 2-digit parent.
-function AccountTree({ accounts, lang, onEdit, onToggleActive }) {
+//
+// ROBUSTNESS FIX (Part A bug 2): the old implementation returned null when no
+// root (parent_account_id == NULL) existed, and silently dropped any account
+// whose parent was missing from the fetched list — so an OHADA chart whose rows
+// had no null-parent root (or an interrupted/legacy seed with dangling parents)
+// rendered ZERO rows while the page still claimed "N accounts", and the search
+// then filtered that same invisible data. Now EVERY account is always rendered:
+// the tree walks roots parent-first, then appends any account that was not
+// reachable (e.g. an orphan whose parent is missing) as an extra top-level item.
+function AccountTree({ accounts, framework, lang, onEdit, onToggleActive }) {
   const children = new Map()
   const roots = []
   for (const a of accounts) {
@@ -193,32 +213,52 @@ function AccountTree({ accounts, lang, onEdit, onToggleActive }) {
     }
   }
   const sort = (a, b) =>
-    a.code.localeCompare(b.code, undefined, { numeric: true })
+    String(a.code ?? '').localeCompare(String(b.code ?? ''), undefined, {
+      numeric: true,
+    })
   roots.sort(sort)
   for (const list of children.values()) list.sort(sort)
 
-  function render(node, depth) {
+  const ordered = []
+  const seen = new Set()
+  function walk(node, depth) {
+    if (seen.has(node.id)) return
+    seen.add(node.id)
+    ordered.push([node, depth])
     const kids = children.get(node.id)
-    return [
-      <TreeNode
-        key={node.id}
-        account={node}
-        depth={depth}
-        lang={lang}
-        onEdit={() => onEdit(node)}
-        onToggleActive={onToggleActive}
-      />,
-      ...(kids ? kids.flatMap((k) => render(k, depth + 1)) : []),
-    ]
+    if (kids) for (const k of kids) walk(k, depth + 1)
+  }
+  for (const r of roots) walk(r, 0)
+  for (const a of accounts) {
+    if (!seen.has(a.id)) {
+      seen.add(a.id)
+      ordered.push([a, 0]) // orphan/missing-parent account: show it anyway
+    }
   }
 
-  if (roots.length === 0) return null
-  return <>{roots.flatMap((r) => render(r, 0))}</>
+  if (ordered.length === 0) return null
+  return (
+    <>
+      {ordered.map(([node, depth]) => (
+        <TreeNode
+          key={node.id}
+          account={node}
+          depth={depth}
+          framework={framework}
+          lang={lang}
+          onEdit={() => onEdit(node)}
+          onToggleActive={onToggleActive}
+        />
+      ))}
+    </>
+  )
 }
 
-function TreeNode({ account, depth, onEdit, onToggleActive, lang }) {
+function TreeNode({ account, depth, framework, onEdit, onToggleActive, lang }) {
   const { t } = useLanguage()
   const name = lang === 'fr' ? account.name_fr : account.name_en
+  // IFRS accounts have no code (Part B) — never render a code badge for them.
+  const hasCode = framework === 'OHADA' && account.code
 
   return (
     <div
@@ -228,9 +268,11 @@ function TreeNode({ account, depth, onEdit, onToggleActive, lang }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-700">
-              {account.code}
-            </span>
+            {hasCode && (
+              <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs font-semibold text-slate-700">
+                {account.code}
+              </span>
+            )}
             {account.ohada_class_number != null && (
               <span
                 className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
@@ -291,7 +333,7 @@ function TreeNode({ account, depth, onEdit, onToggleActive, lang }) {
 function CreateAccountForm({ org, allAccounts, onSave, onCancel }) {
   const { t } = useLanguage()
   const [form, setForm] = useState({
-    code: '',
+    code: org.framework === 'OHADA' ? '' : null,
     name_en: '',
     name_fr: '',
     account_class: 'asset',
@@ -341,20 +383,23 @@ function CreateAccountForm({ org, allAccounts, onSave, onCancel }) {
     >
       <h4 className="font-semibold text-slate-900">{t('coa.createTitle')}</h4>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <label className="block">
-          <span className={LABEL_CLS}>{t('coa.code')}</span>
-          <input
-            required
-            value={form.code}
-            onChange={(e) => set('code', e.target.value)}
-            className={INPUT_CLS}
-            placeholder={org.framework === 'OHADA' ? '1011' : '1300'}
-          />
-        </label>
+        {org.framework === 'OHADA' && (
+          <label className="block">
+            <span className={LABEL_CLS}>{t('coa.code')}</span>
+            <input
+              required
+              value={form.code}
+              onChange={(e) => set('code', e.target.value)}
+              className={INPUT_CLS}
+              placeholder="1011"
+            />
+          </label>
+        )}
         <label className="block">
           <span className={LABEL_CLS}>{t('coa.chooseParent')}</span>
           <AccountLookup
             accounts={allAccounts || []}
+            framework={org.framework}
             value={
               form.parent_account_id
                 ? allAccounts?.find((a) => a.id === form.parent_account_id)

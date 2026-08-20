@@ -121,4 +121,22 @@ export function postTransaction(organizationId, transactionId) {
   })
 }
 
+/** GET /journal-entries?organization_id=&from=&to=&account_id=&reference= (Session 7) */
+export function fetchJournalEntries(organizationId, params = {}) {
+  const qs = new URLSearchParams({ organization_id: organizationId })
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, v)
+  }
+  return request(`/journal-entries?${qs.toString()}`)
+}
+
+/** GET /cashbook?organization_id=&from=&to=&account_id=&reference= (Session 7) */
+export function fetchCashBook(organizationId, params = {}) {
+  const qs = new URLSearchParams({ organization_id: organizationId })
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, v)
+  }
+  return request(`/cashbook?${qs.toString()}`)
+}
+
 export default { fetchHealth }

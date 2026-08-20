@@ -17,7 +17,9 @@ class AccountCreate(BaseModel):
 
     organization_id: int
     framework: FrameworkCode
-    code: str = Field(min_length=1, max_length=20)
+    # Part B: required for OHADA (SYSCOHADA numbering); omitted/None for IFRS,
+    # which has no mandated chart of accounts — a supplied code is ignored.
+    code: Optional[str] = Field(default=None, max_length=20)
     name_en: str = Field(min_length=1, max_length=160)
     name_fr: str = Field(min_length=1, max_length=160)
     account_class: AccountClass
@@ -46,7 +48,7 @@ class AccountOut(BaseModel):
     id: int
     organization_id: int
     framework: str
-    code: str
+    code: Optional[str] = None
     name_en: str
     name_fr: str
     account_class: str

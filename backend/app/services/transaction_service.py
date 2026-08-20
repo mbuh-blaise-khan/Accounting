@@ -92,6 +92,7 @@ def create_draft_transaction(
                 account_id=account.id,
                 debit_amount=debit,
                 credit_amount=credit,
+                narration=(item.get("narration") or "").strip() or None,
             )
         )
 
@@ -169,6 +170,7 @@ def serialize_transaction(txn: Transaction) -> TransactionOut:
                 account_id=line.account_id,
                 debit_amount=line.debit_amount,
                 credit_amount=line.credit_amount,
+                narration=line.narration,
                 account_code=acct.code if acct else None,
                 account_name_en=acct.name_en if acct else None,
                 account_name_fr=acct.name_fr if acct else None,
