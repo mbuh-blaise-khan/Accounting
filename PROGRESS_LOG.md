@@ -16,14 +16,160 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 7 — bug fixes, IFRS code removal, and journal/cash book
+**Last completed session:** Session 7 follow-up (2) — "real (non-demo) workspaces were empty" fix:
+every NEW workspace (demo or not) is auto-seeded with its framework chart, existing non-demo orgs
+backfilled via reseed_charts.py, autocomplete upgraded to progressive code-PREFIX narrowing,
+"A/C number" label introduced. 54 backend tests green.
 **Next session to run:** Session 8 — General Ledger
-**Blockers / open questions:** None outstanding. (Live-run verification of Parts A–D should be
-re-run in a terminal-capable environment; see Session 7 verification notes.)
+**Blockers / open questions:** None outstanding. (The `node` CLI cannot execute in this shell —
+every invocation fails with "stdout is not a tty" before running any code — so `npm run test:lookup`
+must be re-run in a terminal-capable environment. New assertions were cross-validated instead with
+an exact Python port of `searchAccounts`; see the Session 7 follow-up (2) entry.)
 
 ---
 
 ## Session Log
+
+### Session 7 follow-up (2) — Non-demo workspaces got EMPTY charts: seeding policy fix (2026-08-24)
+- Status: DONE
+- Trigger: a user registered a real (non-demo) OHADA business and found ZERO accounts under Chart of
+  Accounts, no autocomplete suggestions, and no way to post a transaction.
+
+#### Root cause (confirmed with live API probes, not guesses)
+- `organization_service.create_organization` gated chart seeding behind `if is_demo:` (Session 6b
+  design). Real businesses were never auto-seeded -> empty chart -> no code/name autocomplete,
+  no transaction posting.
+- IFRS had the SAME gap (verified live: a fresh non-demo IFRS org before the fix also had 0
+  accounts).
+- This "empty non-demo chart" assumption was wrong for OHADA specifically: SYSCOHADA numbering is a
+  legally standardized national system (docs/ohada-ifrs-source-reference.md), not something each
+  business invents. Every real OHADA business should start from the representative SYSCOHADA chart
+  and may add custom accounts on top.
+
+#### What was built / changed
+- `backend/app/services/organization_service.py`: removed the `is_demo` gate; EVERY new workspace is
+  seeded immediately via `seed_chart_for_organization` (OHADA -> 87-entry representative SYSCOHADA
+  subset; IFRS -> 27-entry IAS-1 template, code-free per Part B).
+- `backend/scripts/reseed_charts.py`: repurposed for the new policy — runs against **ALL orgs by
+  default** (backfill), `--demo-only` restricts to demo orgs; `--dry-run`/`--org` kept. Docstring
+  updated. Fixed a cosmetic bug that printed the final summary once per org.
+- `frontend/src/utils/accountLookup.js`: code matching is now **PREFIX-based** (`startsWith`), not
+  substring-anywhere, so typing "5" suggests all of Class 5, "57" narrows to treasury, "5711" lands
+  on the deepest sub-account; NAME matching stays substring (EN/FR).
+- `frontend/src/utils/accountLookup.test.mjs`: added `OHADA progressive digit-narrowing is REAL
+  prefix matching` (asserts '5'->Class 5, '57'->[571,5711,5712], '5711'->leaf, '011'->[] proving
+  prefix-not-substring; extended the shared fixture with 51/512).
+- i18n relabel (OHADA account-number field/column): `tx.account` -> "A/C number" (EN) / "N° compte"
+  (FR) on the transaction grid (desktop header + mobile); `coa.code` -> "A/C number"/"N° compte" on
+  the Chart-of-Accounts create-account field. Mobile txn-row label is now framework-aware
+  (IFRS rows show "Account name" instead of "A/C number", matching the desktop).
+
+#### Backfill (transaction-aware, real DB)
+Ran `-m scripts.reseed_charts` (all orgs). Results (real script output):
+- org 3 'Khan and Sons' (OHADA, non-demo): 0 -> 87 accounts
+- org 5 'Nelly' (IFRS, non-demo): 1 -> 28 (protected custom kept + Part-B code NULL + 27 template)
+- org 6 'ss' (OHADA, non-demo): 2 -> 87 (2 protected txn accounts + 85 seeded)
+- org 11 'Boris' (OHADA, non-demo real business, reported by the user): 2 -> 89 (2 protected
+  txn-referenced accounts + 87 SYSCOHADA) — posted transactions intact, no dangling refs
+- demo orgs untouched (org 2/4/7/8/9/10 unchanged), IFRS Part-B violations across DB: 0
+
+#### Verification (all real commands, output pasted in this session)
+1. `pytest app/tests -q` -> **54 passed** (added test_non_demo_org_auto_seeds_chart_per_framework;
+   test_account_list_scoped_per_organization updated: Bob's non-demo org is now seeded, not empty;
+   test_ohada_seed_produces_real_hierarchy updated to assert non-demo OHADA auto-seeds).
+2. Real API (TestClient) creating a NEW non-demo OHADA org: 201, GET /accounts -> count=87,
+   has 5711=True, has 7011=True, has 57=True, codes_head real SYSCOHADA (`10,101,1011,...`).
+3. Real API creating a NEW non-demo IFRS org: 201, count=27, codes_present=0 (the IFRS gap was real
+   and is now closed — same fix applied).
+4. searchAccounts port over the new non-demo OHADA chart (REAL rows): '5'->[50,52,521,5211,5215,57,
+   571,5711,5712], '57'->[57,571,5711,5712], '571'->[571,5711,5712], '5711'->[5711], '70'->[70,701,
+   7011,706], '011'->[] (prefix-not-substring), 'cash'->57..., 'ventes'->[70,701,7011].
+5. Bidirectional: name->number ('cash' -> 57 Cash), number->name ('5711' -> Cash - head office,
+   national currency; '701' -> Sales of goods for resale) — the picker displays both directions.
+6. Cross-checked the .mjs assertions with an exact Python port: ALL OK. (node cannot execute in this
+   non-TTY shell — same blocker as the prior entry; npm run test:lookup must be re-run by the user.)
+
+#### Decisions made
+- The prior "non-demo stays empty" scope guard is REVOKED for new and existing orgs: every workspace
+  gets its framework's chart; custom accounts may still be added on top.
+- IFRS non-demo were ALSO empty (confirmed), so the same seeding fix applies (requirement #2).
+- The COA page list-filter stays substring-anywhere for code (it is a browse filter, not the
+  autocomplete picker); prefix narrowing applies to the picker (AccountLookup/searchAccounts).
+
+#### What Session 8 needs to know
+- Session 8 (General Ledger) not started.
+- To re-run the frontend util tests in a terminal-capable env: `cd frontend && npm run test:lookup`.
+- Evidence kept in backend/: `_probe_nondemo.py` (real-API non-demo + narrowing + backfill proof),
+  `_xcheck_lookup.py` (Python mirror of the .mjs assertions). Scratch `_*.txt` cleaned up.
+
+### Session 7 follow-up — Live verification & data remediation (2026-08-21)
+- Status: DONE (this is the terminal-capable verification the Session 7 entry asked for, plus the
+  data fixes it identified)
+- Trigger: on a fresh boot the OHADA demo chart rendered empty and the account search found nothing
+  for real SYSCOHADA codes (5711, 7011, etc.), and the IFRS demo still showed legacy account codes.
+
+#### Root cause (confirmed with real DB + live API probes, not guesses)
+- The seed CODE is correct: a fresh OHADA demo yields 87 real SYSCOHADA accounts and a fresh IFRS
+  demo yields 27 IAS-1 accounts with code=NULL (verified live through TestClient in this session).
+- The live DB held STALE pre-Session-6b/Part-B data:
+  - org 4 (OHADA demo): 18 flat legacy accounts, codes 1000–5600, parent_account_id=NULL, and NO
+    57/571/5711, 70/7011, 60/601, 40/401 → OHADA cash/sales autocomplete found nothing.
+  - org 2 (IFRS demo): 29 accounts still carrying codes/names from the legacy chart (Part B never
+    applied to the live rows), plus 6 posted transactions referencing account ids {3,4,5,9,10,11,19,42}.
+  - org 3 / org 6 (non-demo OHADA): 0 accounts — CORRECT by design (seed only runs for is_demo=True;
+    test_account_list_scoped_per_organization forbids seeding them).
+
+#### What was built / changed
+- NEW `backend/scripts/reseed_charts.py` — repeatable, surgical data-remediation script:
+  - Demo-only by default (`--all` opts non-demo orgs in, with a warning; `--dry-run` previews;
+    `--org N` scopes to one org); idempotent (re-running is safe).
+  - OHADA: deletes only UNREFERENCED system-default accounts whose code is NOT in the canonical
+    SYSCOHADA subset, then calls the existing `seed_ohada_chart` (idempotent, keyed by code).
+  - IFRS: sets `code=NULL` on ALL IFRS accounts (Part B is framework-wide), deletes only
+    unreferenced system-default accounts whose name is NOT in the 27-entry IAS-1 template, then
+    calls `seed_ifrs_template` (idempotent, keyed by name_en).
+  - SAFETY: any account referenced by ANY transaction line (posted OR draft) is permanently
+    protected from deletion; user-created custom accounts (is_system_default=False) are never
+    deleted. Posted entries can never be orphaned.
+- FRONTEND `frontend/src/components/AccountLookup.jsx`: the OHADA journal compact input used to
+  render "code — name" while a dedicated read-only NAME column sat right beside it (duplicated name).
+  Now the OHADA input shows CODE only (IFRS keeps the name only, Part B). The dropdown still shows
+  code + both language names for picking.
+- CONFIRMED-ALREADY-FIXED (re-read on disk, no change needed): Session 7 Bug A3 ("Add a line" dead)
+  — the lines grid + column header are always rendered now; and the OHADA two-column journal layout
+  (AccountLookup code picker + read-only name) is wired correctly with `framework` passed through.
+- TESTS: extended `frontend/src/utils/accountLookup.test.mjs` with an OHADA code-subtree check
+  (571→[571,5711,5712], 60→[60,601,6011,6012,603], name search 'caisse'). `node` cannot execute in
+  this shell ("stdout is not a tty" on even `node --version`), so the new assertions were
+  cross-validated by an exact Python port of searchAccounts run against both synthetic and real
+  reseeded data — all assertions passed.
+
+#### Verification (all live, this session)
+- `python -m pytest app/tests -q` → **53 passed** (incl. org-scoping + IFRS-no-code tests).
+- Real API via TestClient: fresh OHADA demo → 87 accounts, has 5711 + 7011; fresh IFRS demo → 27
+  accounts, codes_present=0.
+- After applying the reseed to the live DB: org 4 = 87 SYSCOHADA accounts (57/571/5711, 70/7011,
+  60/601 all present); org 2 = 32 accounts ALL code=NULL; org 7/org 8 (already-correct probe demos)
+  untouched (no churn); org 3/org 6 still 0 (scope guard intact).
+- Search over reseeded org 4: '5711'→[5711]; '571'→[571,5711,5712]; 'cash'→[57,571,5711,5712];
+  '7011'→[7011]; 'ventes'→[70,701,7011]. org 2 (IFRS, name-only): 'cash and cash'→'Cash and cash
+  equivalents'; 'revenue'→[Sales revenue, Service revenue].
+- org 2 posted-transaction integrity: all 6 posted txns intact and balanced; referenced account ids
+  {3,4,5,9,10,11,19,42} all still resolve to existing org-2 accounts (no dangling references).
+
+#### Decisions made
+- Data remediation lives in the repo as a repeatable script (scripts/reseed_charts.py), not a
+  one-off manual patch; it reuses the already-tested idempotent seeders.
+- Reseeding is demo-only by default. Non-demo orgs staying seeded-empty remains a permanent
+  acceptance criterion (test_account_list_scoped_per_organization).
+- IFRS Part B is enforced surgically (null the code column framework-wide) rather than wiping the
+  org — posted transaction references survive.
+
+#### What Session 8 needs to know
+- Session 8 (General Ledger) is unchanged and NOT started in this session.
+- To re-run the frontend util tests in a terminal-capable env: `cd frontend && npm run test:lookup`.
+- Evidence artifacts kept in backend/: `_probe_live.py` (real-API + search proof), `_probe_after.py`
+  (post-reseed DB proof), `_probe_orgs.py` (org roster). Scratch `_*.txt` outputs were cleaned up.
 
 ### Session 7 — Bug fixes, IFRS code removal, Journal and Cash Book
 - Status: DONE

@@ -81,6 +81,59 @@ check('byNameOnly tolerates accounts without a code (IFRS seed)', () => {
   assert.deepEqual(searchAccounts(ifrs, '1', { byNameOnly: true }), [])
 })
 
+check('OHADA code-subtree search + sort (by code)', () => {
+  // Mirrors real SYSCOHADA prefixes: 60 -> 601 -> 6011/6012, and 57 -> 571 -> 5711/5712.
+  const ohada = [
+    { id: 1, code: '60', name_en: 'Purchases', name_fr: 'Achats' },
+    { id: 2, code: '601', name_en: 'Materials', name_fr: 'Fournitures' },
+    { id: 3, code: '6011', name_en: 'Raw materials', name_fr: 'Matieres prem' },
+    { id: 4, code: '6012', name_en: 'Work in progress', name_fr: 'Travaux encours' },
+    { id: 5, code: '603', name_en: 'Services purchased', name_fr: 'Prestations' },
+    { id: 6, code: '51', name_en: 'Pooled funds', name_fr: 'Fonds de placement' },
+    { id: 7, code: '512', name_en: 'Current bank accounts', name_fr: 'Banques (courant)' },
+    { id: 8, code: '571', name_en: 'Cash - national currency', name_fr: 'Caisse - monnaie' },
+    { id: 9, code: '5711', name_en: 'Cash in hand', name_fr: 'Caisse' },
+    { id: 10, code: '5712', name_en: 'Cash in banks', name_fr: 'Banque' },
+  ]
+  assert.deepEqual(searchAccounts(ohada, '571').map((a) => a.code), ['571', '5711', '5712'])
+  assert.deepEqual(
+    searchAccounts(ohada, '60').map((a) => a.code),
+    ['60', '601', '6011', '6012', '603']
+  )
+  assert.deepEqual(searchAccounts(ohada, '6011').map((a) => a.code), ['6011'])
+  // Name search still works alongside code matching on the OHADA (bidirectional) view.
+  assert.deepEqual(searchAccounts(ohada, 'caisse').map((a) => a.code), ['571', '5711'])
+})
+
+check('OHADA progressive digit-narrowing is REAL prefix matching', () => {
+  // SYSCOHADA hierarchy: one digit = class, more digits = deeper sub-account.
+  // The same chart as the code-subtree check above, so the queries are real codes.
+  const ohada = [
+    { id: 1, code: '60', name_en: 'Purchases', name_fr: 'Achats' },
+    { id: 2, code: '601', name_en: 'Materials', name_fr: 'Fournitures' },
+    { id: 3, code: '6011', name_en: 'Raw materials', name_fr: 'Matieres prem' },
+    { id: 4, code: '6012', name_en: 'Work in progress', name_fr: 'Travaux encours' },
+    { id: 5, code: '603', name_en: 'Services purchased', name_fr: 'Prestations' },
+    { id: 6, code: '51', name_en: 'Pooled funds', name_fr: 'Fonds de placement' },
+    { id: 7, code: '512', name_en: 'Current bank accounts', name_fr: 'Banque (courant)' },
+    { id: 8, code: '571', name_en: 'Cash - national currency', name_fr: 'Caisse - monnaie' },
+    { id: 9, code: '5711', name_en: 'Cash in hand', name_fr: 'Caisse' },
+    { id: 10, code: '5712', name_en: 'Cash in banks', name_fr: 'Banque' },
+  ]
+  // "5" => the whole of Class 5 (everything whose code starts with 5).
+  assert.deepEqual(searchAccounts(ohada, '5').map((a) => a.code), ['51', '512', '571', '5711', '5712'])
+  // "51" narrows to accounts under 51 only.
+  assert.deepEqual(searchAccounts(ohada, '51').map((a) => a.code), ['51', '512'])
+  // "512" reaches the leaf level.
+  assert.deepEqual(searchAccounts(ohada, '512').map((a) => a.code), ['512'])
+  // "57" -> cash sub-tree; "5711" -> deepest seeded sub-account.
+  assert.deepEqual(searchAccounts(ohada, '57').map((a) => a.code), ['571', '5711', '5712'])
+  assert.deepEqual(searchAccounts(ohada, '5711').map((a) => a.code), ['5711'])
+  // Prefix, NOT substring-anywhere: "011" appears in 6011 but must NOT match.
+  assert.deepEqual(searchAccounts(ohada, '011'), [])
+  // A name fragment with letters never prefix-matches codes (falls back to name).
+})
+
 if (failures > 0) {
   console.error(`${failures} check(s) failed`)
   process.exitCode = 1

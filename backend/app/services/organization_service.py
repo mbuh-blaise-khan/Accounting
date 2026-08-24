@@ -39,13 +39,16 @@ def create_organization(
     db.commit()
     db.refresh(org)
 
-    # Demo workspaces get their framework's proper chart structure immediately so
-    # the user can explore without a blank chart (OHADA = real SYSCOHADA subset;
-    # IFRS = editable IAS-1 template). Session 6b.
-    if is_demo:
-        from app.services.account_service import seed_chart_for_organization
+    # EVERY new workspace is seeded with its framework's proper chart structure
+    # immediately, demo or not (OHADA = the real representative SYSCOHADA subset;
+    # IFRS = the editable IAS-1 template). Session 6b gated this to is_demo=True;
+    # that was a wrong design choice for OHADA, whose SYSCOHADA numbering is a
+    # legally standardized national system every real business starts from — a
+    # blank non-demo chart made autocomplete and transaction posting impossible.
+    # IFRS is handled the same way (its editable template is a starting point).
+    from app.services.account_service import seed_chart_for_organization
 
-        seed_chart_for_organization(db, org.id)
+    seed_chart_for_organization(db, org.id)
 
     return org
 

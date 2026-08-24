@@ -411,7 +411,9 @@ function LineRow({ line, accounts, framework = 'OHADA', nameOf, onChange, onRemo
       {/* Mobile: stacked fields per line */}
       <div className="space-y-3 sm:hidden">
         <div>
-          <span className="text-xs text-slate-500">{t('tx.account')}</span>
+          <span className="text-xs text-slate-500">
+            {framework === 'OHADA' ? t('tx.account') : t('tx.accountName')}
+          </span>
           <AccountLookup
             accounts={accounts}
             framework={framework}

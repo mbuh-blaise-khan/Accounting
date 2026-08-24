@@ -49,13 +49,18 @@ def _accounts_map(client, org_id):
 
 
 def test_ohada_seed_produces_real_hierarchy(client, test_db_session):
-    """The OHADA seed is hierarchical, all 9 classes present, parents linked."""
+    """Every new OHADA workspace (INCLUDING non-demo) is seeded with real
+    hierarchical SYSCOHADA: all 9 classes present, parents linked."""
     _register(client)
     org = _create_org(client, framework="OHADA", is_demo=False).json()
 
-    created = seed_chart_for_organization(test_db_session, org["id"])
-    assert len(created) == len(OHADA_CHART)
-    # Idempotent: a second run adds nothing.
+    # Non-demo OHADA workspaces are auto-seeded on creation (Session 8 fix):
+    # the full representative SYSCOHADA chart is present immediately.
+    resp = client.get(f"/accounts?organization_id={org['id']}")
+    assert resp.status_code == 200
+    api_accounts = resp.json()
+    assert len(api_accounts) == len(OHADA_CHART)
+    # Idempotent: a re-seed adds nothing.
     assert seed_chart_for_organization(test_db_session, org["id"]) == []
 
     rows = test_db_session.query(Account).all()
@@ -130,6 +135,28 @@ def test_demo_org_auto_seeds_chart_per_framework(client):
     assert len(ifrs_accounts) == len(IFRS_TEMPLATE)
     assert all(a["ohada_class_number"] is not None for a in ohada_accounts)
     assert all(a["ohada_class_number"] is None for a in ifrs_accounts)
+
+
+def test_non_demo_org_auto_seeds_chart_per_framework(client):
+    """Session 8 fix: real (non-demo) workspaces are seeded too, not just demos.
+
+    OHADA numbering is a legally standardized national system, so every real
+    business starts from the representative SYSCOHADA chart. IFRS gets its
+    editable IAS-1 template. Both must be present immediately on creation.
+    """
+    _register(client)
+    ohada = _create_org(client, framework="OHADA", is_demo=False).json()
+    ifrs = _create_org(client, framework="IFRS", is_demo=False).json()
+
+    ohada_accounts = client.get(f"/accounts?organization_id={ohada['id']}").json()
+    ifrs_accounts = client.get(f"/accounts?organization_id={ifrs['id']}").json()
+
+    assert len(ohada_accounts) == len(OHADA_CHART)
+    assert len(ifrs_accounts) == len(IFRS_TEMPLATE)
+    # OHADA carries the real hierarchy/class numbers; IFRS is code-free (Part B).
+    assert all(a["ohada_class_number"] is not None for a in ohada_accounts)
+    assert all(a["ohada_class_number"] is None for a in ifrs_accounts)
+    assert all(a["code"] is None for a in ifrs_accounts)
 
 
 def test_duplicate_code_rejected_within_framework(client):
@@ -210,11 +237,12 @@ def test_account_list_scoped_per_organization(client):
     resp = client.get(f"/accounts?organization_id={alice_org['id']}")
     assert resp.status_code == 404
 
-    # Bob's own org has its own (empty, non-demo) chart.
+    # Bob's own non-demo org has its own chart, auto-seeded for its framework
+    # (Session 8 fix: every workspace starts with its framework's chart).
     bob_org = _create_org(client, name="Bob Co", is_demo=False).json()
     resp = client.get(f"/accounts?organization_id={bob_org['id']}")
     assert resp.status_code == 200
-    assert resp.json() == []
+    assert len(resp.json()) == len(OHADA_CHART)
 
 
 def test_patch_edits_name_and_toggles_active(client):
