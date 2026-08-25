@@ -139,4 +139,13 @@ export function fetchCashBook(organizationId, params = {}) {
   return request(`/cashbook?${qs.toString()}`)
 }
 
+/** GET /ledger/{accountId}?organization_id=&from=&to= (Session 8) */
+export function fetchLedger(organizationId, accountId, params = {}) {
+  const qs = new URLSearchParams({ organization_id: organizationId })
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, v)
+  }
+  return request(`/ledger/${accountId}?${qs.toString()}`)
+}
+
 export default { fetchHealth }

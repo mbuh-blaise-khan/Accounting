@@ -16,19 +16,86 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 7 follow-up (2) — "real (non-demo) workspaces were empty" fix:
-every NEW workspace (demo or not) is auto-seeded with its framework chart, existing non-demo orgs
-backfilled via reseed_charts.py, autocomplete upgraded to progressive code-PREFIX narrowing,
-"A/C number" label introduced. 54 backend tests green.
-**Next session to run:** Session 8 — General Ledger
-**Blockers / open questions:** None outstanding. (The `node` CLI cannot execute in this shell —
-every invocation fails with "stdout is not a tty" before running any code — so `npm run test:lookup`
-must be re-run in a terminal-capable environment. New assertions were cross-validated instead with
-an exact Python port of `searchAccounts`; see the Session 7 follow-up (2) entry.)
+**Last completed session:** Session 8 — General Ledger (`ledger_service` deriving
+opening/movements/running/closing balances from POSTED lines only, `GET
+/ledger/{account_id}` endpoint, General Ledger page with drill-down) + Journal/Cash Book UI
+grouping fix (date separators, transaction-group banding/dividers, credit-entry offset).
+60 backend tests green; `npm run build` clean (47 modules).
+**Next session to run:** Session 9 (per the build guide order: trial balance /
+financial-statement services — see `.clinerules` service list).
+**Blockers / open questions:** None outstanding. (`node` CLI still cannot run bare in this
+non-TTY shell — every direct invocation fails with "stdout is not a tty" — BUT `npm run build`
+works through npm's cmd shim, so frontend verification is done via real Vite builds. Backend runs
+use the venv python directly.)
 
 ---
 
 ## Session Log
+
+### Session 8 — General Ledger + Journal UI grouping (2026-08-25)
+- Status: DONE
+
+#### What was built
+- `backend/app/schemas/ledger.py`: `LedgerAccountOut`, `LedgerMovementOut`, `LedgerOut`
+  (opening/debit_movements/credit_movements/closing + movements with per-line running balance).
+- `backend/app/services/ledger_service.py`: `get_ledger(db, user, org_id, account_id,
+  date_from=None, date_to=None)` — argument order follows the established `(db, user, org_id, …)`
+  service convention. Everything is DERIVED from POSTED journal lines on the fly (per `.clinerules`):
+  opening = cumulative signed net strictly before `date_from` (0 when unbounded); movements are raw
+  debit/credit sums within the window; running balance accumulates `_signed_delta()` line by line;
+  closing = opening + net movement. Balance convention: debit-normal accounts close at
+  opening + debits − credits; credit-normal accounts at opening + credits − debits. Drafts/reversed
+  never appear. No stored ledger balance exists that could drift from the journal.
+- `backend/app/api/routes/ledger.py` + registered in `router.py`:
+  `GET /ledger/{account_id}?organization_id=&from=&to=` (protected, org-scoped, 404 conventions).
+- `backend/app/tests/test_ledger.py` — 6 tests: the closing identity for a debit-normal account;
+  the credit-normal convention; opening respecting `from` (re-dated posted_at via test_db_session);
+  no-activity ⇒ opening == closing == 0 (unbounded AND inside an explicit period); drafts excluded;
+  org scoping (non-member 404, foreign account id 404, unauthenticated 401).
+- Journal/Cash Book UI (`frontend/src/components/JournalTable.jsx`, presentation ONLY — shared by
+  both pages so both inherit it): (1) sticky/distinct DATE separator band above the first
+  transaction of each day ("Sunday, August 17, 2026" style) — fixes "different weeks cannot be
+  identified"; (2) rows of one transaction read as one unit via a thin top divider starting each
+  new reference group plus alternating subtle group backgrounds; (3) double-entry offset — credit
+  rows indent the account name (pl-10 + ↳ prefix) and shift the credit amount in from the column
+  edge (pr-9), and credit figures render muted vs bold debits. Framework-aware OHADA/IFRS columns,
+  totals math, filters, cash/bank filtering and drill-down untouched. Mobile cards get the same
+  separators/banding/credit offset.
+- General Ledger frontend: `GeneralLedgerPage.jsx` (account picker incl. OHADA code labels,
+  optional from/to, four balance cards, chronological movements table with running balance and a
+  closing-balance footer row, transaction drill-down), `fetchLedger()` in `services/api.js`,
+  i18n EN+FR keys (`ledger.*`, `ws.ledger*`), and Dashboard wiring (nav button, OrgHome card,
+  section switch).
+
+#### Verification (real commands, output captured)
+- `python -m py_compile app/services/ledger_service.py app/schemas/ledger.py` → rc=0; direct import
+  of `ledger_service.get_ledger` OK.
+- `pytest app/tests -q` → **60 passed** (54 prior + 6 new ledger tests), EXIT=0.
+- Ledger tests alone: `pytest app/tests/test_ledger.py -q` → **6 passed**.
+- `npm run build` (real Vite production build) → ✓ 47 modules transformed, built in 3.19s — proves
+  JournalTable rewrite + GeneralLedgerPage compile.
+- i18n JSON parse check on en.json + fr.json → OK.
+
+#### Decisions made
+- Balances are never stored; every ledger call re-derives from the immutable posted journal
+  (.clinerules determinism/immutability rules).
+- `get_ledger` keeps `(db, user, org_id, …)` ordering to match existing services rather than the
+  `(…, account_id, org_id)` order in the session brief.
+- The Journal grouping change is confined to `JournalTable` (shared by Journal + Cash Book);
+  GeneralLedger's own movement table applies the same credit-offset styling but not date bands.
+
+#### Environment note (for future sessions)
+- Bare `node` fails in this shell ("stdout is not a tty"), but `npm run build` WORKS (npm routes
+  through a cmd shim) — use Vite builds as the frontend verification path. Long backend commands:
+  launch detached with `nohup … & disown` writing to a file, then poll the file with read_files
+  ONLY — any new foreground shell command kills background jobs.
+
+#### What Session 9 needs to know
+- Trial balance / financial statements can reuse `ledger_service._period_lines` +
+  `_signed_delta` (per-account signed nets already encode normal-balance direction).
+- `/ledger/{account_id}` returns Decimal fields serialized as JSON numbers; frontend reads
+  `opening_balance`, `debit_movements`, `credit_movements`, `closing_balance`, `movements[]`.
+- To re-run frontend util tests: still blocked by bare node; use `npm run build`.
 
 ### Session 7 follow-up (2) — Non-demo workspaces got EMPTY charts: seeding policy fix (2026-08-24)
 - Status: DONE

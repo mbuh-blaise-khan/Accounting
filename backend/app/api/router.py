@@ -7,6 +7,7 @@ from app.api.routes import (
     frameworks,
     health,
     journal,
+    ledger,
     organizations,
     transactions,
     users,
@@ -21,3 +22,4 @@ api_router.include_router(frameworks.router)
 api_router.include_router(accounts.router)
 api_router.include_router(transactions.router)
 api_router.include_router(journal.router)
+api_router.include_router(ledger.router)
