@@ -30,7 +30,12 @@ from app.models.enums import TransactionStatus
 from app.models.organization import Organization, OrganizationMember
 from app.models.transaction import Transaction, TransactionLine
 from app.models.user import User
-from app.schemas.ledger import LedgerAccountOut, LedgerMovementOut, LedgerOut
+from app.schemas.ledger import (
+    LedgerAccountOut,
+    LedgerBalance,
+    LedgerMovementOut,
+    LedgerOut,
+)
 
 
 def _ensure_org_access(db: Session, user: User, org_id: int) -> Organization:
@@ -82,6 +87,29 @@ def _signed_delta(debit: Decimal, credit: Decimal, normal_balance: str) -> Decim
     # Asset/expense (normal debit): debit increases; liability/equity/revenue:
     # (normal credit): credit increases.
     return net if normal_balance == "debit" else -net
+
+
+def _balance(signed: Decimal, normal_balance: str) -> LedgerBalance:
+    """Present a signed balance the way a real ledger does: as an unsigned figure
+    sitting on exactly one side (Dr or Cr), never as a signed number the reader
+    must convert via the account's normal_balance.
+
+    ``_signed_delta`` returns a CONVENTION-RELATIVE value: positive always means
+    "increase toward the account's normal side", negative means "overdrawn to
+    the opposite side". So this helper must know ``normal_balance`` to pick the
+    correct side:
+      - debit-normal (assets, expenses):  + => Debit balance, - => Credit balance
+      - credit-normal (liabilities/equity/revenue): + => Credit balance, - => Debit balance
+    """
+    if signed > 0:
+        if normal_balance == "debit":
+            return LedgerBalance(debit=signed, credit=Decimal("0"), side="debit")
+        return LedgerBalance(debit=Decimal("0"), credit=signed, side="credit")
+    if signed < 0:
+        if normal_balance == "debit":
+            return LedgerBalance(debit=Decimal("0"), credit=-signed, side="credit")
+        return LedgerBalance(debit=-signed, credit=Decimal("0"), side="debit")
+    return LedgerBalance(side="zero")
 
 
 def _period_lines(
@@ -179,12 +207,12 @@ def get_ledger(
                 id=line.id,
                 transaction_id=txn.id,
                 date=txn.posted_at,
-                reference=f"TX-{txn.id:04d}",
+                                reference=f"TX-{txn.id:04d}",
                 description=txn.description,
                 narration=line.narration,
                 debit=debit,
                 credit=credit,
-                running_balance=running,
+                running_balance=_balance(running, nb),
                 status=txn.status.value,
             )
         )
@@ -201,12 +229,12 @@ def get_ledger(
             name_en=account.name_en,
             name_fr=account.name_fr,
             normal_balance=nb,
-        ),
+                ),
         date_from=date_from,
         date_to=date_to,
-        opening_balance=opening,
+        opening_balance=_balance(opening, nb),
         debit_movements=debit_total,
         credit_movements=credit_total,
-        closing_balance=closing,
+        closing_balance=_balance(closing, nb),
         movements=movements,
     )

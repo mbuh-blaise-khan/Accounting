@@ -98,20 +98,24 @@ def test_ledger_debit_normal_identity(client):
     assert body["account"]["id"] == acc["57"]["id"]
     assert body["account"]["code"] == "57"
     assert body["account"]["normal_balance"] == "debit"
-    assert float(body["opening_balance"]) == 0
+    assert float(body["opening_balance"]["debit"]) == 0
+    assert body["opening_balance"]["side"] == "zero"
     assert float(body["debit_movements"]) == 50000
     assert float(body["credit_movements"]) == 20000
-    # THE IDENTITY under test.
-    assert float(body["closing_balance"]) == (
-        float(body["opening_balance"])
+    # THE IDENTITY under test: closing = opening + debit_movements - credit_movements.
+    assert float(body["closing_balance"]["debit"]) == (
+        float(body["opening_balance"]["debit"])
         + float(body["debit_movements"])
         - float(body["credit_movements"])
     )
-    assert float(body["closing_balance"]) == 30000
+    assert float(body["closing_balance"]["debit"]) == 30000
+    assert body["closing_balance"]["side"] == "debit"
     # Chronological movements whose running balance ends at the closing figure.
     assert [m["reference"] for m in body["movements"]] == ["TX-0001", "TX-0002"]
-    assert float(body["movements"][0]["running_balance"]) == 50000
-    assert float(body["movements"][-1]["running_balance"]) == 30000
+    assert float(body["movements"][0]["running_balance"]["debit"]) == 50000
+    assert body["movements"][0]["running_balance"]["side"] == "debit"
+    assert float(body["movements"][-1]["running_balance"]["debit"]) == 30000
+    assert float(body["movements"][-1]["running_balance"]["credit"]) == 0
     assert all(m["date"] is not None for m in body["movements"])
 
 
@@ -126,15 +130,18 @@ def test_ledger_credit_normal_convention(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["account"]["normal_balance"] == "credit"
-    assert float(body["opening_balance"]) == 0
+    assert float(body["opening_balance"]["credit"]) == 0
     assert float(body["debit_movements"]) == 0
     assert float(body["credit_movements"]) == 50000
-    assert float(body["closing_balance"]) == (
-        float(body["opening_balance"])
+    # Credit-normal identity: closing = opening + credit_movements - debit_movements.
+    assert float(body["closing_balance"]["credit"]) == (
+        float(body["opening_balance"]["credit"])
         + float(body["credit_movements"])
         - float(body["debit_movements"])
     )
-    assert float(body["closing_balance"]) == 50000
+    assert float(body["closing_balance"]["credit"]) == 50000
+    assert float(body["closing_balance"]["debit"]) == 0
+    assert body["closing_balance"]["side"] == "credit"
 
 
 def test_ledger_opening_respects_from_bound(client, test_db_session):
@@ -164,12 +171,13 @@ def test_ledger_opening_respects_from_bound(client, test_db_session):
     assert resp.status_code == 200
     body = resp.json()
     # Opening carries the pre-period sale; movements carry only the purchase.
-    assert float(body["opening_balance"]) == 50000
+    assert float(body["opening_balance"]["debit"]) == 50000
+    assert body["opening_balance"]["side"] == "debit"
     assert [m["reference"] for m in body["movements"]] == ["TX-0002"]
     assert float(body["debit_movements"]) == 0
     assert float(body["credit_movements"]) == 20000
-    assert float(body["closing_balance"]) == 30000
-    assert float(body["movements"][0]["running_balance"]) == 30000
+    assert float(body["closing_balance"]["debit"]) == 30000
+    assert float(body["movements"][0]["running_balance"]["debit"]) == 30000
     assert body["date_from"] == "2026-01-06"
     assert body["date_to"] == "2026-01-28"
 
@@ -184,8 +192,10 @@ def test_ledger_no_activity_shows_opening_equal_closing(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["movements"] == []
-    assert float(body["opening_balance"]) == 0
-    assert float(body["closing_balance"]) == 0
+    assert body["opening_balance"]["side"] == "zero"
+    assert float(body["opening_balance"]["debit"]) == 0
+    assert float(body["closing_balance"]["debit"]) == 0
+    assert body["closing_balance"]["side"] == "zero"
 
     # Same holds inside an explicit period.
     resp = _ledger(
@@ -193,7 +203,7 @@ def test_ledger_no_activity_shows_opening_equal_closing(client):
     )
     body = resp.json()
     assert body["movements"] == []
-    assert float(body["opening_balance"]) == float(body["closing_balance"]) == 0
+    assert body["opening_balance"] == body["closing_balance"]
 
 
 def test_ledger_excludes_draft_transactions(client):
@@ -208,7 +218,55 @@ def test_ledger_excludes_draft_transactions(client):
     body = _ledger(client, org["id"], acc["57"]["id"]).json()
     assert {m["transaction_id"] for m in body["movements"]} == {posted["id"]}
     assert draft["id"] not in {m["transaction_id"] for m in body["movements"]}
-    assert float(body["closing_balance"]) == 50000
+    assert float(body["closing_balance"]["debit"]) == 50000
+    assert body["closing_balance"]["side"] == "debit"
+
+
+def test_ledger_balance_side_labels(client):
+    """A real ledger shows a DEBIT balance or a CREDIT balance (never a signed
+    number): a debit-normal account with net debit reports side 'debit'; a
+    credit-normal account in net credit reports side 'credit'; an account that
+    CROSSES from a debit position to a credit position mid-period reports each
+    point correctly."""
+    _register(client)
+    org = _create_demo_org(client)
+    acc = _accounts_by_code(client, org["id"])
+
+    # Cash (debit-normal asset): sale puts it 50,000 Dr; back-to-back purchases
+    # first return it to zero, then take it to 30,000 Cr mid-period.
+    t1 = _make_txn(client, org["id"], _sale(acc))                      # Dr 57 50,000
+    t2 = _make_txn(client, org["id"], _cash_purchase(acc), "Bought goods")  # Cr 57 20,000
+    _post(client, org["id"], t1["id"])
+    _post(client, org["id"], t2["id"])
+    # Third txn: bigger purchase, credit cash 60,000 (debit Purchases).
+    over = [
+        {"account_id": acc["60"]["id"], "debit": 60000, "credit": 0},
+        {"account_id": acc["57"]["id"], "debit": 0, "credit": 60000},
+    ]
+    t3 = _make_txn(client, org["id"], over, "Large purchase")
+    _post(client, org["id"], t3["id"])
+
+    cash = _ledger(client, org["id"], acc["57"]["id"]).json()
+    # After t1: Dr 50,000. After t2: Dr 30,000. After t3: Cr 30,000 (crossed).
+    assert cash["movements"][0]["running_balance"]["side"] == "debit"
+    assert float(cash["movements"][0]["running_balance"]["debit"]) == 50000
+    assert cash["movements"][1]["running_balance"]["side"] == "debit"
+    assert float(cash["movements"][1]["running_balance"]["debit"]) == 30000
+    assert cash["movements"][2]["running_balance"]["side"] == "credit"
+    assert float(cash["movements"][2]["running_balance"]["credit"]) == 30000
+    assert cash["closing_balance"]["side"] == "credit"
+    assert float(cash["closing_balance"]["credit"]) == 30000
+    assert float(cash["closing_balance"]["debit"]) == 0
+
+    # Sales (credit-normal revenue) with a net credit position -> credit balance.
+    sales = _ledger(client, org["id"], acc["70"]["id"]).json()
+    assert sales["closing_balance"]["side"] == "credit"
+    assert float(sales["closing_balance"]["credit"]) == 50000
+
+    # Purchases (debit-normal expense) in a net debit position -> debit balance.
+    purchases = _ledger(client, org["id"], acc["60"]["id"]).json()
+    assert purchases["closing_balance"]["side"] == "debit"
+    assert float(purchases["closing_balance"]["debit"]) == 80000
 
 
 def test_ledger_scoped_per_organization(client):

@@ -66,6 +66,13 @@ def _ohada_balanced(acc):
     ]
 
 
+def _ifrs_balanced(acc):
+    return [
+        {"account_id": acc["Cash and cash equivalents"]["id"], "debit": 50000, "credit": 0},
+        {"account_id": acc["Sales revenue"]["id"], "debit": 0, "credit": 50000},
+    ]
+
+
 def test_journal_shows_only_posted_transactions(client):
     _register(client)
     org = _create_demo_org(client)
@@ -135,9 +142,14 @@ def test_journal_filters_by_date_account_and_reference(client):
     assert rows[0]["account_code"] == "57"
     assert float(rows[0]["debit"]) == 50000
 
-    # Reference filter -> matches the description.
-    resp = client.get(f"/journal-entries?organization_id={org['id']}&reference=cash")
+    # Reference filter -> matches ONLY the reference field (TX-####), not the
+    # description or account name (Part A fix).
+    ref = f"TX-{txn['id']:04d}"
+    resp = client.get(f"/journal-entries?organization_id={org['id']}&reference={ref}")
     assert len(resp.json()) == 2
+    # A word that only appears in the description must NOT match a reference.
+    resp = client.get(f"/journal-entries?organization_id={org['id']}&reference=cash")
+    assert resp.json() == []
 
     # Date range in the distant past -> nothing.
     resp = client.get(

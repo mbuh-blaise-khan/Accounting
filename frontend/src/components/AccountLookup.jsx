@@ -24,8 +24,12 @@ export default function AccountLookup({
 }) {
   const { t } = useLanguage()
   const byNameOnly = framework !== 'OHADA'
+  // OHADA journal rows have a dedicated code column + a separate read-only name
+  // column, so the autocomplete input shows the CODE only (no duplicated name).
+  // IFRS shows the name (Part B: no codes). The dropdown still lists code + both
+  // language names so the user can pick by either.
   const selectedText = (acct) =>
-    acct && !byNameOnly ? `${acct.code} — ${acct.name_en}` : acct ? acct.name_en : ''
+    !acct ? '' : byNameOnly ? acct.name_en : acct.code
   const [query, setQuery] = useState(selectedText(selected))
   const [open, setOpen] = useState(false)
   const [highlight, setHighlight] = useState(0)

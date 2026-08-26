@@ -21,6 +21,7 @@ function buildDisplay(rows) {
   let lastDateKey = null
   let lastRef = null
   let band = 0
+  let justDate = false
   for (const r of rows) {
     const d = r.date ? new Date(r.date) : null
     const dateKey = d ? `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` : 'none'
@@ -28,11 +29,21 @@ function buildDisplay(rows) {
       items.push({ kind: 'date', date: d, key: `d${items.length}` })
       lastDateKey = dateKey
       lastRef = null // a new day always starts a fresh transaction group
+      justDate = true
     }
     const firstInTxn = r.reference !== lastRef
     if (firstInTxn) {
       band = (band + 1) % 2 // alternate background per TRANSACTION group
       lastRef = r.reference
+      // A bold rule separates this transaction from the previous one. This is
+      // the entry-level boundary (stronger than the faint row borders) so
+      // TX-0012 / TX-0013 / TX-0014 read as unmistakable blocks.
+      if (items.length > 0 && !justDate) {
+        items.push({ kind: 'gap', key: `g${items.length}` })
+      }
+      justDate = false
+    } else {
+      justDate = false
     }
     items.push({ kind: 'row', row: r, band, firstInTxn })
   }
@@ -66,20 +77,22 @@ export default function JournalTable({ rows, org, nameOf, t, onViewTxn }) {
   const totalCredit = rows.reduce((s, r) => s + (Number(r.credit) || 0), 0)
   const colCount = isOhada ? 11 : 10
 
-  // Row styling shared by every line of one transaction group.
+  // Row styling shared by every line of one transaction group. Transaction
+  // BOUNDARIES are drawn by the dedicated gap rule lines, not by these faint
+  // per-row borders, so different entries never blur together.
   function rowClass(item) {
-    const { row: r, band, firstInTxn } = item
+    const { row: r, band } = item
     return [
       'border-b border-slate-100 hover:bg-slate-100/70',
       band ? 'bg-slate-50' : '',
-      firstInTxn ? 'border-t border-t-slate-300' : '',
-      Number(r.credit) > 0 ? 'is-credit' : '',
+      r.credit > 0 ? 'is-credit' : '',
     ]
       .filter(Boolean)
       .join(' ')
   }
 
-  // One display item = either a sticky DATE separator band or one journal LINE.
+  // One display item = a sticky DATE band, a bold TRANSACTION-boundary rule, or
+  // one journal LINE.
   function renderItem(item) {
     if (item.kind === 'date') {
       return (
@@ -92,6 +105,18 @@ export default function JournalTable({ rows, org, nameOf, t, onViewTxn }) {
             className="border-y border-slate-300 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-700"
           >
             {fmtDay(item.date)}
+          </td>
+        </tr>
+      )
+    }
+
+    if (item.kind === 'gap') {
+      // A bold, full-width rule between DIFFERENT transactions (double-entry
+      // "ruling line" convention) — stronger than any in-transaction separator.
+      return (
+        <tr key={item.key} aria-hidden="true">
+          <td colSpan={colCount} className="p-0">
+            <div className="border-t-2 border-slate-400" />
           </td>
         </tr>
       )
@@ -115,11 +140,12 @@ export default function JournalTable({ rows, org, nameOf, t, onViewTxn }) {
             {r.account_code || ''}
           </td>
         )}
-        {/* Double-entry convention: credit-side names are indented under their
-            debit counterpart so the entry side reads without the header. */}
+        {/* Double-entry convention: credit-side names are indented well under
+            their debit counterpart so the side reads without the header (Part D:
+            strong, explicit offset — pl-16, not a faint nudge). */}
         <td
           className={`max-w-[210px] truncate px-3 py-2 ${
-            isCredit ? 'pl-10 text-slate-700' : 'font-medium text-slate-900'
+            isCredit ? 'pl-16 text-slate-700' : 'font-medium text-slate-900'
           }`}
         >
           {isCredit ? '↳ ' : ''}
@@ -131,9 +157,14 @@ export default function JournalTable({ rows, org, nameOf, t, onViewTxn }) {
         <td className="whitespace-nowrap px-3 py-2 text-right font-medium text-slate-900">
           {Number(r.debit) > 0 ? fmtAmount(r.debit) : ''}
         </td>
-        {/* Credit amounts sit indented from the column edge versus debits. */}
-        <td className="whitespace-nowrap px-3 py-2 pr-9 text-right text-slate-600">
-          {isCredit ? fmtAmount(r.credit) : ''}
+        {/* Credit amounts sit visibly indented within their column (pl-14) so the
+            credited line reads shifted right of the debit figure — not flush. */}
+        <td
+          className={`whitespace-nowrap text-right ${
+            isCredit ? 'pl-14 pr-2 text-slate-700' : 'px-3 pr-3 font-light text-slate-300'
+          } py-2`}
+        >
+          {isCredit ? `↳ ${fmtAmount(r.credit)}` : ''}
         </td>
         <td className="px-3 py-2 text-slate-600">{r.source || '—'}</td>
         <td className="px-3 py-2">
@@ -205,6 +236,11 @@ export default function JournalTable({ rows, org, nameOf, t, onViewTxn }) {
               </div>
             )
           }
+          if (item.kind === 'gap') {
+            return (
+              <div key={item.key} className="border-t-2 border-slate-400" />
+            )
+          }
           const r = item.row
           const isCredit = Number(r.credit) > 0
           return (
@@ -217,7 +253,7 @@ export default function JournalTable({ rows, org, nameOf, t, onViewTxn }) {
               <div className="flex items-start justify-between gap-2">
                 <div
                   className={`min-w-0 ${
-                    isCredit ? 'border-l-2 border-blue-300 pl-3' : ''
+                    isCredit ? 'border-l-4 border-blue-300 pl-4' : ''
                   }`}
                 >
                   <p
@@ -251,10 +287,10 @@ export default function JournalTable({ rows, org, nameOf, t, onViewTxn }) {
                     {Number(r.debit) > 0 ? fmtAmount(r.debit) : '—'}
                   </span>
                 </span>
-                <span className="pl-3 text-slate-700">
+                <span className="pl-6 text-slate-700">
                   {t('journal.credit')}:{' '}
-                  <span className={`font-medium ${isCredit ? 'text-slate-900' : 'text-slate-400'}`}>
-                    {isCredit ? fmtAmount(r.credit) : '—'}
+                  <span className={`font-semibold ${isCredit ? 'text-slate-900' : 'text-slate-400'}`}>
+                    {isCredit ? `↳ ${fmtAmount(r.credit)}` : '—'}
                   </span>
                 </span>
               </div>

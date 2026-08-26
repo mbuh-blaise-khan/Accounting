@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react'
 import { fetchAccounts, fetchLedger, fetchTransactions } from '../services/api.js'
 import { useLanguage } from '../i18n/index.jsx'
+import AccountFilterSelect from '../components/AccountFilterSelect.jsx'
 
 export default function GeneralLedgerPage({ org, onBack }) {
   const { t, lang } = useLanguage()
@@ -71,6 +72,21 @@ export default function GeneralLedgerPage({ org, onBack }) {
     return (Number(n) || 0).toLocaleString()
   }
 
+  // A balance point is an unsigned figure sitting on ONE side (Dr or Cr), the
+  // way a real ledger shows it. Render the amount with its side label.
+  function fmtBalance(bal) {
+    if (!bal) return '—'
+    if (Number(bal.debit) > 0) return `${fmtAmount(bal.debit)} ${t('ledger.dr')}`
+    if (Number(bal.credit) > 0) return `${fmtAmount(bal.credit)} ${t('ledger.cr')}`
+    return '—'
+  }
+  function balanceLabel(bal) {
+    if (!bal || bal.side === 'zero') return t('ledger.zeroPosition')
+    return bal.side === 'debit'
+      ? t('ledger.debitPosition')
+      : t('ledger.creditPosition')
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
       <div className="mx-auto w-full max-w-6xl">
@@ -95,21 +111,14 @@ export default function GeneralLedgerPage({ org, onBack }) {
             <span className="block text-xs font-medium text-slate-500">
               {t('ledger.account')}
             </span>
-            <select
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className={`mt-1 w-full rounded-lg border px-3 py-2 text-sm focus:border-blue-500 focus:outline-none ${
-                accountId ? 'border-slate-300' : 'border-slate-300 text-slate-500'
-              }`}
-            >
-              <option value="">{t('ledger.pickAccount')}</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {isOhada && a.code ? `${a.code} — ` : ''}
-                  {nameOf(a)}
-                </option>
-              ))}
-            </select>
+            <AccountFilterSelect
+              accounts={accounts}
+              framework={org.framework}
+              value={accounts.find((a) => a.id === Number(accountId)) || null}
+              onChange={(id) => setAccountId(id)}
+              t={t}
+              nameOf={nameOf}
+            />
           </label>
           <label>
             <span className="block text-xs font-medium text-slate-500">{t('journal.from')}</span>
@@ -169,9 +178,11 @@ export default function GeneralLedgerPage({ org, onBack }) {
               </div>
               <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                 <div className="rounded-lg bg-slate-50 p-3">
-                  <dt className="text-xs text-slate-500">{t('ledger.openingBalance')}</dt>
+                  <dt className="text-xs text-slate-500">
+                    {t('ledger.openingBalance')} · {balanceLabel(ledger.opening_balance)}
+                  </dt>
                   <dd className="mt-0.5 font-semibold text-slate-800">
-                    {fmtAmount(ledger.opening_balance)}
+                    {fmtBalance(ledger.opening_balance)}
                   </dd>
                 </div>
                 <div className="rounded-lg bg-blue-50 p-3">
@@ -187,9 +198,11 @@ export default function GeneralLedgerPage({ org, onBack }) {
                   </dd>
                 </div>
                 <div className="rounded-lg bg-green-50 p-3">
-                  <dt className="text-xs text-slate-500">{t('ledger.closingBalance')}</dt>
+                  <dt className="text-xs text-slate-500">
+                    {t('ledger.closingBalance')} · {balanceLabel(ledger.closing_balance)}
+                  </dt>
                   <dd className="mt-0.5 font-bold text-slate-900">
-                    {fmtAmount(ledger.closing_balance)}
+                    {fmtBalance(ledger.closing_balance)}
                   </dd>
                 </div>
               </dl>
@@ -226,13 +239,28 @@ export default function GeneralLedgerPage({ org, onBack }) {
                       </td>
                     </tr>
                   ) : (
-                    ledger.movements.map((m) => {
-                      const isCredit = Number(m.credit) > 0
-                      return (
-                        <tr
-                          key={m.id}
-                          className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
-                        >
+                    (() => {
+                      const rows = []
+                      let prevTxnId = null
+                      ledger.movements.forEach((m, idx) => {
+                        // Thick rule between movements of DIFFERENT transactions
+                        // (same visual treatment as the Journal, Part C).
+                        if (idx > 0 && m.transaction_id !== prevTxnId) {
+                          rows.push(
+                            <tr key={`sep-${m.id}`}>
+                              <td colSpan={isOhada ? 9 : 8} className="p-0">
+                                <div className="border-t-2 border-slate-400" />
+                              </td>
+                            </tr>
+                          )
+                        }
+                        prevTxnId = m.transaction_id
+                        const isCredit = Number(m.credit) > 0
+                        rows.push(
+                          <tr
+                            key={m.id}
+                            className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                          >
                           <td className="whitespace-nowrap px-3 py-2 text-slate-700">
                             {m.date ? new Date(m.date).toLocaleString() : '—'}
                           </td>
@@ -258,11 +286,15 @@ export default function GeneralLedgerPage({ org, onBack }) {
                           <td className="whitespace-nowrap px-3 py-2 text-right font-medium text-slate-900">
                             {Number(m.debit) > 0 ? fmtAmount(m.debit) : ''}
                           </td>
-                          <td className="whitespace-nowrap px-3 py-2 pr-9 text-right text-slate-600">
-                            {isCredit ? fmtAmount(m.credit) : ''}
+                          <td
+                            className={`whitespace-nowrap text-right ${
+                              isCredit ? 'pl-14 pr-2 text-slate-700' : 'px-3 pr-3 text-slate-300'
+                            } py-2`}
+                          >
+                            {isCredit ? `↳ ${fmtAmount(m.credit)}` : ''}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-right font-semibold text-slate-900">
-                            {fmtAmount(m.running_balance)}
+                            {fmtBalance(m.running_balance)}
                           </td>
                           <td className="px-3 py-2 text-right">
                             <button
@@ -274,8 +306,10 @@ export default function GeneralLedgerPage({ org, onBack }) {
                             </button>
                           </td>
                         </tr>
-                      )
-                    })
+                        )
+                      })
+                      return rows
+                    })()
                   )}
                 </tbody>
                 <tfoot>
@@ -284,7 +318,7 @@ export default function GeneralLedgerPage({ org, onBack }) {
                       {t('ledger.closingBalance')}
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 pr-9 text-right">
-                      {fmtAmount(ledger.closing_balance)}
+                      {fmtBalance(ledger.closing_balance)}
                     </td>
                     <td></td>
                   </tr>

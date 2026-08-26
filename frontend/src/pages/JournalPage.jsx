@@ -13,6 +13,7 @@ import {
 } from '../services/api.js'
 import { useLanguage } from '../i18n/index.jsx'
 import JournalTable from '../components/JournalTable.jsx'
+import AccountFilterSelect from '../components/AccountFilterSelect.jsx'
 
 export default function JournalPage({ org, onBack, cashbook = false }) {
   const { t, lang } = useLanguage()
@@ -128,21 +129,16 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
                 className={`mt-1 w-full ${inputCls}`}
               />
             </label>
-            <label className="block col-span-2 sm:col-span-1">
+            <label className="block col-span-2 sm:col-span-2 lg:col-span-2">
               <span className={labelCls}>{t('journal.account')}</span>
-              <select
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className={`mt-1 w-full ${inputCls}`}
-              >
-                <option value="">{t('journal.allAccounts')}</option>
-                {accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {org.framework === 'OHADA' && a.code ? `${a.code} — ` : ''}
-                    {nameOf(a)}
-                  </option>
-                ))}
-              </select>
+              <AccountFilterSelect
+                accounts={accounts}
+                framework={org.framework}
+                value={accounts.find((a) => a.id === Number(accountId)) || null}
+                onChange={(id) => setAccountId(id)}
+                t={t}
+                nameOf={nameOf}
+              />
             </label>
             <label className="block col-span-2 sm:col-span-1">
               <span className={labelCls}>{t('journal.reference')}</span>

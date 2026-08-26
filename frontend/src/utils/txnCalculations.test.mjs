@@ -10,6 +10,7 @@ import {
   sumLines,
   toNumber,
   toPayload,
+  validatePost,
 } from './txnCalculations.js'
 
 let failures = 0
@@ -160,6 +161,69 @@ check('toPayload maps grid lines to backend shape', () => {
   // Session 7: the per-line libellé is carried through as `narration`.
   assert.equal(payload.lines[0].narration, 'Cash sale')
   assert.equal(payload.lines[1].narration, null)
+})
+
+// --- validatePost (Part F: required-field validation) ---------------------
+check('validatePost: fully filled valid entry -> ok=true, no errors', () => {
+  const lines = [
+    { id: 1, account_id: 1, debit: '50000', credit: '' },
+    { id: 2, account_id: 2, debit: '', credit: '50000' },
+  ]
+  const r = validatePost('Sold goods for cash', lines)
+  assert.equal(r.ok, true)
+  assert.equal(r.descriptionError, '')
+  assert.equal(r.balanceError, '')
+  assert.equal(Object.keys(r.lineErrors).length, 0)
+})
+
+check('validatePost: missing description -> descriptionError set, ok=false', () => {
+  const lines = [
+    { id: 1, account_id: 1, debit: '50000', credit: '' },
+    { id: 2, account_id: 2, debit: '', credit: '50000' },
+  ]
+  const r = validatePost('  ', lines)
+  assert.equal(r.ok, false)
+  assert.equal(r.descriptionError, 'description')
+})
+
+check('validatePost: missing account on a line -> lineErrors[line.id]=account', () => {
+  const lines = [
+    { id: 1, account_id: '', debit: '50000', credit: '' },
+    { id: 2, account_id: 2, debit: '', credit: '50000' },
+  ]
+  const r = validatePost('Sale', lines)
+  assert.equal(r.ok, false)
+  assert.equal(r.lineErrors[1], 'account')
+})
+
+check('validatePost: missing amount on a line -> lineErrors[line.id]=amount', () => {
+  const lines = [
+    { id: 1, account_id: 1, debit: '', credit: '' },
+    { id: 2, account_id: 2, debit: '', credit: '50000' },
+  ]
+  const r = validatePost('Sale', lines)
+  assert.equal(r.ok, false)
+  assert.equal(r.lineErrors[1], 'amount')
+})
+
+check('validatePost: both debit and credit on one line -> lineErrors=amount (bothSides)', () => {
+  const lines = [
+    { id: 1, account_id: 1, debit: '50000', credit: '100' },
+    { id: 2, account_id: 2, debit: '', credit: '50100' },
+  ]
+  const r = validatePost('Sale', lines)
+  assert.equal(r.ok, false)
+  assert.equal(r.lineErrors[1], 'bothSides')
+})
+
+check('validatePost: unbalanced -> balanceError set, ok=false', () => {
+  const lines = [
+    { id: 1, account_id: 1, debit: '50000', credit: '' },
+    { id: 2, account_id: 2, debit: '', credit: '40000' },
+  ]
+  const r = validatePost('Sale', lines)
+  assert.equal(r.ok, false)
+  assert.equal(r.balanceError, 'unbalanced')
 })
 
 if (failures > 0) {

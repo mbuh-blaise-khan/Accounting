@@ -15,6 +15,7 @@ wherever a posted transaction appears.
 """
 from datetime import date, datetime, time, timezone
 from decimal import Decimal
+import re
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session, joinedload
@@ -127,7 +128,17 @@ def list_journal_entries(
     if reference:
         ref = reference.strip()
         if ref:
-            q = q.filter(Transaction.description.ilike(f"%{ref}%"))
+            # The Reference column shows "TX-{id:04d}". A reference search must
+            # match THAT field, not the description (Part A fix). Parse an id
+            # token from the query: "TX-0012" / "0012" / "12" all resolve to
+            # transaction id 12. A query with no digits (e.g. a word that only
+            # appears in a description) can never match a reference -> no rows.
+            m = re.search(r"(?:TX[-_ ]?)?(\d+)", ref, re.IGNORECASE)
+            parsed = int(m.group(1)) if m else None
+            if parsed is None:
+                q = q.filter(Transaction.id == -1)
+            else:
+                q = q.filter(Transaction.id == parsed)
 
     rows = (
         q.order_by(

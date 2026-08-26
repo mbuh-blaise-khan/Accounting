@@ -16,21 +16,80 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 8 — General Ledger (`ledger_service` deriving
-opening/movements/running/closing balances from POSTED lines only, `GET
-/ledger/{account_id}` endpoint, General Ledger page with drill-down) + Journal/Cash Book UI
-grouping fix (date separators, transaction-group banding/dividers, credit-entry offset).
-60 backend tests green; `npm run build` clean (47 modules).
+**Last completed session:** Post-Session-8 fix round — reference search corrected to
+match ONLY the reference field (Part A); account type-ahead filter (`AccountFilterSelect`)
+on Journal/Cash Book/General Ledger (Part B); bolder transaction-boundary rules in
+JournalTable + GL movements (Part C); credit-offset root cause found and fixed (Part D);
+ledger balances re-shaped to explicit Dr/Cr side objects after a real `_balance` bug was
+found (Part E); required-field validation wired into New Transaction with inline
+per-field errors (Part F). 61 backend tests green; 21 frontend checks green;
+`npm run build` clean (48 modules).
 **Next session to run:** Session 9 (per the build guide order: trial balance /
 financial-statement services — see `.clinerules` service list).
-**Blockers / open questions:** None outstanding. (`node` CLI still cannot run bare in this
-non-TTY shell — every direct invocation fails with "stdout is not a tty" — BUT `npm run build`
-works through npm's cmd shim, so frontend verification is done via real Vite builds. Backend runs
-use the venv python directly.)
+**Blockers / open questions:** None outstanding. (`node` runs via npm script shims
+(`npm run test:lookup` / `test:txn`); backend uses the venv python directly.)
 
 ---
 
 ## Session Log
+
+### Post-Session-8 fixes — search UX, visual separation, ledger balance sides, validation (2026-08-25)
+- Status: DONE
+
+#### Root causes found (Parts A/C/D were previously claimed fixed but were NOT)
+
+- **Part A (reference search):** the backend `journal_service` reference filter was already
+  correct (parses `TX-0012`/`0012`/`12` → `Transaction.id == parsed`; digit-less queries can
+  never match). The REAL defect was the i18n placeholder: `"journal.referencePlaceholder"`
+  said **"e.g. cash"** in EN ("ex. caisse" in FR) — inviting a description word that could
+  never match a reference. Fixed to "e.g. TX-0012" / "ex. TX-0012". Verified live:
+  searching `TX-0001` returns only TX-0001's 2 lines; `0001` also resolves; the description
+  word "Purchase" returns 0 rows.
+- **Part C (transaction separation):** Session 8's alternating background alone was too weak.
+  Added an explicit bold rule line (`border-t-2 border-slate-400`, full-width) between
+  DIFFERENT transactions in both JournalTable and the General Ledger movements table, so
+  TX-0012 / TX-0013 / TX-0014 read as unmistakable blocks even same-day.
+- **Part D (credit offset):** Session 8's offset had been applied but too faintly to register
+  (and the GL movements table had its own rendering). Re-applied as a STRONG treatment:
+  credit account names get `pl-16` + "↳" prefix and muted color vs bold debit names; credit
+  amounts sit indented (`pl-14`) inside their column; GL movement rows got the identical
+  treatment so all three pages match.
+- **Part E (ledger balance presentation) — REAL COMPUTATION BUG:** `_balance(signed)` mapped
+  positive → debit / negative → credit as if `signed` were an absolute debit/credit figure,
+  but `_signed_delta()` returns a CONVENTION-RELATIVE value (+ = toward normal side). For a
+  credit-normal account in net credit position this produced side="debit" — wrong label AND
+  wrong column. Fixed `_balance(signed, normal_balance)` to pick the side via the account's
+  convention; schemas now expose every balance point as `{debit, credit, side}` with exactly
+  one non-zero (researched convention: ledgers show "Debit balance"/"Credit balance" as an
+  unsigned figure sitting on one labeled side, not a signed number). Frontend renders
+  "15,000 Dr" / "27,000 Cr". Tests updated + new cross-over test (account crossing from Dr
+  to Cr mid-period labels each running balance correctly).
+
+#### Also in this round
+
+- **Part B:** new `frontend/src/components/AccountFilterSelect.jsx` wraps AccountLookup for
+  filter use on Journal / Cash Book / General Ledger (progressive OHADA code-prefix narrowing,
+  name substring for both frameworks, clear ✕ button back to "all accounts"). Selection
+  behavior after picking is unchanged.
+- **Part F:** `validatePost()` (pure helper in txnCalculations.js) reports exactly WHICH
+  required fields are empty per line ('account' | 'amount' | 'bothSides') plus description
+  and balance errors; NewTransactionPage now wires its Post button through `attemptPost()`,
+  renders a red inline banner above any invalid line (desktop grid + mobile card) and under
+  the description field; posting stays blocked until fixed. i18n keys added in EN+FR
+  (tx.errDescription / errAccount / errAmount / errBothSides / errUnbalanced).
+
+#### Verification evidence (real commands, real output)
+
+- Backend suite: `pytest app/tests/ -v` → **61 passed**, 3 warnings (deprecations only).
+- Live API probe (TestClient + real routes, `_probe_p8.py`, since removed): **13/13 checks
+  passed**, including: reference `TX-0001` ⇒ exactly 2 lines of TX-0001; word "Purchase" ⇒
+  0 rows; cash ledger closing `15000.0 Dr / 0.0 Cr / side=debit`; sales closing
+  `0.0 Dr / 27000.0 Cr / side=credit`; identity closing.debit = opening.debit + debits −
+  credits holds on the wire format.
+- Frontend: `npm run build` → ✓ 48 modules transformed; `npm run test:txn` → 20/20 ok
+  (6 new validatePost checks); `npm run test:lookup` → 9/9 ok.
+
+---
 
 ### Session 8 — General Ledger + Journal UI grouping (2026-08-25)
 - Status: DONE

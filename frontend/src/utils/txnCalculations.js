@@ -50,6 +50,31 @@ export function canPost(description, lines) {
   return isBalanced(lines)
 }
 
+// Per-field validation run when the user actually clicks "Post transaction"
+// (Part F). Returns exactly WHICH required fields are empty so the page can
+// show inline messages next to each one — an account with no amount, an amount
+// with no account, or a missing description must block the post even if the
+// remaining lines happen to balance.
+export function validatePost(description, lines) {
+  const lineErrors = {}
+  for (const l of lines) {
+    const hasAccount = l.account_id != null && String(l.account_id) !== ''
+    const d = toNumber(l.debit)
+    const c = toNumber(l.credit)
+    if (!hasAccount) lineErrors[l.id] = 'account'
+    else if (d > 0 && c > 0) lineErrors[l.id] = 'bothSides'
+    else if (d === 0 && c === 0) lineErrors[l.id] = 'amount'
+  }
+  const descriptionError = !description || !description.trim() ? 'description' : ''
+  const { totalDebit, totalCredit } = sumLines(lines)
+  const balanceError = totalDebit !== totalCredit ? 'unbalanced' : ''
+  const ok =
+    !descriptionError &&
+    !balanceError &&
+    Object.keys(lineErrors).length === 0
+  return { ok, descriptionError, lineErrors, balanceError }
+}
+
 // Map grid lines → the { account_id, debit, credit, narration } payload the
 // backend expects. `narration` is the per-line "libellé" shown in the Journal.
 export function toPayload(description, lines, organizationId) {

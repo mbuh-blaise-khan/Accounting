@@ -30,6 +30,7 @@ import {
   isBalanced,
   sumLines,
   toPayload,
+  validatePost,
 } from '../utils/txnCalculations.js'
 
 const INPUT_CLS =
@@ -62,6 +63,7 @@ export default function NewTransactionPage({ org, onBack }) {
   const [lines, setLines] = useState([newLine(), newLine()])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [errors, setErrors] = useState(null) // { ok, descriptionError, lineErrors, balanceError }
   const [posted, setPosted] = useState(null)
 
   useEffect(() => {
@@ -123,11 +125,22 @@ export default function NewTransactionPage({ org, onBack }) {
       const draft = await createTransaction(payload)
       const result = await postTransaction(org.id, draft.id)
       setPosted(result)
+      setErrors(null)
     } catch (err) {
       setError(err.message)
     } finally {
       setBusy(false)
     }
+  }
+
+  // Post gate (Part F): validate required fields FIRST and surface WHICH ones
+  // are missing inline. A line with no account or no amount blocks the post
+  // even if what remains happens to balance — this is about explicit field
+  // completion, not balance (balance is still checked separately after).
+  function attemptPost() {
+    const result = validatePost(description, lines)
+    setErrors(result)
+    if (result.ok) handlePost()
   }
 
   function reset() {
@@ -136,6 +149,7 @@ export default function NewTransactionPage({ org, onBack }) {
     setDate(todayISO())
     setPosted(null)
     setError(null)
+    setErrors(null)
   }
 
   if (posted) {
@@ -194,6 +208,11 @@ export default function NewTransactionPage({ org, onBack }) {
           <p className="mt-2 text-right text-xs text-slate-400">
             {description.trim().length} {t('tx.characters')}
           </p>
+          {errors?.descriptionError && (
+            <p className="mt-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
+              {t('tx.errDescription')}
+            </p>
+          )}
         </div>
 
         {/* Step 2: Date (journal entry date; UI-only for now) */}
@@ -258,6 +277,7 @@ export default function NewTransactionPage({ org, onBack }) {
                 onRemove={removeLine}
                 canRemove={lines.length > 2}
                 t={t}
+                errorKey={errors?.lineErrors?.[line.id]}
               />
             ))}
           </div>
@@ -295,11 +315,12 @@ export default function NewTransactionPage({ org, onBack }) {
           </div>
         </div>
 
-        {/* Post button */}
+        {/* Post button — click runs attemptPost which validates required fields
+            FIRST and surfaces WHICH are missing inline (Part F), then posts. */}
         <button
           type="button"
           disabled={!ready || busy}
-          onClick={handlePost}
+          onClick={attemptPost}
           className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {busy ? t('tx.posting') : t('tx.post')}
@@ -321,13 +342,28 @@ export default function NewTransactionPage({ org, onBack }) {
 //   Account (name lookup) | Libellé | Débit | Crédit
 // while OHADA keeps the classic journal layout
 //   Account (code lookup) | Account name | Libellé | Débit | Crédit.
-function LineRow({ line, accounts, framework = 'OHADA', nameOf, onChange, onRemove, canRemove, t }) {
+function LineRow({ line, accounts, framework = 'OHADA', nameOf, onChange, onRemove, canRemove, t, errorKey }) {
   const selected = line.account
   const inputCls = INPUT_CLS // reuse shared input styling
   const isOhada = framework === 'OHADA'
 
+  // Part F: inline validation message for THIS line, keyed by errorKey from
+  // validatePost ('account' | 'amount' | 'bothSides' | undefined).
+  function errorMsg() {
+    if (errorKey === 'account') return t('tx.errAccount')
+    if (errorKey === 'amount') return t('tx.errAmount')
+    if (errorKey === 'bothSides') return t('tx.errBothSides')
+    return null
+  }
+  const msg = errorMsg()
+
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      {msg && (
+        <p className="mb-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
+          {msg}
+        </p>
+      )}
       {/* Desktop grid */}
       <div
         className={`hidden sm:grid sm:gap-2 sm:items-end ${
@@ -410,6 +446,11 @@ function LineRow({ line, accounts, framework = 'OHADA', nameOf, onChange, onRemo
 
       {/* Mobile: stacked fields per line */}
       <div className="space-y-3 sm:hidden">
+        {msg && (
+          <p className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
+            {msg}
+          </p>
+        )}
         <div>
           <span className="text-xs text-slate-500">
             {framework === 'OHADA' ? t('tx.account') : t('tx.accountName')}
