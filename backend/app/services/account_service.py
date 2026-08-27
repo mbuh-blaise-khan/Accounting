@@ -12,6 +12,7 @@ The seeded chart data lives in app/accounting/:
   mandated chart of accounts; see the reference doc).
 """
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.accounting.ifrs_template import IFRS_TEMPLATE
@@ -69,6 +70,64 @@ def list_accounts(db: Session, user: User, org_id: int) -> list[Account]:
         .order_by(Account.code)
         .all()
     )
+
+
+def list_accounts_for_selector(
+    db: Session, user: User, org_id: int
+) -> list[dict]:
+    """The org's chart, ordered for the General Ledger account selector.
+
+    Ordering (most useful first, applies to both OHADA and IFRS):
+      1. custom accounts this member personally created,
+      2. accounts with the most recent POSTED activity (recently used first),
+      3. everything else in normal code/name order.
+
+    Recency is derived from real posted transaction_lines for that account
+    within the org — never a guess. Each item carries `is_mine` and
+    `last_posted_at` so the UI can label the buckets.
+    """
+    _ensure_org_access(db, user, org_id)
+    accounts = (
+        db.query(Account)
+        .filter(Account.organization_id == org_id)
+        .all()
+    )
+
+    # Last posted-activity timestamp per account (posted OR reversed entries
+    # count — a reversal is still activity).
+    activity_rows = (
+        db.query(TransactionLine.account_id, func.max(Transaction.posted_at))
+        .join(Transaction, Transaction.id == TransactionLine.transaction_id)
+        .filter(
+            Transaction.organization_id == org_id,
+            Transaction.status != TransactionStatus.draft,
+            Transaction.posted_at.is_not(None),
+        )
+        .group_by(TransactionLine.account_id)
+        .all()
+    )
+    last_posted = {acc_id: ts for acc_id, ts in activity_rows}
+
+    def _sort_key(a: Account):
+        mine = (not a.is_system_default) and a.created_by == user.id
+        last = last_posted.get(a.id)
+        base = ((a.code or "") or (a.name_en or "")).lower()
+        if mine:
+            return (0, 0, base)
+        if last is not None:
+            # Negative epoch so newer timestamps sort first (Python sorts asc).
+            return (1, -last.timestamp(), base)
+        return (2, 0, base)
+
+    ordered = sorted(accounts, key=_sort_key)
+    return [
+        {
+            "account": a,
+            "is_mine": (not a.is_system_default) and a.created_by == user.id,
+            "last_posted_at": last_posted.get(a.id),
+        }
+        for a in ordered
+    ]
 
 
 def create_custom_account(
@@ -148,6 +207,9 @@ def create_custom_account(
         active=True,
         description=description.strip(),
         ohada_class_number=ohada_class_number,
+        # Attribute the custom account to the member who created it (drives the
+        # smart-ordered General Ledger dropdown: "your accounts" first).
+        created_by=user.id,
     )
     db.add(account)
     db.commit()

@@ -206,9 +206,16 @@ def test_reverse_posted_transaction(client):
     txn = _make_txn(client, org["id"], _balanced_lines(acc)).json()
     client.post(f"/transactions/{txn['id']}/post?organization_id={org['id']}")
 
+    # Reversal now returns the NEW mirrored, posted entry (not the original).
     resp = client.post(f"/transactions/{txn['id']}/reverse?organization_id={org['id']}")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "reversed"
+    mirror = resp.json()
+    assert mirror["status"] == "posted"
+    assert mirror["reverse_of_id"] == txn["id"]
+
+    # The original is marked reversed (never edited/deleted).
+    listed = {t["id"]: t for t in client.get(f"/transactions?organization_id={org['id']}").json()}
+    assert listed[txn["id"]]["status"] == "reversed"
 
 
 def test_draft_cannot_be_reversed(client):

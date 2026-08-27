@@ -59,3 +59,16 @@ class AccountOut(BaseModel):
     description: str
     ohada_class_number: Optional[int] = None
     created_at: datetime
+    # The member who created a custom account (NULL for seeded system defaults).
+    created_by: Optional[int] = None
+
+
+class AccountSuggestedOut(AccountOut):
+    """An account returned by the smart-ordered General Ledger selector.
+
+    Adds the last posted-activity timestamp (for the "recently used" bucket)
+    and a boolean marking accounts this member personally created.
+    """
+
+    last_posted_at: Optional[datetime] = None
+    is_mine: bool = False

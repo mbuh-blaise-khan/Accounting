@@ -56,6 +56,11 @@ class Transaction(Base):
         cascade="all, delete-orphan",
         order_by="TransactionLine.id",
     )
+    # If this transaction is a completed reversing entry, `reverse_of_id` points
+    # at the original posted transaction it mirrors (never edited/deleted).
+    reverse_of_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True, index=True
+    )
 
 
 class TransactionLine(Base):

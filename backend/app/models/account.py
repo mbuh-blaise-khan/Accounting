@@ -78,3 +78,9 @@ class Account(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    # Which workspace member personally created this custom account (NULL for the
+    # seeded system defaults). Used by the smart-ordered General Ledger dropdown
+    # to surface "your custom accounts" first.
+    created_by: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"), nullable=True
+    )

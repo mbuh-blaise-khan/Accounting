@@ -61,4 +61,7 @@ class TransactionOut(BaseModel):
     status: str
     posted_at: Optional[datetime] = None
     created_at: datetime
+    # When this transaction is a completed reversing entry, this is the id of
+    # the original posted transaction it mirrors (NULL otherwise).
+    reverse_of_id: Optional[int] = None
     lines: list[TransactionLineOut] = []

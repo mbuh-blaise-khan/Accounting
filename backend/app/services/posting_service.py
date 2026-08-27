@@ -71,19 +71,62 @@ def post_transaction(
 def reverse_transaction(
     db: Session, user, org_id: int, transaction_id: int
 ) -> Transaction:
-    """Reverse a posted transaction.
+    """Reverse a posted transaction by creating a real, opposite journal entry.
 
-    STUB/MINIMAL for Session 6: marks the transaction 'reversed' so it can no
-    longer be changed. Generating the actual reversing (offsetting) entries is
-    part of the corrections work in a later session.
+    Posted records are immutable (never edited or deleted). Corrections happen
+    exclusively via a reversing entry: this creates a NEW posted transaction
+    that exactly mirrors the original with debit/credit sides swapped, posts it
+    now, and links it back to the original via `reverse_of_id`. The original is
+    marked `reversed` (shown as a badge) but its rows are never altered.
+
+    Only a POSTED transaction may be reversed — drafts and already-reversed
+    transactions are rejected. The mirrored entry is balanced by construction
+    (swapping sides preserves total debits == total credits), so it is posted
+    directly.
     """
     txn = transaction_service.get_transaction(db, user, org_id, transaction_id)
     if txn.status != TransactionStatus.posted:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Only posted transactions can be reversed",
+            detail="Only posted transactions can be reversed — drafts and "
+            "already-reversed transactions are not reversible",
         )
+
+    lines = (
+        db.query(TransactionLine)
+        .filter(TransactionLine.transaction_id == txn.id)
+        .all()
+    )
+    if len(lines) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Cannot reverse a transaction with fewer than two lines",
+        )
+
+    # Build the mirror: same accounts, sides swapped, so it balances by
+    # construction and its net effect cancels the original.
+    reversal = Transaction(
+        organization_id=txn.organization_id,
+        description=f"Reversal of {txn.description}",
+        status=TransactionStatus.posted,
+        posted_at=datetime.now(timezone.utc),
+        created_by=user.id,
+        reverse_of_id=txn.id,
+    )
+    for line in lines:
+        reversal.lines.append(
+            TransactionLine(
+                account_id=line.account_id,
+                debit_amount=_to_decimal(line.credit_amount),
+                credit_amount=_to_decimal(line.debit_amount),
+                narration=(f"Reversal of {line.narration}" if line.narration else None),
+            )
+        )
+
+    # Mark the original reversed WITHOUT touching its rows. The mirror carries
+    # the link back to this original.
     txn.status = TransactionStatus.reversed
+    db.add(reversal)
     db.commit()
-    db.refresh(txn)
-    return txn
+    db.refresh(reversal)
+    return reversal

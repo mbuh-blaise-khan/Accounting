@@ -104,6 +104,31 @@
 - [ ] Frontend General Ledger page: select account, opening, movements, running balance, drill-down
 - [ ] Tests: closing = opening + movements (per normal balance); no-activity account shows opening == closing
 
+## Post-Session-8 Round 2 — reference-search verification, GL smart dropdown, CSV export, reversal workflow
+Reference search (VERIFIED NOT A DEFECT — hardened instead):
+- [x] Live-DB evidence: PostgreSQL `uap_dev` holds 17 transactions, all `posted`, none with NULL `posted_at`; searching every real reference TX-0001…TX-0017 through the actual service returns exactly that transaction's rows — 17 OK, 0 mismatches (probe `_probe_live_ref.py`). Isolated HTTP probe of GET /journal-entries confirms routing/params/serialization too (`_probe_ref.py`: full `TX-0001` → tx 1's 2 lines; digits resolve; description word → 0 rows; unfiltered → 4 rows).
+- [x] Contract locked in a pure helper `parse_reference_query()` (`journal_service`) with 6 DB-free unit tests (`test_reference_query.py`): `TX-0012`/`tx_0012`/`TX 12`/`0012`/`12` all → id 12; digit-less input (a description word or a single letter) can never match a reference and yields zero rows by design.
+- [x] Journal/Cash Book empty state now echoes the searched reference plus a hint that references look like `TX-0012`, instead of a bare "no match" sentence.
+
+GL account dropdown with smart ordering (Part 2):
+- [x] Backend: `GET /accounts/suggested?organization_id=` returns `AccountSuggestedOut` rows ordered (1) accounts created by the CURRENT user for this org, (2) most recent real posted/reversed activity via `max(Transaction.posted_at)` over non-draft lines, (3) remaining code/name order.
+- [x] Frontend General Ledger: native `<select>` ("▾") beside the existing type-ahead; both drive the same `accountId`. Optgroups: "My accounts" then "All other accounts (most recently used first)". Works for OHADA and IFRS alike.
+
+CSV export (Part 3):
+- [x] `frontend/src/utils/csvExport.js`: client-side generation from already-fetched data (exports exactly what's displayed — no new backend endpoint/dependency), proper quoting incl. FR semicolon locales, UTF-8 BOM for Excel accents, CRLF endings.
+- [x] "Download CSV" on Journal, Cash Book (same component), and General Ledger, respecting current date/account/reference filters; columns mirror each framework's on-screen table (OHADA includes N° compte; IFRS omits it).
+
+Transaction reversal workflow (Part 4):
+- [x] Backend completes Session 6's stub: `POST /transactions/{id}/reverse` creates a NEW posted transaction mirroring the original with debit/credit sides swapped, narration prefixed "Reversal of", linked back via `transactions.reverse_of_id`; original is marked `reversed` and its rows are NEVER edited/deleted; draft/already-reversed rejected with 409 (migration 0009 + `posting_service.reverse_transaction`).
+- [x] Journal, Cash Book AND General Ledger include `posted` and `reversed` transactions so an original + its reversal display as a visible net-zero pair.
+- [x] Frontend `TxnStatusBlock` (shared by Journal & GL drill-downs): localized status badge (Posted/Reversed/Draft), "Reversal of TX-####" marker, and a "Reverse this transaction" action ONLY on posted entries behind a plain-language confirm explaining what a reversing entry does; success message states the pair nets to zero. Immutability rule preserved — no edit/delete of posted entries anywhere.
+- [x] Tests (`test_reversal.py`, 4 tests): mirror contract (sides swapped, `reverse_of_id`, posted); original marked reversed with untouched lines; draft + double-reverse rejected; ledger/journal show both legs netting to zero; suggested-order contract for the selector endpoint. `test_transactions.py` updated to the mirror contract.
+
+Verification evidence:
+- [x] Backend full suite detached: **71 passed** in 8.50s (`backend/_p_all.txt`); per-file runs also green (accounts 15, auth 9, health 3, journal+refq 11, ledger 7, orgs 7, reversal+transactions 19). Prior "hangs" reproduced only as in-shell shell-integration flakiness, never under detached runs.
+- [x] `npm run build`: ✓ built in 2.95s (50 modules) after fixing one stray JSX self-closing tag introduced mid-edit.
+- [x] `npm run test:lookup` — all account-lookup checks passed (9 checks). `npm run test:txn` — all txn-calculations checks passed (20 checks).
+
 ## Session 9 — Trial Balance
 - [ ] `trial_balance_service`: every account's debit/credit balance for a period, total debits vs credits
 - [ ] API: GET /trial-balance?organization_id=&as_of=

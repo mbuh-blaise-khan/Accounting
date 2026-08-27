@@ -183,5 +183,6 @@ def serialize_transaction(txn: Transaction) -> TransactionOut:
         status=str(txn.status.value),
         posted_at=txn.posted_at,
         created_at=txn.created_at,
+        reverse_of_id=txn.reverse_of_id,
         lines=lines_out,
     )

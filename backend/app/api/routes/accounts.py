@@ -5,7 +5,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.user import User
-from app.schemas.account import AccountCreate, AccountOut, AccountUpdate
+from app.schemas.account import (
+    AccountCreate,
+    AccountOut,
+    AccountSuggestedOut,
+    AccountUpdate,
+)
 from app.services import account_service
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
@@ -19,6 +24,26 @@ def list_accounts(
 ):
     """List the chart of accounts for an organization the user is a member of."""
     return account_service.list_accounts(db, current_user, organization_id)
+
+
+@router.get("/suggested", response_model=list[AccountSuggestedOut])
+def suggested_accounts(
+    organization_id: int = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Accounts ordered for the General Ledger selector.
+
+    Custom accounts this member created come first, then accounts with the most
+    recent posted activity, then the rest in code/name order. Each entry carries
+    `is_mine` and `last_posted_at` for the bucket labels.
+    """
+    rows = account_service.list_accounts_for_selector(db, current_user, organization_id)
+    return [
+        AccountSuggestedOut(**AccountOut.model_validate(r["account"]).model_dump(),
+            last_posted_at=r["last_posted_at"], is_mine=r["is_mine"])
+        for r in rows
+    ]
 
 
 @router.post("", response_model=AccountOut, status_code=201)

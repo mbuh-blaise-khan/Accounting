@@ -14,6 +14,8 @@ import {
 import { useLanguage } from '../i18n/index.jsx'
 import JournalTable from '../components/JournalTable.jsx'
 import AccountFilterSelect from '../components/AccountFilterSelect.jsx'
+import TxnStatusBlock from '../components/TxnStatusBlock.jsx'
+import { downloadCsv } from '../utils/csvExport.js'
 
 export default function JournalPage({ org, onBack, cashbook = false }) {
   const { t, lang } = useLanguage()
@@ -28,6 +30,7 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
   const [detailError, setDetailError] = useState(null)
 
   const nameOf = (a) => (lang === 'fr' ? a.name_fr : a.name_en)
+  const isOhada = org.framework === 'OHADA'
 
   async function load() {
     setError(null)
@@ -98,6 +101,46 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
         <p className="mt-1 text-sm text-slate-600">
           {org.name} · {t('dashboard.framework')} {org.framework} · {org.currency}
         </p>
+
+        {/* Part 3: export exactly what the current filters display */}
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            disabled={!rows || rows.length === 0}
+            onClick={() =>
+              downloadCsv(
+                `${cashbook ? 'cash-book' : 'journal'}-${new Date().toISOString().slice(0, 10)}`,
+                [
+                  t('journal.date'),
+                  t('journal.reference'),
+                  t('journal.description'),
+                  ...(isOhada ? [t('journal.accountNo')] : []),
+                  t('journal.accountName'),
+                  t('journal.narration'),
+                  t('journal.debit'),
+                  t('journal.credit'),
+                  t('journal.source'),
+                  t('journal.status'),
+                ],
+                (rows || []).map((r) => [
+                  r.date ? new Date(r.date).toLocaleString() : '',
+                  r.reference,
+                  r.description,
+                  ...(isOhada ? [r.account_code || ''] : []),
+                  nameOf({ name_en: r.account_name_en, name_fr: r.account_name_fr }),
+                  r.narration || '',
+                  Number(r.debit) || 0,
+                  Number(r.credit) || 0,
+                  r.source,
+                  r.status,
+                ])
+              )
+            }
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          >
+            ⬇ {t('common.downloadCsv')}
+          </button>
+        </div>
         <p className="mt-1 text-sm text-slate-500">
           {cashbook ? t('cashbook.subtitle') : t('journal.subtitle')}
         </p>
@@ -169,6 +212,18 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
           ) : rows.length === 0 ? (
             <p className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">
               {t('journal.empty')}
+              {reference && reference.trim() && (
+                <>
+                  {' '}
+                  — <span className="font-medium">{t('journal.searchedReference')}</span>{' '}
+                  <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700">
+                    {reference.trim()}
+                  </code>
+                  <span className="mt-1 block text-xs text-slate-400">
+                    {t('journal.referenceHint')}
+                  </span>
+                </>
+              )}
             </p>
           ) : (
             <JournalTable
@@ -207,6 +262,12 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
             txn={detail}
             org={org}
             onClose={() => setDetail(null)}
+            onReversed={async () => {
+              // Refresh the table AND re-read the (now reversed) original so
+              // the drill-down shows its updated status immediately.
+              await load()
+              await openDetail(detail.id)
+            }}
           />
         )}
       </div>
@@ -216,7 +277,7 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
 
 // Full detail of the originating transaction (all lines, not just the rows
 // shown in the current filtered view) — the drill-down target of every row.
-function TransactionDetail({ txn, org, onClose }) {
+function TransactionDetail({ txn, org, onClose, onReversed }) {
   const { t, lang } = useLanguage()
   const postedDate = txn.posted_at ? new Date(txn.posted_at).toLocaleString() : '—'
   const createdDate = new Date(txn.created_at).toLocaleString()
@@ -244,7 +305,9 @@ function TransactionDetail({ txn, org, onClose }) {
         </div>
         <div>
           <dt className="text-xs text-slate-500">{t('journal.status')}</dt>
-          <dd className="font-medium text-slate-800">{txn.status}</dd>
+          <dd className="font-medium text-slate-800">
+            {t(`journal.status_${txn.status}`)}
+          </dd>
         </div>
         <div className="sm:col-span-2">
           <dt className="text-xs text-slate-500">{t('tx.description')}</dt>
@@ -252,9 +315,13 @@ function TransactionDetail({ txn, org, onClose }) {
         </div>
         <div className="sm:col-span-2">
           <dt className="text-xs text-slate-500">{t('journal.createdAt')}</dt>
-          <dd className="text-slate-600">{createdDate}</dd>
+          <dd className="font-medium text-slate-600">{createdDate}</dd>
         </div>
       </dl>
+
+      {/* Status badge + reversal action (Part 4) */}
+      <TxnStatusBlock txn={txn} org={org} onReversed={onReversed} />
+
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[480px] text-left text-sm">
           <thead>

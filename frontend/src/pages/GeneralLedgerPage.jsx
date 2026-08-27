@@ -4,13 +4,21 @@
 // lines (GET /ledger/{account_id}) — nothing is stored server-side. Each row
 // drills down to the originating transaction, same as the Journal.
 import { useEffect, useState } from 'react'
-import { fetchAccounts, fetchLedger, fetchTransactions } from '../services/api.js'
+import {
+  fetchAccounts,
+  fetchLedger,
+  fetchSuggestedAccounts,
+  fetchTransactions,
+} from '../services/api.js'
 import { useLanguage } from '../i18n/index.jsx'
 import AccountFilterSelect from '../components/AccountFilterSelect.jsx'
+import TxnStatusBlock from '../components/TxnStatusBlock.jsx'
+import { downloadCsv } from '../utils/csvExport.js'
 
 export default function GeneralLedgerPage({ org, onBack }) {
   const { t, lang } = useLanguage()
   const [accounts, setAccounts] = useState([])
+  const [suggested, setSuggested] = useState([]) // Part 2: smart-ordered list
   const [accountId, setAccountId] = useState('')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -42,6 +50,11 @@ export default function GeneralLedgerPage({ org, onBack }) {
     fetchAccounts(org.id)
       .then(setAccounts)
       .catch((err) => setError(err.message))
+    // Part 2: smart-ordered list for the dropdown (user's own accounts
+    // first, then most recently posted-to, then code/name order).
+    fetchSuggestedAccounts(org.id)
+      .then(setSuggested)
+      .catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [org.id])
 
@@ -111,6 +124,46 @@ export default function GeneralLedgerPage({ org, onBack }) {
             <span className="block text-xs font-medium text-slate-500">
               {t('ledger.account')}
             </span>
+            {/* Part 2: native dropdown (▾) — smart-ordered; typing in the
+                type-ahead below still works. Both drive the same accountId. */}
+            <select
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              className={`mt-1 w-full ${inputCls}`}
+            >
+              <option value="">▾ {t('ledger.pickAccount')}</option>
+              {suggested.some((a) => a.is_mine) && (
+                <optgroup label={t('ledger.myAccounts')}>
+                  {suggested
+                    .filter((a) => a.is_mine)
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.code ? `${a.code} · ` : ''}
+                        {nameOf(a)}
+                      </option>
+                    ))}
+                </optgroup>
+              )}
+              {!suggested.some((a) => a.is_mine) ? (
+                suggested.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.code ? `${a.code} · ` : ''}
+                    {nameOf(a)}
+                  </option>
+                ))
+              ) : (
+                <optgroup label={t('ledger.otherAccounts')}>
+                  {suggested
+                    .filter((a) => !a.is_mine)
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.code ? `${a.code} · ` : ''}
+                        {nameOf(a)}
+                      </option>
+                    ))}
+                </optgroup>
+              )}
+            </select>
             <AccountFilterSelect
               accounts={accounts}
               framework={org.framework}
@@ -154,6 +207,46 @@ export default function GeneralLedgerPage({ org, onBack }) {
         )}
         {!accountId && !error && (
           <p className="mt-6 text-center text-slate-500">{t('ledger.pickFirst')}</p>
+        )}
+
+        {/* Part 3: export exactly what the current period/account shows */}
+        {ledger && (
+          <div className="mt-2 flex justify-end">
+            <button
+              type="button"
+              disabled={!ledger.movements || ledger.movements.length === 0}
+              onClick={() =>
+                downloadCsv(
+                  `ledger-${ledger.account.code || ledger.account.id}-${new Date()
+                    .toISOString()
+                    .slice(0, 10)}`,
+                  [
+                    t('journal.date'),
+                    t('journal.reference'),
+                    t('journal.description'),
+                    ...(isOhada ? [t('journal.accountNo')] : []),
+                    t('ledger.narrationCol'),
+                    t('journal.debit'),
+                    t('journal.credit'),
+                    t('ledger.runningBalance'),
+                  ],
+                  (ledger.movements || []).map((m) => [
+                    m.date ? new Date(m.date).toLocaleString() : '',
+                    m.reference,
+                    m.description || '',
+                    ...(isOhada ? [ledger.account.code || ''] : []),
+                    m.narration || '',
+                    Number(m.debit) > 0 ? Number(m.debit) : 0,
+                    Number(m.credit) > 0 ? Number(m.credit) : 0,
+                    fmtBalance(m.running_balance),
+                  ])
+                )
+              }
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              ⬇ {t('common.downloadCsv')}
+            </button>
+          </div>
         )}
 
         {ledger && (
@@ -330,7 +423,17 @@ export default function GeneralLedgerPage({ org, onBack }) {
               <p className="mt-3 text-sm text-red-600">{detailError}</p>
             )}
             {detail && (
-              <TxnDetail txn={detail} org={org} onClose={() => setDetail(null)} />
+              <TxnDetail
+                txn={detail}
+                org={org}
+                onClose={() => setDetail(null)}
+                onReversed={async () => {
+                  // Re-run the ledger so the pair (original + reversal) shows
+                  // net-zero immediately; re-read the updated transaction.
+                  await load()
+                  await openDetail(detail.id)
+                }}
+              />
             )}
           </>
         )}
@@ -340,7 +443,7 @@ export default function GeneralLedgerPage({ org, onBack }) {
 }
 
 // Compact drill-down: the originating transaction's lines (same as Journal).
-function TxnDetail({ txn, org, onClose }) {
+function TxnDetail({ txn, org, onClose, onReversed }) {
   const { t, lang } = useLanguage()
   const isOhada = org.framework === 'OHADA'
   return (
@@ -359,6 +462,10 @@ function TxnDetail({ txn, org, onClose }) {
         </button>
       </div>
       <p className="mt-2 text-sm text-slate-700">{txn.description}</p>
+
+      {/* Status badge + reversal action (Part 4) */}
+      <TxnStatusBlock txn={txn} org={org} onReversed={onReversed} />
+
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[420px] text-left text-sm">
           <thead>

@@ -88,6 +88,26 @@ def _is_cash_bank(account: Account, framework: str) -> bool:
     return any(kw in text for kw in _CASH_KEYWORDS)
 
 
+def parse_reference_query(reference):
+    """Parse a Journal reference search into a transaction id (Part A contract).
+
+    The Reference column shows "TX-{id:04d}", so a reference search matches
+    THAT field — not the description. Pure helper so the contract is
+    unit-testable without a database:
+
+    - ``"TX-0012"`` / ``"tx_0012"`` / ``"TX 12"`` / ``"0012"`` / ``"12"``
+      all resolve to transaction id 12;
+    - any query with no digits at all can never match a reference and yields
+      ``None`` (callers must return zero rows for it).
+
+    Returns the parsed int id, or None when no id token is present.
+    """
+    if reference is None:
+        return None
+    m = re.search(r"(?:TX[-_ ]?)?(\d+)", reference.strip(), re.IGNORECASE)
+    return int(m.group(1)) if m else None
+
+
 def list_journal_entries(
     db: Session,
     user: User,
@@ -115,7 +135,12 @@ def list_journal_entries(
         )
         .filter(
             Transaction.organization_id == org_id,
-            Transaction.status == TransactionStatus.posted,
+            # Posted AND reversed transactions are immutable and appear in the
+            # journal; drafts never do. Keeping a reversed original visible
+            # alongside its reversal shows the cancelling pair (net-zero).
+            Transaction.status.in_(
+                [TransactionStatus.posted, TransactionStatus.reversed]
+            ),
             Transaction.posted_at.is_not(None),
         )
     )
@@ -125,20 +150,18 @@ def list_journal_entries(
         q = q.filter(Transaction.posted_at <= _end_of(date_to))
     if account_id is not None:
         q = q.filter(TransactionLine.account_id == account_id)
-    if reference:
-        ref = reference.strip()
-        if ref:
-            # The Reference column shows "TX-{id:04d}". A reference search must
-            # match THAT field, not the description (Part A fix). Parse an id
-            # token from the query: "TX-0012" / "0012" / "12" all resolve to
-            # transaction id 12. A query with no digits (e.g. a word that only
-            # appears in a description) can never match a reference -> no rows.
-            m = re.search(r"(?:TX[-_ ]?)?(\d+)", ref, re.IGNORECASE)
-            parsed = int(m.group(1)) if m else None
-            if parsed is None:
-                q = q.filter(Transaction.id == -1)
-            else:
-                q = q.filter(Transaction.id == parsed)
+    if reference and reference.strip():
+        # The Reference column shows "TX-{id:04d}". A reference search must
+        # match THAT field, not the description (Part A fix). Parse an id
+        # token from the query (pure helper, unit-tested): "TX-0012" / "0012"
+        # / "12" all resolve to transaction id 12. A query with no digits
+        # (e.g. a word that only appears in a description) can never match a
+        # reference -> no rows.
+        parsed = parse_reference_query(reference)
+        if parsed is None:
+            q = q.filter(Transaction.id == -1)
+        else:
+            q = q.filter(Transaction.id == parsed)
 
     rows = (
         q.order_by(

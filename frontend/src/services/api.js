@@ -148,4 +148,25 @@ export function fetchLedger(organizationId, accountId, params = {}) {
   return request(`/ledger/${accountId}?${qs.toString()}`)
 }
 
+/**
+ * GET /accounts/suggested?organization_id={id}
+ * Smart-ordered account list for pickers: accounts the current user created
+ * first, then most recently used (by real posted activity), then code/name.
+ */
+export function fetchSuggestedAccounts(organizationId) {
+  return request(`/accounts/suggested?organization_id=${organizationId}`)
+}
+
+/**
+ * POST /transactions/{id}/reverse?organization_id={id}
+ * Posted entries are immutable: correction happens via a NEW mirrored entry
+ * with debit/credit sides swapped, linked back to the original. Returns the
+ * NEW posted mirror transaction.
+ */
+export function reverseTransaction(organizationId, transactionId) {
+  return request(`/transactions/${transactionId}/reverse?organization_id=${organizationId}`, {
+    method: 'POST',
+  })
+}
+
 export default { fetchHealth }

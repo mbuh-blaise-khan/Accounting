@@ -16,22 +16,115 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Post-Session-8 fix round — reference search corrected to
-match ONLY the reference field (Part A); account type-ahead filter (`AccountFilterSelect`)
-on Journal/Cash Book/General Ledger (Part B); bolder transaction-boundary rules in
-JournalTable + GL movements (Part C); credit-offset root cause found and fixed (Part D);
-ledger balances re-shaped to explicit Dr/Cr side objects after a real `_balance` bug was
-found (Part E); required-field validation wired into New Transaction with inline
-per-field errors (Part F). 61 backend tests green; 21 frontend checks green;
-`npm run build` clean (48 modules).
-**Next session to run:** Session 9 (per the build guide order: trial balance /
-financial-statement services — see `.clinerules` service list).
-**Blockers / open questions:** None outstanding. (`node` runs via npm script shims
-(`npm run test:lookup` / `test:txn`); backend uses the venv python directly.)
+**Last completed session:** Post-Session-8 Round 2 — Part 1: reference search proven
+NOT a backend defect with live-DB evidence (17/17 real references resolve) and
+hardened via a pure `parse_reference_query()` helper + 6 unit tests + empty-state
+that echoes the searched reference. Part 2: GL smart-ordered account dropdown
+(mine → recently posted-to → code/name) beside the existing type-ahead, backed by
+GET /accounts/suggested. Part 3: client-side "Download CSV" on Journal / Cash Book /
+General Ledger exporting exactly the filtered display (framework-aware columns).
+Part 4: reversal workflow completed END-TO-END — backend mirror-entry service was
+already built last round; this round added the frontend action/badges/linkage in
+Journal & GL drill-downs. Backend suite: **71 passed** (8.50s detached). Frontend:
+build clean (50 modules), test:lookup + test:txn all green.
+**Next session to run:** Session 9 (trial balance) — NOT started yet.
+**Blockers / open questions:** None technical. If exact references still fail in the
+browser after this session, restart the backend/frontend dev processes — code and DB
+are verified correct; digit-less searches ("a single letter") intentionally return
+zero rows. Known env quirk: long foreground pytest runs stall in-shell; ALWAYS run
+detached (`nohup … & disown`) and poll output files.
 
 ---
 
 ## Session Log
+
+### Post-Session-8 Round 2 — reference search verified, GL dropdown, CSV export, reversal end-to-end (2026-08-26)
+- Status: DONE
+
+#### Part 1 — Reference search: investigated for real; VERIFIED NOT A DEFECT
+- Evidence chain (all commands actually run, outputs on disk):
+  1. `backend/_probe_ref.py` (TestClient + isolated SQLite over the REAL routes):
+     `TX-0001` → exactly tx 1's 2 lines; `TX-0002` → tx 2's lines; bare digits resolve;
+     description word "one" → 0 rows; unfiltered → 4 rows (`_probe_ref_fresh.out`).
+  2. NEW live-database probe `backend/_probe_live_ref.py` against PostgreSQL `uap_dev`:
+     17 transactions, ALL `posted`, none with NULL `posted_at`; then the EXACT service
+     call behind "Apply filters" for every real reference TX-0001…TX-0017 →
+     **17 OK, 0 mismatches**, including the user's own example TX-0016 (org 6,
+     "Mbuh sold goods for 5000 in cash") → its correct rows (`_probe_live_ref.out`).
+  3. Frontend wiring audited: input value → `reference` state → params →
+     `fetchJournalEntries` `/journal-entries?...&reference=…` — no mismatch.
+- **Root cause statement:** there is no reference-search defect in code or data.
+  Digit-less searches (e.g. "a single letter") return zero rows BY DESIGN because
+  references are generated `TX-{id:04d}` and can never contain letters — that part
+  of the report matches intended behavior. If an EXACT reference still fails in the
+  user's browser, the only remaining explanation is stale running processes (a dev
+  server started before commit `0a266b0`) — restart backend/frontend.
+- Hardening (no behavior change to the filter itself): extracted the contract into a
+  pure, DB-free helper `parse_reference_query()` in `journal_service`; added
+  `app/tests/test_reference_query.py` (6 tests); Journal/Cash Book empty state now
+  shows "Searched reference: <what you typed>" + hint that references look like
+  TX-0012 (EN+FR).
+
+#### Part 2 — GL account dropdown with smart ordering
+- Backend (built earlier in this round): migration `0009` (`accounts.created_by`),
+  `list_accounts_for_selector()` ordering = my custom accounts first → most recent
+  real `max(Transaction.posted_at)` activity over non-draft non-null-posted lines →
+  code/name asc; exposed at `GET /accounts/suggested`.
+- Frontend: `fetchSuggestedAccounts()` in api.js; native `<select>` ("▾") above the
+  existing type-ahead in GeneralLedgerPage, both driving the same `accountId`;
+  optgroups "My accounts" / "All other accounts (most recently used first)";
+  suggested list refetched per org change. OHADA and IFRS both covered.
+
+#### Part 3 — CSV export
+- New `frontend/src/utils/csvExport.js`: client-side generation from the already
+  fetched (and therefore currently-filtered) rows — guarantees "export what you
+  see", zero new backend endpoints/deps. Proper quoting, UTF-8 BOM for Excel +
+  accented French names, CRLF endings.
+- "Download CSV" button on Journal & Cash Book (shared component) and General
+  Ledger. Columns match the on-screen table per framework: Date, Reference,
+  Description, [N° compte OHADA only], Account name, Libellé/narration, Debit,
+  Credit, (+ Source, Status; + Running balance for GL). Disabled until rows exist.
+
+#### Part 4 — Reversal workflow completed end-to-end
+- Backend (built earlier in this round): `posting_service.reverse_transaction`
+  creates the NEW posted mirror (sides swapped, narration prefixed, linked via
+  `transactions.reverse_of_id`), marks original `reversed`, never touches original
+  rows; 409 on draft/already-reversed; ledger/journal/cashbook include reversed so
+  the net-zero pair is visible. Tests: `test_reversal.py` (4) + updated
+  `test_transactions.py::test_reverse_posted_transaction`.
+- Frontend (this round): shared `components/TxnStatusBlock.jsx` rendered inside BOTH
+  the Journal's TransactionDetail and the GL's TxnDetail:
+  - localized status badge (Posted green / Reversed amber / Draft grey);
+  - "Reversal of TX-####" mono badge when `reverse_of_id` present;
+  - "Reverse this transaction" ONLY when status === 'posted', behind a plain-language
+    confirm explaining a mirror entry cancels the original and the original stays
+    untouched; success message states the pair nets to zero; on success the page
+    reloads rows and re-reads the transaction so badges refresh immediately.
+- Immutability rule intact: no UI or API path edits/deletes posted transactions.
+
+#### Decisions made
+- Did NOT fabricate a fix for Part 1: root cause = not a defect (strict-by-design
+  digit-less behavior + probable stale dev servers); hardened instead.
+- CSV chosen client-side (already-displayed state ⇒ trivially consistent with the
+  applied filters); PDF explicitly out of scope this session.
+
+#### Verification evidence (real runs, this session)
+- Live DB probe `_probe_live_ref.out`: 17 OK / 0 mismatches / 0 skipped, EXIT=0;
+  HTTP probe `_probe_ref_fresh.out` shows full JSON rows for TX-0001/TX-0002.
+- Backend suites: refq+journal **11 passed**; reversal+transactions **19 passed**;
+  orgs **7**, auth **9**, health **3** passed; FULL `app/tests` **71 passed in 8.50s**
+  (`_p_all.txt`). In-shell foreground pytest intermittently stalls (~dot 23) while
+  detached identical commands finish <9s → environment artifact, recorded here to
+  prevent future ghost-chasing.
+- Frontend: `npm run build` ✓ 50 modules in 2.95s (one stray `/>` from an edit caught
+  by the build and fixed); `npm run test:lookup` all 9 checks pass; `npm run
+  test:txn` all 20 checks pass. i18n en.json/fr.json JSON-parse validated.
+
+#### What Session 9 needs to know
+- Trial Balance must include `posted` AND treat `reversed` originals correctly —
+  original + mirror cancel to zero; keep using pure helpers like
+  `parse_reference_query` where convenient.
+- Run pytest DETACHED in this environment; ~71 tests finish in seconds.
 
 ### Post-Session-8 fixes — search UX, visual separation, ledger balance sides, validation (2026-08-25)
 - Status: DONE

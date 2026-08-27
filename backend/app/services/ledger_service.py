@@ -134,7 +134,11 @@ def _period_lines(
         .options(joinedload(TransactionLine.transaction))
         .filter(
             Transaction.organization_id == org_id,
-            Transaction.status == TransactionStatus.posted,
+            # Posted AND reversed (immutable) transactions feed the ledger so an
+            # original and its reversal both count and visibly cancel to zero.
+            Transaction.status.in_(
+                [TransactionStatus.posted, TransactionStatus.reversed]
+            ),
             Transaction.posted_at.is_not(None),
             TransactionLine.account_id == account_id,
         )
