@@ -121,7 +121,14 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
         />
 
         {/* Part 3: export exactly what the current filters display */}
-        <div className="no-print mt-2 flex justify-end">
+        <div className="no-print mt-2 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            🖨 {t('common.print')}
+          </button>
           <button
             type="button"
             disabled={!rows || rows.length === 0}
@@ -144,6 +151,11 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
                 if (key === 'cashCredit') return r.cashbook_type === 'cash' ? Number(r.credit) || 0 : 0
                 return r.cashbook_type === 'bank' ? Number(r.credit) || 0 : 0
               }
+              const period =
+                from || to
+                  ? `${t('report.period')} ${formatReportDate(from) || '—'} – ${formatReportDate(to) || '—'}`
+                  : ''
+              const reportTitle = cashbook ? t('cashbook.title') : t('journal.title')
               downloadCsv(
                 `${cashbook ? 'cash-book' : 'journal'}-${new Date().toISOString().slice(0, 10)}`,
                 [
@@ -157,7 +169,7 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
                   ...(!cashbook ? [t('journal.source'), t('journal.status')] : []),
                 ],
                 (rows || []).map((r) => [
-                  r.date ? new Date(r.date).toLocaleString() : '',
+                  r.date ? formatReportDate(r.date) : '',
                   r.reference,
                   r.description,
                   ...(isOhada ? [r.account_code || ''] : []),
@@ -165,7 +177,8 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
                   r.narration || '',
                   ...amountColumns.map((column) => amount(r, column.key)),
                   ...(!cashbook ? [r.source, r.status] : []),
-                ])
+                ]),
+                reportCsvHeader({ organization: org, title: reportTitle, framework: org.framework, period, generatedAt, t })
               )
             }}
             className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
@@ -173,11 +186,11 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
             ⬇ {t('common.downloadCsv')}
           </button>
         </div>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="no-print mt-1 text-sm text-slate-500">
           {cashbook ? t('cashbook.subtitle') : t('journal.subtitle')}
         </p>
         {cashbook && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="no-print mt-3 flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-slate-700">{t('cashbook.type')}</span>
             {[['single', t('cashbook.single')], ['double', t('cashbook.double')]].map(([value, label]) => (
               <button
@@ -193,7 +206,7 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
         )}
 
         {error && (
-          <p className="mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
+          <p className="no-print mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
             {error}
           </p>
         )}
@@ -460,17 +473,17 @@ function CashBookTable({ rows, org, type, nameOf, t, onViewTxn }) {
           <th className="px-3 py-2"></th>
         </tr></thead>
         <tbody>{rows.map((r) => <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
-          <td className="whitespace-nowrap px-3 py-2">{r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
+          <td className="whitespace-nowrap px-3 py-2">{r.date ? formatReportDate(r.date) : '—'}</td>
           <td className="px-3 py-2 font-mono text-xs">{r.reference}</td>
           {isOhada && <td className="px-3 py-2 font-mono text-xs">{r.account_code || ''}</td>}
           <td className="px-3 py-2">{nameOf(r)}</td>
           <td className="max-w-[180px] truncate px-3 py-2 text-slate-600">{r.narration || '—'}</td>
-          {amountColumns.map((c) => <td key={c.key} className="whitespace-nowrap px-3 py-2 text-right">{value(r, c.key) ? value(r, c.key).toLocaleString() : ''}</td>)}
+          {amountColumns.map((c) => <td key={c.key} className="whitespace-nowrap px-3 py-2 text-right">{value(r, c.key) ? formatReportNumber(value(r, c.key)) : ''}</td>)}
           <td className="px-3 py-2 text-right"><button type="button" onClick={() => onViewTxn(r.transaction_id)} className="text-sm font-medium text-blue-600 hover:text-blue-700">{t('journal.view')} →</button></td>
         </tr>)}</tbody>
         <tfoot><tr className="border-t border-slate-300 bg-slate-100 font-bold">
           <td className="px-3 py-2" colSpan={(isOhada ? 5 : 4)}>{t('journal.totals')}</td>
-          {amountColumns.map((c) => <td key={c.key} className="px-3 py-2 text-right">{totals[c.key].toLocaleString()}</td>)}
+          {amountColumns.map((c) => <td key={c.key} className="px-3 py-2 text-right">{formatReportNumber(totals[c.key])}</td>)}
           <td />
         </tr></tfoot>
       </table>

@@ -23,11 +23,22 @@ export function reportPeriodLabel({ from, to, asOf, t }) {
 }
 
 export function reportCsvHeader({ organization, title, framework, period, generatedAt, t }) {
+  // The report-info block only. csvExport.toCsv inserts the blank separator row
+  // between these rows and the column headers, so there is no trailing [] here.
   return [
     [t('report.business'), organization.name],
     [t('report.title'), `${title} (${framework})`],
     [t('report.period'), period],
     [t('report.generated'), formatReportDateTime(generatedAt)],
-    [],
   ]
+}
+
+/**
+ * The account-identity columns for a report. OHADA shows the plan code column
+ * ("N° compte") first; IFRS omits it entirely (name-only), so it returns [].
+ * Used identically by the UI column header and the CSV export so the two never
+ * disagree, and unit-testable without a browser.
+ */
+export function reportAccountColumns(isOhada, t) {
+  return isOhada ? [t('journal.accountNo')] : []
 }

@@ -105,24 +105,24 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-8">
-      <div className="mx-auto w-full max-w-6xl">
-        <button
-          type="button"
-          onClick={onBack}
-          className="mb-2 text-sm font-medium text-blue-600 hover:text-blue-700"
-        >
-          ← {t('tx.backToOrg')}
-        </button>
-        <h2 className="text-xl font-bold text-slate-900">{t('ledger.title')}</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          {org.name} · {t('dashboard.framework')} {org.framework} · {org.currency}
-        </p>
+    <div className="report-page min-h-screen bg-slate-50 px-4 py-8">
+      <div className="report-content mx-auto w-full max-w-6xl">
+        <div className="no-print">
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+          >
+            ← {t('tx.backToOrg')}
+          </button>
+          <h2 className="text-xl font-bold text-slate-900">{t('ledger.title')}</h2>
+        </div>
+        <ReportHeader org={org} title={t('ledger.title')} from={from} to={to} generatedAt={generatedAt} t={t} />
 
-        {/* Account + period picker */}
+        {/* Account + period picker (never printed) */}
         <form
           onSubmit={handleSubmit}
-          className="mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+          className="no-print mt-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
         >
           <label className="min-w-[220px] flex-1">
             <span className="block text-xs font-medium text-slate-500">
@@ -210,16 +210,27 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
           </p>
         )}
         {!accountId && !error && (
-          <p className="mt-6 text-center text-slate-500">{t('ledger.pickFirst')}</p>
+          <p className="no-print mt-6 text-center text-slate-500">{t('ledger.pickFirst')}</p>
         )}
 
-        {/* Part 3: export exactly what the current period/account shows */}
+        {/* Print + export (never printed themselves) */}
         {ledger && (
-          <div className="mt-2 flex justify-end">
+          <div className="no-print mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            >
+              🖨 {t('common.print')}
+            </button>
             <button
               type="button"
               disabled={!ledger.movements || ledger.movements.length === 0}
-              onClick={() =>
+              onClick={() => {
+                const period =
+                  from || to
+                    ? `${t('report.period')} ${formatReportDate(from) || '—'} – ${formatReportDate(to) || '—'}`
+                    : ''
                 downloadCsv(
                   `ledger-${ledger.account.code || ledger.account.id}-${new Date()
                     .toISOString()
@@ -235,7 +246,7 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
                     t('ledger.runningBalance'),
                   ],
                   (ledger.movements || []).map((m) => [
-                    m.date ? new Date(m.date).toLocaleString() : '',
+                    m.date ? formatReportDate(m.date) : '',
                     m.reference,
                     m.description || '',
                     ...(isOhada ? [ledger.account.code || ''] : []),
@@ -243,9 +254,17 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
                     Number(m.debit) > 0 ? Number(m.debit) : 0,
                     Number(m.credit) > 0 ? Number(m.credit) : 0,
                     fmtBalance(m.running_balance),
-                  ])
+                  ]),
+                  reportCsvHeader({
+                    organization: org,
+                    title: t('ledger.title'),
+                    framework: org.framework,
+                    period,
+                    generatedAt,
+                    t,
+                  })
                 )
-              }
+              }}
               className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
             >
               ⬇ {t('common.downloadCsv')}
@@ -306,7 +325,7 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
             </div>
 
             {/* Movements */}
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="report-table mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
@@ -359,7 +378,7 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
                             className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
                           >
                           <td className="whitespace-nowrap px-3 py-2 text-slate-700">
-                            {m.date ? new Date(m.date).toLocaleString() : '—'}
+                            {m.date ? formatReportDate(m.date) : '—'}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-slate-600">
                             {m.reference}
@@ -424,9 +443,10 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
             </div>
 
             {detailError && (
-              <p className="mt-3 text-sm text-red-600">{detailError}</p>
+              <p className="no-print mt-3 text-sm text-red-600">{detailError}</p>
             )}
             {detail && (
+              <div className="no-print">
               <TxnDetail
                 txn={detail}
                 org={org}
@@ -438,6 +458,7 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
                   await openDetail(detail.id)
                 }}
               />
+              </div>
             )}
           </>
         )}

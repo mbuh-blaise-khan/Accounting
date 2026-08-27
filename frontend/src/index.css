@@ -1,7 +1,16 @@
 @import "tailwindcss";
 
+/* Print support (report pages).
+   ALL print rules are inside @media print so they can never leak into the
+   normal on-screen view (verified by frontend/src/utils/report.test.mjs).
+   Printing a report shows ONLY the report header block + the report table:
+   the app header, workspace nav, back button, filters, buttons and drill-down
+   panels all carry the .no-print class and/or are the header/nav elements
+   hidden below. */
 @media print {
+  header, nav { display: none !important; }
   .no-print { display: none !important; }
+  body { background: white !important; }
   .report-page { min-height: auto !important; background: white !important; padding: 0 !important; }
   .report-content { max-width: none !important; width: 100% !important; }
   .report-header { break-after: avoid; }

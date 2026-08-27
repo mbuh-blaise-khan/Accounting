@@ -16,32 +16,33 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Cash Book enhancement — single- and double-column type selector
-Session 9 adds a deterministic, org-scoped trial-balance service and API. One
-computation returns opening debit/credit balances, period debit/credit movements,
-and closing debit/credit balances. Posted and reversed historical lines are both
-included, so an original and its mirror reversal net to zero. The API accepts
-`as_of`, `from`, and `columns=2|4|6`; columns is a view hint and the complete
-payload is always returned. Zero-activity accounts are omitted. The frontend
-supports the beginner-default 2-column closing view plus 4- and 6-column views,
-OHADA code/name versus IFRS name-only rendering, totals and a loud closing-balance
-indicator, CSV export, and General Ledger drill-down. Dashboard navigation and
-account handoff are wired.
+**Last completed session:** Trial-balance grouped headers + print support and CSV formatting fix across Journal, Cash Book, General Ledger and Trial Balance
 
-**Verification evidence:** `pytest app/tests/test_trial_balance.py -q` completed
-with **8 passed, 1 warning in 3.65s**. Cash Book-focused tests completed with
-**7 passed, 1 warning in 2.37s**. The full backend suite completed with **81 passed,
-3 warnings in 11.91s**. Frontend `npm run build` completed with **51 modules
-transformed** and **built in 3.73s** (exit 0).
-**Next session to run:** Session 10 (financial statements), after this Cash Book
-enhancement is verified and committed.
-**Decisions:** no new backend dependency; frontend CSV is generated from the
-already-fetched rows; zero-activity accounts are omitted; opening/closing are net
-balances placed on their debit/credit side while movement columns remain gross.
-Cash Book uses OHADA 57 as physical cash and 52/56 as bank; IFRS uses explicit
-name matching with bank terms taking precedence. Single-column filters to cash;
-double-column retains both buckets and splits four amount columns. Triple-column
-and Petty Cash Book are deferred because discount and imprest concepts are absent.
+The trial-balance table now uses a **grouped two-row header** (top row spans "Opening balance / Movement / Closing balance" groups, each `colspan=2`; the row below carries Debit/Credit under every group), replacing the old flat "Opening · Debit" concatenated labels — the layout real accounting software (e.g. Sage) uses. Mobile decision, consistent with the rest of the app: wide tables keep `overflow-x-auto` horizontal scroll (the 2-column beginner view fits without scrolling; grouped headers stay attached to their columns rather than collapsing to cards).
+
+Print support was added to all four reports (⚠ Journal, ⚠ Cash Book, General Ledger, Trial Balance). Every page has a **Print** button calling `window.print()`. All print CSS lives strictly inside `@media print` in `index.css` (verified by a test not to leak on screen); printing hides the app header, workspace nav, back button, filters, buttons, the TB pass/fail card and drill-downs, leaving only the report-header block + report table.
+
+Every report now shows the same **REPORT HEADER block** on screen, in print and in CSV: workspace name, report title + framework label, the period / as-of date, and "Generated on [real current timestamp]" — built from real schema data only (no fabricated registration/address data).
+
+CSV export for all four reports carries the report info as **header rows**, a blank separator row, clean column headers (trial balance emits two header rows mirroring the grouped table), consistent **DD/MM/YYYY dates** (not raw `toLocaleString()` dumps), consistent number formatting, and `N° compte` included for OHADA / omitted for IFRS (`reportAccountColumns`).
+
+**Verification evidence:** `npm run test:reports` — all 9 checks passed, RC=0. `npm run build` — 53 modules transformed, built in 4.58s, RC=0. (Backend untouched this session; the Cash Book work this approval requires was verified and committed first — 7 passed / build 53 modules — in commit `a6fbe33`.)
+
+**Next session to run:** Session 10 (financial statements) — the remaining MVP milestone. This report-printing/CSV polish is complete and committed.
+
+**Decisions:**
+- Trial balance keeps horizontal-scroll tables on mobile (matches Journal/Ledger) rather than a stacked-card collapse, so the grouped header stays readable. Documented in `TrialBalancePage.jsx`.
+- Report header uses only real data (workspace name, framework, period, generated timestamp). No fabricated business address/registration.
+- `toCsv`/`downloadCsv` now accept one-or-more header rows, so the trial balance can export a proper grouped two-row header.
+- `reportCsvHeader` no longer appends a trailing empty row; `toCsv` adds the single blank separator — avoids a double blank.
+- Print CSS for `.no-print`, `.report-page`, `.report-content`, `.report-header`, `.report-table` and the app `header`/`nav` lives only inside `@media print` (test-enforced).
+
+### Trial-balance grouped headers; print support and CSV formatting fix (2026-08-27)
+- Status: DONE; `npm run test:reports` all 9 checks passed (RC=0) and `npm run build` (53 modules, 4.58s, RC=0).
+- STEP 1 (grouped headers): Trial Balance table rewritten to a two-row header — group row spans Opening/Movement/Closing per selected 2/4/6-column view; second row shows Debit/Credit. Computationally DRIVEN from the same row payload; CSV mirrors it with two header rows.
+- STEP 2 (print + CSV): added a Print button to Journal, Cash Book, General Ledger and Trial Balance via `window.print()`; report header shown on screen (from the shared `ReportHeader` component), hidden only in print; CSV now prepends report-info header rows + blank separator; consistent dates (`formatReportDate`) and numbers (`formatReportNumber`); OHADA N° compte / IFRS omitted for all report columns.
+- Added the `reportAccountColumns` OHADA/IFRS account-column helper to `reportPresentation.js` and created `frontend/src/utils/report.test.mjs` (`npm run test:reports`).
+- Acceptance criteria updated.
 
 ### Cash Book enhancement — single- and double-column types (2026-08-27)
 - Status: DONE; focused tests and frontend build passed. The full-suite process reached 71 test dots but did not emit a pytest summary before terminal teardown blocked, so no full-suite pass is claimed.

@@ -138,6 +138,15 @@ Verification evidence:
 - **Decision:** accounts with no included activity are omitted. Opening and closing are net balances placed on their debit/credit side; movement columns show gross period debit/credit activity.
 - **Verification:** focused command `pytest app/tests/test_trial_balance.py -q` produced `8 passed, 1 warning in 3.65s`. Full-suite and frontend-build attempts reached partial output but did not produce completion/return-code output because the terminal integration stalled; they remain unclaimed.
 
+## Reporting polish — grouped Trial Balance headers, print support, CSV formatting (between S9 and S10)
+- [x] Trial Balance table uses a grouped two-row header: the top row spans "Opening / Movement / Closing balance" groups (colSpan=2, distinct background/border) and the row below carries Debit/Credit sub-headers — replacing flat "Opening · Debit" concatenated labels; correct for every 2/4/6-column view
+- [x] OHADA keeps the N° compte column first, IFRS is name-only, in both the table and the CSV
+- [x] Mobile: grouped headers stay with their columns under the app-wide horizontal-scroll pattern (`overflow-x-auto`); the 2-col beginner view fits without scroll (decision documented in `TrialBalancePage.jsx`)
+- [x] Print button on Journal, Cash Book, General Ledger and Trial Balance calling `window.print()`; print CSS lives only inside `@media print` (hides header/nav/back/filters/buttons/pass-fail card/drill-downs) and provably does NOT leak into the normal on-screen view
+- [x] Consistent REPORT HEADER block on screen, print and CSV: workspace name, report title + framework label, period/as-of date, "Generated on [real current timestamp]" using only real schema data (no fabricated address/registration)
+- [x] CSV for all four reports: report-info header rows → blank separator → clean column headers (Trial Balance uses two header rows mirroring the grouped table); consistent DD/MM/YYYY dates (no raw `toLocaleString()` dumps); consistent number formatting; OHADA includes N° compte / IFRS omits it
+- [x] Tests: CSV includes header rows; date + number formatting consistent; OHADA/IFRS columns correct; print CSS doesn't leak on screen (`npm run test:reports` — all 9 checks passed, RC=0; `npm run build` — 53 modules, 4.58s, RC=0)
+
 ## Session 10 — Financial Statements (first milestone)
 - [ ] `financial_statement_service`: Income Statement + Statement of Financial Position from trial-balance data by account_class
 - [ ] API: GET /reports/income-statement?period=, GET /reports/financial-position?as_of=
