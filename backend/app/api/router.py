@@ -10,6 +10,7 @@ from app.api.routes import (
     ledger,
     organizations,
     transactions,
+    trial_balance,
     users,
 )
 
@@ -23,3 +24,4 @@ api_router.include_router(accounts.router)
 api_router.include_router(transactions.router)
 api_router.include_router(journal.router)
 api_router.include_router(ledger.router)
+api_router.include_router(trial_balance.router)

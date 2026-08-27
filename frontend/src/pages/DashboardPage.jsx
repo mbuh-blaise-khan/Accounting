@@ -11,6 +11,7 @@ import NewTransactionPage from './NewTransactionPage.jsx'
 import JournalPage from './JournalPage.jsx'
 import CashBookPage from './CashBookPage.jsx'
 import GeneralLedgerPage from './GeneralLedgerPage.jsx'
+import TrialBalancePage from './TrialBalancePage.jsx'
 
 export default function DashboardPage() {
   const { t } = useLanguage()
@@ -19,7 +20,7 @@ export default function DashboardPage() {
   const [frameworks, setFrameworks] = useState([])
   const [error, setError] = useState(null)
   const [activeOrg, setActiveOrg] = useState(null) // set -> inside a workspace
-  const [section, setSection] = useState('home') // home | accounts | newTransaction | journal | cashbook | ledger
+  const [section, setSection] = useState('home') // home | accounts | newTransaction | journal | cashbook | ledger | trialBalance
 
   async function load() {
     setError(null)
@@ -143,6 +144,7 @@ function NavBtn({ active, onClick, label }) {
 
 function WorkSpace({ org, section, onSectionChange, onExit }) {
   const { t } = useLanguage()
+  const [ledgerAccount, setLedgerAccount] = useState(null) // preset by trial-balance drill-down
   return (
     <div className="min-h-screen bg-slate-50">
       <nav className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-2 backdrop-blur">
@@ -160,6 +162,7 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
             <NavBtn active={section === 'journal'} onClick={() => onSectionChange('journal')} label={t('ws.journal')} />
             <NavBtn active={section === 'cashbook'} onClick={() => onSectionChange('cashbook')} label={t('ws.cashbook')} />
             <NavBtn active={section === 'ledger'} onClick={() => onSectionChange('ledger')} label={t('ws.ledger')} />
+            <NavBtn active={section === 'trialBalance'} onClick={() => onSectionChange('trialBalance')} label={t('ws.trialBalance')} />
             <NavBtn active={section === 'accounts'} onClick={() => onSectionChange('accounts')} label={t('ws.accounts')} />
           </div>
         </div>
@@ -173,6 +176,7 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
             onJournal={() => onSectionChange('journal')}
             onCashBook={() => onSectionChange('cashbook')}
             onLedger={() => onSectionChange('ledger')}
+            onTrialBalance={() => onSectionChange('trialBalance')}
           />
         )}
         {section === 'accounts' && (
@@ -187,15 +191,25 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
         {section === 'cashbook' && (
           <CashBookPage org={org} onBack={() => onSectionChange('home')} />
         )}
-        {section === 'ledger' && (
-          <GeneralLedgerPage org={org} onBack={() => onSectionChange('home')} />
+                {section === 'ledger' && (
+          <GeneralLedgerPage org={org} onBack={() => onSectionChange('home')} initialAccountId={ledgerAccount} />
+        )}
+        {section === 'trialBalance' && (
+          <TrialBalancePage
+            org={org}
+            onBack={() => onSectionChange('home')}
+            onOpenLedger={(accountId) => {
+              setLedgerAccount(accountId)
+              onSectionChange('ledger')
+            }}
+          />
         )}
       </main>
     </div>
   )
 }
 
-function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onLedger }) {
+function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onLedger, onTrialBalance }) {
   const { t } = useLanguage()
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -222,11 +236,17 @@ function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onL
           action={t('ws.cashbook')}
           onClick={onCashBook}
         />
-        <BigCard
+                        <BigCard
           title={t('ws.ledgerTitle')}
           desc={t('ws.ledgerDesc')}
           action={t('ws.ledger')}
           onClick={onLedger}
+        />
+        <BigCard
+          title={t('ws.trialBalanceTitle')}
+          desc={t('ws.trialBalanceDesc')}
+          action={t('ws.trialBalanceAction')}
+          onClick={onTrialBalance}
         />
         <BigCard
           title={t('ws.accountsTitle')}

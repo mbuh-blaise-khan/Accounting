@@ -169,4 +169,18 @@ export function reverseTransaction(organizationId, transactionId) {
   })
 }
 
+/**
+ * GET /trial-balance?organization_id=&as_of=&from=&columns=2|4|6
+ * ONE computation carrying opening/movement/closing for every account, so the
+ * UI can switch between the 2/4/6-column views without refetching.
+ */
+export function fetchTrialBalance(organizationId, params = {}) {
+  const qs = new URLSearchParams({ organization_id: organizationId })
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, v)
+  }
+  return request(`/trial-balance?${qs.toString()}`)
+}
+
+
 export default { fetchHealth }

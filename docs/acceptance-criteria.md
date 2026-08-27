@@ -130,10 +130,12 @@ Verification evidence:
 - [x] `npm run test:lookup` — all account-lookup checks passed (9 checks). `npm run test:txn` — all txn-calculations checks passed (20 checks).
 
 ## Session 9 — Trial Balance
-- [ ] `trial_balance_service`: every account's debit/credit balance for a period, total debits vs credits
-- [ ] API: GET /trial-balance?organization_id=&as_of=
-- [ ] Frontend Trial Balance page: code, name, debit, credit, totals row, pass/fail indicator, drill-down to ledger
-- [ ] Tests: total debits == total credits across seeded scenarios; zero-activity account handling documented; period filtering correct
+- [x] `trial_balance_service`: one computation returns opening debit/credit balances, period debit/credit movements, and closing debit/credit balances; reversed historical entries and their mirror lines are included
+- [x] API: GET /trial-balance?organization_id=&as_of=&from=&columns=2|4|6; `columns` is a view hint and the full payload is always returned so the UI can switch views without refetching
+- [x] Frontend Trial Balance page: beginner-default 2-column closing view with 4- and 6-column views, OHADA account code vs IFRS name-only display, totals and loud closing-balance pass/fail indicator, CSV export, and General Ledger drill-down
+- [x] Tests: closing debit == closing credit across all three views; reversed pair nets to zero; opening + movement = closing; period filtering; zero-activity accounts are omitted; OHADA/IFRS display contracts
+- **Decision:** accounts with no included activity are omitted. Opening and closing are net balances placed on their debit/credit side; movement columns show gross period debit/credit activity.
+- **Verification:** focused command `pytest app/tests/test_trial_balance.py -q` produced `8 passed, 1 warning in 3.65s`. Full-suite and frontend-build attempts reached partial output but did not produce completion/return-code output because the terminal integration stalled; they remain unclaimed.
 
 ## Session 10 — Financial Statements (first milestone)
 - [ ] `financial_statement_service`: Income Statement + Statement of Financial Position from trial-balance data by account_class

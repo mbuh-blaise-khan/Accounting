@@ -15,11 +15,11 @@ import AccountFilterSelect from '../components/AccountFilterSelect.jsx'
 import TxnStatusBlock from '../components/TxnStatusBlock.jsx'
 import { downloadCsv } from '../utils/csvExport.js'
 
-export default function GeneralLedgerPage({ org, onBack }) {
+export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }) {
   const { t, lang } = useLanguage()
   const [accounts, setAccounts] = useState([])
   const [suggested, setSuggested] = useState([]) // Part 2: smart-ordered list
-  const [accountId, setAccountId] = useState('')
+  const [accountId, setAccountId] = useState(initialAccountId)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [ledger, setLedger] = useState(null)

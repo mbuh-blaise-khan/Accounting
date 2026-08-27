@@ -16,23 +16,30 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Post-Session-8 Round 2 — Part 1: reference search proven
-NOT a backend defect with live-DB evidence (17/17 real references resolve) and
-hardened via a pure `parse_reference_query()` helper + 6 unit tests + empty-state
-that echoes the searched reference. Part 2: GL smart-ordered account dropdown
-(mine → recently posted-to → code/name) beside the existing type-ahead, backed by
-GET /accounts/suggested. Part 3: client-side "Download CSV" on Journal / Cash Book /
-General Ledger exporting exactly the filtered display (framework-aware columns).
-Part 4: reversal workflow completed END-TO-END — backend mirror-entry service was
-already built last round; this round added the frontend action/badges/linkage in
-Journal & GL drill-downs. Backend suite: **71 passed** (8.50s detached). Frontend:
-build clean (50 modules), test:lookup + test:txn all green.
-**Next session to run:** Session 9 (trial balance) — NOT started yet.
-**Blockers / open questions:** None technical. If exact references still fail in the
-browser after this session, restart the backend/frontend dev processes — code and DB
-are verified correct; digit-less searches ("a single letter") intentionally return
-zero rows. Known env quirk: long foreground pytest runs stall in-shell; ALWAYS run
-detached (`nohup … & disown`) and poll output files.
+**Last completed session:** Session 9 — Trial Balance (implementation complete; final full-suite/build verification blocked by terminal integration)
+Session 9 adds a deterministic, org-scoped trial-balance service and API. One
+computation returns opening debit/credit balances, period debit/credit movements,
+and closing debit/credit balances. Posted and reversed historical lines are both
+included, so an original and its mirror reversal net to zero. The API accepts
+`as_of`, `from`, and `columns=2|4|6`; columns is a view hint and the complete
+payload is always returned. Zero-activity accounts are omitted. The frontend
+supports the beginner-default 2-column closing view plus 4- and 6-column views,
+OHADA code/name versus IFRS name-only rendering, totals and a loud closing-balance
+indicator, CSV export, and General Ledger drill-down. Dashboard navigation and
+account handoff are wired.
+
+**Verification evidence:** `pytest app/tests/test_trial_balance.py -q` completed
+with **8 passed, 1 warning in 3.65s**. Repeated full-suite attempts stopped after
+partial dot output without a pytest summary; frontend `npm run build` attempts
+reached module transformation without a final Vite summary. These two checks are
+therefore explicitly unverified, not claimed as passed, because the terminal
+integration stalled. Session 9 must not be treated as fully verified until both
+commands complete and output is captured.
+**Next session to run:** Session 10 (financial statements), only after Session 9
+verification is completed.
+**Decisions:** no new backend dependency; frontend CSV is generated from the
+already-fetched rows; zero-activity accounts are omitted; opening/closing are net
+balances placed on their debit/credit side while movement columns remain gross.
 
 ---
 
