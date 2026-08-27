@@ -1,1 +1,12 @@
 @import "tailwindcss";
+
+@media print {
+  .no-print { display: none !important; }
+  .report-page { min-height: auto !important; background: white !important; padding: 0 !important; }
+  .report-content { max-width: none !important; width: 100% !important; }
+  .report-header { break-after: avoid; }
+  table { page-break-inside: auto; }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+  thead { display: table-header-group; }
+  tfoot { display: table-row-group; }
+}

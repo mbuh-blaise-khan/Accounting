@@ -14,6 +14,8 @@ import { useLanguage } from '../i18n/index.jsx'
 import AccountFilterSelect from '../components/AccountFilterSelect.jsx'
 import TxnStatusBlock from '../components/TxnStatusBlock.jsx'
 import { downloadCsv } from '../utils/csvExport.js'
+import ReportHeader from '../components/ReportHeader.jsx'
+import { formatReportDate, formatReportNumber, reportCsvHeader, reportPeriodLabel } from '../utils/reportPresentation.js'
 
 export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }) {
   const { t, lang } = useLanguage()
@@ -22,6 +24,7 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
   const [accountId, setAccountId] = useState(initialAccountId)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [generatedAt, setGeneratedAt] = useState(new Date())
   const [ledger, setLedger] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -38,6 +41,7 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
     try {
       const data = await fetchLedger(org.id, accountId, { from, to })
       setLedger(data)
+      setGeneratedAt(new Date())
     } catch (err) {
       setError(err.message)
       setLedger(null)

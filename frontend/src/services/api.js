@@ -130,7 +130,7 @@ export function fetchJournalEntries(organizationId, params = {}) {
   return request(`/journal-entries?${qs.toString()}`)
 }
 
-/** GET /cashbook?organization_id=&from=&to=&account_id=&reference= (Session 7) */
+/** GET /cashbook?organization_id=&from=&to=&account_id=&reference=&type=single|double (Session 10) */
 export function fetchCashBook(organizationId, params = {}) {
   const qs = new URLSearchParams({ organization_id: organizationId })
   for (const [k, v] of Object.entries(params)) {

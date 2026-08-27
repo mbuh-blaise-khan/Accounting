@@ -44,6 +44,23 @@ def _accounts_by_name(client, org_id):
     return {a["name_en"]: a for a in resp.json()}
 
 
+def _create_account(client, org_id, code, name_en, name_fr):
+    resp = client.post(
+        "/accounts",
+        json={
+            "organization_id": org_id,
+            "framework": "OHADA",
+            "code": code,
+            "name_en": name_en,
+            "name_fr": name_fr,
+            "account_class": "asset",
+            "normal_balance": "debit",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
 def _make_txn(client, org_id, lines, description="Sold goods for cash"):
     resp = client.post(
         "/transactions",
@@ -203,3 +220,50 @@ def test_journal_ohada_includes_codes_ifrs_omits_them(client):
     cb = client.get(f"/cashbook?organization_id={ifrs['id']}").json()
     assert len(cb) == 1
     assert cb[0]["account_name_en"] == "Cash and cash equivalents"
+
+
+def test_cash_book_single_excludes_bank_and_double_splits_types(client):
+    _register(client)
+    org = _create_demo_org(client)
+    acc = _accounts_by_code(client, org["id"])
+    bank = _create_account(client, org["id"], code="529", name_en="Bank account", name_fr="Compte banque")
+    cash_txn = _make_txn(client, org["id"], _ohada_balanced(acc))
+    _post(client, org["id"], cash_txn["id"])
+    bank_txn = _make_txn(client, org["id"], [
+        {"account_id": bank["id"], "debit": 200, "credit": 0},
+        {"account_id": acc["70"]["id"], "debit": 0, "credit": 200},
+    ])
+    _post(client, org["id"], bank_txn["id"])
+
+    single = client.get(f"/cashbook?organization_id={org['id']}&type=single").json()
+    double = client.get(f"/cashbook?organization_id={org['id']}&type=double").json()
+    assert single and all(row["cashbook_type"] == "cash" for row in single)
+    assert {row["cashbook_type"] for row in double} == {"cash", "bank"}
+    assert len(double) > len(single)
+    assert sum(float(row["debit"]) for row in double if row["cashbook_type"] == "cash") == 50000
+    assert sum(float(row["credit"]) for row in double if row["cashbook_type"] == "cash") == 0
+    assert sum(float(row["debit"]) for row in double if row["cashbook_type"] == "bank") == 200
+    assert sum(float(row["credit"]) for row in double if row["cashbook_type"] == "bank") == 0
+
+
+def test_cash_book_type_preserves_filters_and_reversed_rows(client):
+    _register(client)
+    org = _create_demo_org(client)
+    acc = _accounts_by_code(client, org["id"])
+    txn = _make_txn(client, org["id"], _ohada_balanced(acc))
+    _post(client, org["id"], txn["id"])
+    rows = client.get(f"/cashbook?organization_id={org['id']}&type=single&from=2000-01-01&to=2000-01-02").json()
+    assert rows == []
+    assert client.get(f"/cashbook?organization_id={org['id']}&type=invalid").status_code == 422
+
+    # A posted entry and its reversal remain visible as historical rows, but
+    # each Cash Book amount column nets to zero in both layouts.
+    reversal = client.post(f"/transactions/{txn['id']}/reverse?organization_id={org['id']}")
+    assert reversal.status_code == 200, reversal.text
+    single = client.get(f"/cashbook?organization_id={org['id']}&type=single").json()
+    double = client.get(f"/cashbook?organization_id={org['id']}&type=double").json()
+    assert len(single) == 2  # original cash line + mirrored reversal cash line
+    assert sum(float(row["debit"]) for row in single) == sum(float(row["credit"]) for row in single)
+    cash_rows = [row for row in double if row["cashbook_type"] == "cash"]
+    assert sum(float(row["debit"]) for row in cash_rows) == sum(float(row["credit"]) for row in cash_rows)
+    assert all(row["cashbook_type"] in {"cash", "bank"} for row in double)

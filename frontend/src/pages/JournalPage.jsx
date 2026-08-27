@@ -16,6 +16,8 @@ import JournalTable from '../components/JournalTable.jsx'
 import AccountFilterSelect from '../components/AccountFilterSelect.jsx'
 import TxnStatusBlock from '../components/TxnStatusBlock.jsx'
 import { downloadCsv } from '../utils/csvExport.js'
+import ReportHeader from '../components/ReportHeader.jsx'
+import { formatReportDate, formatReportNumber, reportCsvHeader, reportPeriodLabel } from '../utils/reportPresentation.js'
 
 export default function JournalPage({ org, onBack, cashbook = false }) {
   const { t, lang } = useLanguage()
@@ -26,6 +28,8 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
   const [to, setTo] = useState('')
   const [accountId, setAccountId] = useState('')
   const [reference, setReference] = useState('')
+  const [cashbookType, setCashbookType] = useState('double')
+  const [generatedAt, setGeneratedAt] = useState(() => new Date())
   const [detail, setDetail] = useState(null) // drill-down transaction detail
   const [detailError, setDetailError] = useState(null)
 
@@ -35,11 +39,18 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
   async function load() {
     setError(null)
     try {
-      const params = { from, to, account_id: accountId, reference }
+      const params = {
+        from,
+        to,
+        account_id: accountId,
+        reference,
+        ...(cashbook ? { type: cashbookType } : {}),
+      }
       const data = cashbook
         ? await fetchCashBook(org.id, params)
         : await fetchJournalEntries(org.id, params)
       setRows(data)
+      setGeneratedAt(new Date())
     } catch (err) {
       setError(err.message)
     }
@@ -49,7 +60,7 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
     setRows(null)
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [org.id, cashbook])
+  }, [org.id, cashbook, cashbookType])
 
   useEffect(() => {
     fetchAccounts(org.id)
@@ -86,8 +97,9 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
   const labelCls = 'block text-xs font-medium text-slate-500'
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-8">
-      <div className="mx-auto w-full max-w-6xl">
+    <div className="report-page min-h-screen bg-slate-50 px-4 py-8">
+      <div className="report-content mx-auto w-full max-w-6xl">
+        <div className="no-print">
         <button
           type="button"
           onClick={onBack}
@@ -98,16 +110,40 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
         <h2 className="text-xl font-bold text-slate-900">
           {cashbook ? t('cashbook.title') : t('journal.title')}
         </h2>
-        <p className="mt-1 text-sm text-slate-600">
-          {org.name} · {t('dashboard.framework')} {org.framework} · {org.currency}
-        </p>
+        </div>
+        <ReportHeader
+          org={org}
+          title={cashbook ? t('cashbook.title') : t('journal.title')}
+          from={from}
+          to={to}
+          generatedAt={generatedAt}
+          t={t}
+        />
 
         {/* Part 3: export exactly what the current filters display */}
-        <div className="mt-2 flex justify-end">
+        <div className="no-print mt-2 flex justify-end">
           <button
             type="button"
             disabled={!rows || rows.length === 0}
-            onClick={() =>
+            onClick={() => {
+              const amountColumns = cashbook && cashbookType === 'double'
+                ? [
+                    { key: 'cashDebit', label: t('cashbook.cashDebit') },
+                    { key: 'bankDebit', label: t('cashbook.bankDebit') },
+                    { key: 'cashCredit', label: t('cashbook.cashCredit') },
+                    { key: 'bankCredit', label: t('cashbook.bankCredit') },
+                  ]
+                : [
+                    { key: 'debit', label: t('cashbook.debit') },
+                    { key: 'credit', label: t('cashbook.credit') },
+                  ]
+              const amount = (r, key) => {
+                if (key === 'debit' || key === 'credit') return Number(r[key]) || 0
+                if (key === 'cashDebit') return r.cashbook_type === 'cash' ? Number(r.debit) || 0 : 0
+                if (key === 'bankDebit') return r.cashbook_type === 'bank' ? Number(r.debit) || 0 : 0
+                if (key === 'cashCredit') return r.cashbook_type === 'cash' ? Number(r.credit) || 0 : 0
+                return r.cashbook_type === 'bank' ? Number(r.credit) || 0 : 0
+              }
               downloadCsv(
                 `${cashbook ? 'cash-book' : 'journal'}-${new Date().toISOString().slice(0, 10)}`,
                 [
@@ -117,10 +153,8 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
                   ...(isOhada ? [t('journal.accountNo')] : []),
                   t('journal.accountName'),
                   t('journal.narration'),
-                  t('journal.debit'),
-                  t('journal.credit'),
-                  t('journal.source'),
-                  t('journal.status'),
+                  ...amountColumns.map((column) => column.label),
+                  ...(!cashbook ? [t('journal.source'), t('journal.status')] : []),
                 ],
                 (rows || []).map((r) => [
                   r.date ? new Date(r.date).toLocaleString() : '',
@@ -129,13 +163,11 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
                   ...(isOhada ? [r.account_code || ''] : []),
                   nameOf({ name_en: r.account_name_en, name_fr: r.account_name_fr }),
                   r.narration || '',
-                  Number(r.debit) || 0,
-                  Number(r.credit) || 0,
-                  r.source,
-                  r.status,
+                  ...amountColumns.map((column) => amount(r, column.key)),
+                  ...(!cashbook ? [r.source, r.status] : []),
                 ])
               )
-            }
+            }}
             className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
           >
             ⬇ {t('common.downloadCsv')}
@@ -144,6 +176,21 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
         <p className="mt-1 text-sm text-slate-500">
           {cashbook ? t('cashbook.subtitle') : t('journal.subtitle')}
         </p>
+        {cashbook && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-slate-700">{t('cashbook.type')}</span>
+            {[['single', t('cashbook.single')], ['double', t('cashbook.double')]].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setCashbookType(value)}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium ${cashbookType === value ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {error && (
           <p className="mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
@@ -152,7 +199,7 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
         )}
 
         {/* Filters */}
-        <div className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="no-print mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
             <label className="block">
               <span className={labelCls}>{t('journal.from')}</span>
@@ -206,7 +253,7 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
         </div>
 
         {/* Table */}
-        <div className="mt-4">
+        <div className="report-table mt-4">
           {rows === null ? (
             <p className="text-center text-slate-500">{t('common.loading')}</p>
           ) : rows.length === 0 ? (
@@ -226,6 +273,16 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
               )}
             </p>
           ) : (
+            cashbook ? (
+              <CashBookTable
+                rows={rows}
+                org={org}
+                type={cashbookType}
+                nameOf={(r) => lang === 'fr' ? r.account_name_fr : r.account_name_en}
+                t={t}
+                onViewTxn={openDetail}
+              />
+            ) : (
             <JournalTable
               rows={rows}
               org={org}
@@ -235,6 +292,7 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
               t={t}
               onViewTxn={openDetail}
             />
+            )
           )}
           {rows && rows.length > 0 && (
             <p className="mt-2 text-sm text-slate-500">
@@ -252,12 +310,13 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
 
         {/* Drill-down: originating transaction detail */}
         {detailError && (
-          <p className="mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
+          <p className="no-print mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
             {detailError}
           </p>
         )}
 
         {detail && (
+          <div className="no-print">
           <TransactionDetail
             txn={detail}
             org={org}
@@ -269,6 +328,7 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
               await openDetail(detail.id)
             }}
           />
+          </div>
         )}
       </div>
     </div>
@@ -362,6 +422,58 @@ function TransactionDetail({ txn, org, onClose, onReversed }) {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+function CashBookTable({ rows, org, type, nameOf, t, onViewTxn }) {
+  const isOhada = org.framework === 'OHADA'
+  const amountColumns = type === 'single'
+    ? [
+        { key: 'debit', label: t('cashbook.debit') },
+        { key: 'credit', label: t('cashbook.credit') },
+      ]
+    : [
+        { key: 'cashDebit', label: t('cashbook.cashDebit') },
+        { key: 'bankDebit', label: t('cashbook.bankDebit') },
+        { key: 'cashCredit', label: t('cashbook.cashCredit') },
+        { key: 'bankCredit', label: t('cashbook.bankCredit') },
+      ]
+  const value = (row, key) => {
+    if (key === 'debit' || key === 'credit') return Number(row[key]) || 0
+    if (key === 'cashDebit') return row.cashbook_type === 'cash' ? Number(row.debit) || 0 : 0
+    if (key === 'bankDebit') return row.cashbook_type === 'bank' ? Number(row.debit) || 0 : 0
+    if (key === 'cashCredit') return row.cashbook_type === 'cash' ? Number(row.credit) || 0 : 0
+    return row.cashbook_type === 'bank' ? Number(row.credit) || 0 : 0
+  }
+  const totals = Object.fromEntries(amountColumns.map((c) => [c.key, rows.reduce((s, r) => s + value(r, c.key), 0)]))
+  return (
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <table className="w-full min-w-[620px] text-left text-sm">
+        <thead><tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+          <th className="px-3 py-2">{t('journal.date')}</th>
+          <th className="px-3 py-2">{t('journal.reference')}</th>
+          {isOhada && <th className="px-3 py-2">{t('journal.accountNo')}</th>}
+          <th className="px-3 py-2">{t('journal.accountName')}</th>
+          <th className="px-3 py-2">{t('journal.narration')}</th>
+          {amountColumns.map((c) => <th key={c.key} className="whitespace-nowrap px-3 py-2 text-right">{c.label}</th>)}
+          <th className="px-3 py-2"></th>
+        </tr></thead>
+        <tbody>{rows.map((r) => <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50">
+          <td className="whitespace-nowrap px-3 py-2">{r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
+          <td className="px-3 py-2 font-mono text-xs">{r.reference}</td>
+          {isOhada && <td className="px-3 py-2 font-mono text-xs">{r.account_code || ''}</td>}
+          <td className="px-3 py-2">{nameOf(r)}</td>
+          <td className="max-w-[180px] truncate px-3 py-2 text-slate-600">{r.narration || '—'}</td>
+          {amountColumns.map((c) => <td key={c.key} className="whitespace-nowrap px-3 py-2 text-right">{value(r, c.key) ? value(r, c.key).toLocaleString() : ''}</td>)}
+          <td className="px-3 py-2 text-right"><button type="button" onClick={() => onViewTxn(r.transaction_id)} className="text-sm font-medium text-blue-600 hover:text-blue-700">{t('journal.view')} →</button></td>
+        </tr>)}</tbody>
+        <tfoot><tr className="border-t border-slate-300 bg-slate-100 font-bold">
+          <td className="px-3 py-2" colSpan={(isOhada ? 5 : 4)}>{t('journal.totals')}</td>
+          {amountColumns.map((c) => <td key={c.key} className="px-3 py-2 text-right">{totals[c.key].toLocaleString()}</td>)}
+          <td />
+        </tr></tfoot>
+      </table>
     </div>
   )
 }

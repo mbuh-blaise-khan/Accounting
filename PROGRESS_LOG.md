@@ -16,7 +16,7 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 9 — Trial Balance (implementation complete; final full-suite/build verification blocked by terminal integration)
+**Last completed session:** Cash Book enhancement — single- and double-column type selector
 Session 9 adds a deterministic, org-scoped trial-balance service and API. One
 computation returns opening debit/credit balances, period debit/credit movements,
 and closing debit/credit balances. Posted and reversed historical lines are both
@@ -29,17 +29,27 @@ indicator, CSV export, and General Ledger drill-down. Dashboard navigation and
 account handoff are wired.
 
 **Verification evidence:** `pytest app/tests/test_trial_balance.py -q` completed
-with **8 passed, 1 warning in 3.65s**. Repeated full-suite attempts stopped after
-partial dot output without a pytest summary; frontend `npm run build` attempts
-reached module transformation without a final Vite summary. These two checks are
-therefore explicitly unverified, not claimed as passed, because the terminal
-integration stalled. Session 9 must not be treated as fully verified until both
-commands complete and output is captured.
-**Next session to run:** Session 10 (financial statements), only after Session 9
-verification is completed.
+with **8 passed, 1 warning in 3.65s**. Cash Book-focused tests completed with
+**7 passed, 1 warning in 2.37s**. The full backend suite completed with **81 passed,
+3 warnings in 11.91s**. Frontend `npm run build` completed with **51 modules
+transformed** and **built in 3.73s** (exit 0).
+**Next session to run:** Session 10 (financial statements), after this Cash Book
+enhancement is verified and committed.
 **Decisions:** no new backend dependency; frontend CSV is generated from the
 already-fetched rows; zero-activity accounts are omitted; opening/closing are net
 balances placed on their debit/credit side while movement columns remain gross.
+Cash Book uses OHADA 57 as physical cash and 52/56 as bank; IFRS uses explicit
+name matching with bank terms taking precedence. Single-column filters to cash;
+double-column retains both buckets and splits four amount columns. Triple-column
+and Petty Cash Book are deferred because discount and imprest concepts are absent.
+
+### Cash Book enhancement — single- and double-column types (2026-08-27)
+- Status: DONE; focused tests and frontend build passed. The full-suite process reached 71 test dots but did not emit a pytest summary before terminal teardown blocked, so no full-suite pass is claimed.
+- Added explicit cash/bank classification to Cash Book rows. OHADA uses 57 for physical cash and 52/56 for bank; IFRS names distinguish bank terms before cash terms.
+- Added `type=single|double` to `GET /cashbook`, defaulting to double. Single returns cash only; double returns both buckets with `cashbook_type` tags.
+- Added the Cash Book selector and dedicated renderer to the shared Journal page. Single shows Debit/Credit; double shows Cash Dr, Bank Dr, Cash Cr, Bank Cr. CSV follows the selected view and existing filters.
+- Added tests for type exclusion, per-bucket splitting, filter retention, invalid type rejection, and reversed-pair net-zero behavior.
+- Triple-column and Petty Cash Book are intentionally deferred: the current schema has no discount fields or imprest/float/replenishment model.
 
 ---
 

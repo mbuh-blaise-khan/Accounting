@@ -94,9 +94,10 @@
 - [x] Description field modernized + real `posted_at` surfaced as the leading date everywhere a posted transaction appears (Part C).
 - [x] Journal read view: date (posted_at, first), reference, description, account number (OHADA only), account name, debit, credit, narration, source, posting status
 - [x] Cash Book view filtered to cash/bank movements
-- [x] API: GET /journal-entries (filters), GET /cashbook
-- [x] Frontend Journal + Cash Book pages with date filters and drill-down to transaction
-- [x] Tests: journal totals match posted lines in period; cash book only cash/bank; OHADA codes shown vs IFRS omitted
+- [x] Cash Book types: single-column cash-only and double-column cash/bank with separate Cash Dr, Bank Dr, Cash Cr, Bank Cr totals; triple-column and petty-cash/imprest deliberately deferred because discount/float concepts are not in the schema
+- [x] API: GET /journal-entries (filters), GET /cashbook?type=single|double (default double), with each row tagged cash or bank
+- [x] Frontend Journal + Cash Book pages with date filters, type selector, framework-aware columns, CSV export, and drill-down to transaction
+- [x] Tests: journal totals match posted lines in period; single excludes bank; double splits bucket totals; reversed pairs net to zero; OHADA codes shown vs IFRS omitted
 
 ## Session 8 — General Ledger
 - [ ] `ledger_service`: opening balance, debit movements, credit movements, running/closing balance — derived from posted lines, not stored

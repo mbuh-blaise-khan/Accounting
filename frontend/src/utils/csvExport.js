@@ -25,8 +25,8 @@ function csvEscape(value) {
  * @param {Array<Array<*>>} rows one array of cells per row, same order
  * @returns {string} CSV text including a UTF-8 BOM and \r\n line endings
  */
-export function toCsv(headers, rows) {
-  const lines = [headers, ...rows].map((cells) => cells.map(csvEscape).join(','))
+export function toCsv(headers, rows, metadataRows = []) {
+  const lines = [...metadataRows, [], headers, ...rows].map((cells) => cells.map(csvEscape).join(','))
   return `\uFEFF${lines.join('\r\n')}\r\n`
 }
 
@@ -36,8 +36,8 @@ export function toCsv(headers, rows) {
  * @param {string[]} headers column titles in display order
  * @param {Array<Array<*>>} rows cell values in display order
  */
-export function downloadCsv(filename, headers, rows) {
-  const blob = new Blob([toCsv(headers, rows)], { type: 'text/csv;charset=utf-8' })
+export function downloadCsv(filename, headers, rows, metadataRows = []) {
+  const blob = new Blob([toCsv(headers, rows, metadataRows)], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

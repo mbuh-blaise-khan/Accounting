@@ -3,6 +3,7 @@ and org-scoped. They are read-only views over POSTED transactions."""
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query
+from typing import Literal
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -40,12 +41,13 @@ def list_cash_book(
     date_to: date | None = Query(default=None, alias="to"),
     account_id: int | None = Query(default=None),
     reference: str | None = Query(default=None),
+    cashbook_type: Literal["single", "double"] = Query(default="double", alias="type"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Cash Book: posted lines on cash/bank accounts only (same filters)."""
+    """Cash Book: single cash-only or double cash-and-bank layout."""
     return journal_service.list_cash_book(
         db, current_user, organization_id,
         date_from=date_from, date_to=date_to,
-        account_id=account_id, reference=reference,
+        account_id=account_id, reference=reference, cashbook_type=cashbook_type,
     )

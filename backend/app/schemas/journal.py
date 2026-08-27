@@ -32,3 +32,5 @@ class JournalEntryOut(BaseModel):
     status: str = "posted"
     created_by: Optional[int] = None
     created_at: Optional[datetime] = None
+    # Cash Book only: explicit account bucket used by the single/double layouts.
+    cashbook_type: Optional[str] = None  # "cash" or "bank"

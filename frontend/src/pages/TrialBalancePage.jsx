@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 import { fetchTrialBalance } from '../services/api.js'
 import { useLanguage } from '../i18n/index.jsx'
 import { downloadCsv } from '../utils/csvExport.js'
+import ReportHeader from '../components/ReportHeader.jsx'
+import { formatReportNumber, reportCsvHeader, reportPeriodLabel } from '../utils/reportPresentation.js'
 
 const VIEWS = [2, 4, 6]
 
@@ -15,6 +17,7 @@ export default function TrialBalancePage({ org, onBack, onOpenLedger }) {
   const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10))
   const [from, setFrom] = useState('')
   const [view, setView] = useState(2)
+  const [generatedAt, setGeneratedAt] = useState(new Date())
   const [tb, setTb] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -24,6 +27,7 @@ export default function TrialBalancePage({ org, onBack, onOpenLedger }) {
     setError(null)
     try {
       setTb(await fetchTrialBalance(org.id, { as_of: asOf, from, columns: view }))
+      setGeneratedAt(new Date())
     } catch (err) {
       setError(err.message)
       setTb(null)

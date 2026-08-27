@@ -74,18 +74,35 @@ def _to_decimal(value) -> Decimal:
         return Decimal(0)
 
 
-def _is_cash_bank(account: Account, framework: str) -> bool:
-    """Is this account a cash/bank (treasury) account for its framework?"""
+def _cashbook_account_type(account: Account, framework: str) -> str | None:
+    """Classify a treasury account for the Cash Book as ``cash`` or ``bank``.
+
+    This deliberately distinguishes physical cash from bank balances. For OHADA,
+    57 is Caisse and 52/56 are bank-related classes. IFRS has no mandated account
+    numbering, so names are used, with bank keywords taking precedence over cash
+    keywords (e.g. "cash at bank" is bank, not physical cash).
+    """
     if not account:
-        return False
+        return None
+    code = (account.code or "").strip()
     if framework == "OHADA":
-        # Real SYSCOHADA Class 5 (trésorerie) — the numbered cash/bank class.
-        if account.ohada_class_number == 5:
-            return True
-        if account.code and account.code[:1].isdigit() and account.code.startswith("5"):
-            return True
+        if code.startswith("57"):
+            return "cash"
+        if code.startswith("52") or code.startswith("56"):
+            return "bank"
     text = f"{account.name_en or ''} {account.name_fr or ''}".lower()
-    return any(kw in text for kw in _CASH_KEYWORDS)
+    bank_words = ("bank", "banque", "overdraft", "découvert")
+    cash_words = ("cash", "caisse", "espèces", "especes", "petty cash")
+    if any(word in text for word in bank_words):
+        return "bank"
+    if any(word in text for word in cash_words):
+        return "cash"
+    return None
+
+
+def _is_cash_bank(account: Account, framework: str) -> bool:
+    """Backward-compatible combined treasury predicate."""
+    return _cashbook_account_type(account, framework) is not None
 
 
 def parse_reference_query(reference):
@@ -174,7 +191,8 @@ def list_journal_entries(
 
     out: list[JournalEntryOut] = []
     for line in rows:
-        if cashbook_only and not _is_cash_bank(line.account, framework):
+        cashbook_type = _cashbook_account_type(line.account, framework)
+        if cashbook_only and (cashbook_type is None):
             continue
         txn = line.transaction
         acct = line.account
@@ -196,6 +214,7 @@ def list_journal_entries(
                 status=txn.status.value,
                 created_by=txn.created_by,
                 created_at=txn.created_at,
+                cashbook_type=cashbook_type,
             )
         )
     return out
@@ -209,9 +228,13 @@ def list_cash_book(
     date_to: date | None = None,
     account_id: int | None = None,
     reference: str | None = None,
+    cashbook_type: str = "double",
 ) -> list[JournalEntryOut]:
-    """Cash Book: posted lines on cash/bank accounts only (same filters)."""
-    return list_journal_entries(
+    """Return single-column cash only, or double-column cash and bank rows."""
+    if cashbook_type not in {"single", "double"}:
+        raise HTTPException(status_code=422, detail="type must be 'single' or 'double'")
+    rows = list_journal_entries(
         db, user, org_id, date_from, date_to, account_id, reference,
         cashbook_only=True,
     )
+    return [row for row in rows if row.cashbook_type == "cash"] if cashbook_type == "single" else rows
