@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { fetchHealth } from '../services/api.js'
 import { useLanguage } from '../i18n/index.jsx'
+import Logo from '../components/Logo.jsx'
 
 export default function HomePage({ onCreateAccount, onLogin }) {
   const { t } = useLanguage()
@@ -21,7 +22,10 @@ export default function HomePage({ onCreateAccount, onLogin }) {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
-        <h1 className="text-2xl font-bold text-slate-900">{t('app.title')}</h1>
+        <div className="flex justify-center">
+          <Logo wordmark={t('app.title')} iconSize="h-9 w-9" />
+        </div>
+        <h1 className="mt-3 text-2xl font-bold text-slate-900">{t('app.title')}</h1>
         <p className="mt-1 text-slate-600">{t('app.subtitle')}</p>
         <p className="mt-4 text-slate-700">{t('landing.tagline')}</p>
 

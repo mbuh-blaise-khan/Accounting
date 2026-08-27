@@ -1,0 +1,191 @@
+"""Business Profile + fiscal-year period-math tests (Post-S9 session).
+
+Covers the acceptance points:
+1. A workspace can be created and used (posted to) with ALL Business Profile
+   fields unset — no regression; fiscal_year_start_month defaults to 1.
+2. The Business Profile fields are updated via the org PATCH endpoint, and
+   blank input clears them back to None.
+3. An invalid fiscal_year_start_month is rejected (422).
+4. Trial-balance period math shifts the "opening" point when a non-January
+   fiscal_year_start_month is set, and equals the calendar year when unset.
+5. The pure fiscal-year-start helper is correct.
+"""
+from datetime import date
+
+from app.services.trial_balance_service import _fiscal_year_start
+
+
+def _register(client, email="biz@example.com", name="Biz"):
+    return client.post(
+        "/auth/register",
+        json={
+            "email": email,
+            "password": "supersecret123",
+            "display_name": name,
+            "language_preference": "en",
+        },
+    )
+
+
+def _create_org(client, framework="OHADA", name="Biz Co"):
+    r = client.post(
+        "/organizations",
+        json={"name": name, "framework": framework, "currency": "XAF", "is_demo": True},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def _get(client, org_id):
+    r = client.get(f"/organizations/{org_id}")
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _patch(client, org_id, **data):
+    return client.patch(f"/organizations/{org_id}", json=data)
+
+
+def _accounts_by_code(client, org_id):
+    return {a["code"]: a for a in client.get(f"/accounts?organization_id={org_id}").json()}
+
+
+def _post_txn(client, org_id, acc_d, acc_c, amount, description="entry"):
+    r = client.post(
+        "/transactions",
+        json={
+            "organization_id": org_id,
+            "description": description,
+            "lines": [
+                {"account_id": acc_d["id"], "debit": amount, "credit": 0},
+                {"account_id": acc_c["id"], "debit": 0, "credit": amount},
+            ],
+        },
+    )
+    assert r.status_code in (200, 201), r.text
+    txn = r.json()
+    p = client.post(f"/transactions/{txn['id']}/post?organization_id={org_id}")
+    assert p.status_code == 200, p.text
+    return txn
+
+
+def _tb(client, org_id, **params):
+    qs = "&".join(f"{k}={v}" for k, v in params.items() if v is not None)
+    r = client.get(f"/trial-balance?organization_id={org_id}" + (f"&{qs}" if qs else ""))
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _backdate_posted_at(test_db_session, txn_id, d: date):
+    from app.models.transaction import Transaction
+
+    row = test_db_session.get(Transaction, txn_id)
+    row.posted_at = row.posted_at.replace(year=d.year, month=d.month, day=d.day)
+    test_db_session.commit()
+
+
+# --- 1) Created & usable with all profile fields unset ------------------------
+def test_org_created_and_usable_with_all_profile_fields_unset(client):
+    _register(client)
+    org = _create_org(client)
+    # New fields default: fiscal-year month = 1 (calendar year), others NULL.
+    got = _get(client, org["id"])
+    assert got["fiscal_year_start_month"] == 1
+    assert got["registered_address"] is None
+    assert got["rccm_number"] is None
+    assert got["tax_id"] is None
+
+    # Still fully usable: posting works exactly as before.
+    acc = _accounts_by_code(client, org["id"])
+    _post_txn(client, org["id"], acc["57"], acc["70"], 5000, "sale")
+    tb = _tb(client, org["id"])
+    assert tb["balanced"] is True
+    assert float(tb["totals"]["closing_debit"]) == 5000.0
+
+
+# --- 2) Business Profile fields can be updated via PATCH ----------------------
+def test_business_profile_fields_can_be_updated_and_cleared(client):
+    _register(client)
+    org = _create_org(client)
+
+    r = _patch(
+        client,
+        org["id"],
+        registered_address="Yaoundé, Cameroon",
+        tax_id="P12345678901N",
+        rccm_number="RC/YA/2026/000123",
+        fiscal_year_start_month=6,
+    )
+    assert r.status_code == 200, r.text
+    got = r.json()
+    assert got["registered_address"] == "Yaoundé, Cameroon"
+    assert got["rccm_number"] == "RC/YA/2026/000123"
+    assert got["tax_id"] == "P12345678901N"
+    assert got["fiscal_year_start_month"] == 6
+
+    # PATCH is partial: sending only one key must NOT clobber the others.
+    r2 = _patch(client, org["id"], tax_id="")
+    assert r2.status_code == 200, r2.text
+    got2 = r2.json()
+    assert got2["tax_id"] is None  # blank clears back to NULL
+    assert got2["rccm_number"] == "RC/YA/2026/000123"  # untouched
+    assert got2["fiscal_year_start_month"] == 6  # untouched
+
+
+def test_invalid_fiscal_year_start_month_rejected(client):
+    _register(client)
+    org = _create_org(client)
+    assert _patch(client, org["id"], fiscal_year_start_month=0).status_code == 422
+    assert _patch(client, org["id"], fiscal_year_start_month=13).status_code == 422
+
+
+# --- 3) Fiscal-year start helper ----------------------------------------------
+def test_fiscal_year_start_helper():
+    assert _fiscal_year_start(date(2026, 3, 15), 6) == date(2025, 6, 1)
+    assert _fiscal_year_start(date(2026, 7, 1), 6) == date(2026, 6, 1)
+    assert _fiscal_year_start(date(2026, 3, 15), 1) == date(2026, 1, 1)
+    assert _fiscal_year_start(date(2026, 1, 5), 6) == date(2025, 6, 1)
+    assert _fiscal_year_start(date(2027, 1, 5), 6) == date(2026, 6, 1)
+
+
+# --- 4) Trial Balance opening point shifts with fiscal-year start -------------
+def test_trial_balance_opening_shifts_with_non_january_fiscal_year(client, test_db_session):
+    """Deterministic scenario. A posting on 2025-12-01, an as-of of 2026-03-15.
+
+    With default fiscal-year start (January): the fiscal year begins 2026-01-01,
+    so the 2025-12-01 posting lands in OPENING.
+    With fiscal_year_start_month=6: the fiscal year runs 2025-06-01 →
+    2026-05-31, so the same posting is MOVEMENT (current fiscal year-to-date).
+    """
+    _register(client, email="fisc@example.com", name="Fisc")
+
+    default_org = _create_org(client, name="CalendarOrg")
+    acc = _accounts_by_code(client, default_org["id"])
+    txn = _post_txn(client, default_org["id"], acc["57"], acc["70"], 1000, "dec sale")
+    _backdate_posted_at(test_db_session, txn["id"], date(2025, 12, 1))
+
+    shifted_org = _create_org(client, name="FiscalOrg")
+    _patch(client, shifted_org["id"], fiscal_year_start_month=6)
+    acc_s = _accounts_by_code(client, shifted_org["id"])
+    txn_s = _post_txn(client, shifted_org["id"], acc_s["57"], acc_s["70"], 1000, "dec sale")
+    _backdate_posted_at(test_db_session, txn_s["id"], date(2025, 12, 1))
+
+    jan_tb = _tb(client, default_org["id"], **{"as_of": "2026-03-15"})
+    jun_tb = _tb(client, shifted_org["id"], **{"as_of": "2026-03-15"})
+
+    jan_cash = next(r for r in jan_tb["rows"] if r["code"] == "57")
+    jun_cash = next(r for r in jun_tb["rows"] if r["code"] == "57")
+
+    # Calendar year (unset): the pre-January posting is OPENING, no movement.
+    assert float(jan_cash["opening_debit"]) == 1000.0
+    assert float(jan_cash["movement_debit"]) == 0.0
+
+    # June-start fiscal year: same posting is current-year MOVEMENT.
+    assert float(jun_cash["opening_debit"]) == 0.0
+    assert float(jun_cash["movement_debit"]) == 1000.0
+
+    # Both still balance (closing Dr == Cr), and closing totals AGREE — only
+    # the opening/movement split differs.
+    assert jan_tb["balanced"] is True
+    assert jun_tb["balanced"] is True
+    assert float(jan_tb["totals"]["closing_debit"]) == float(jun_tb["totals"]["closing_debit"])

@@ -81,6 +81,18 @@ export function createOrganization(data) {
   return request('/organizations', { method: 'POST', body: JSON.stringify(data) })
 }
 
+/**
+ * PATCH /organizations/{id} -> update the optional Business Profile
+ * (registered address, RCCM number, tax ID, fiscal year start month).
+ * PATCH semantics: only provided keys change; empty strings clear a value.
+ */
+export function updateOrganization(orgId, data) {
+  return request(`/organizations/${orgId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
 /** GET /frameworks -> available accounting frameworks with plain-language descriptions */
 export function fetchFrameworks() {
   return request('/frameworks')

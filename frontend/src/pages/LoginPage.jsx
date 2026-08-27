@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useLanguage } from '../i18n/index.jsx'
+import Logo from '../components/Logo.jsx'
 
 export default function LoginPage({ onSwitchToRegister }) {
   const { t } = useLanguage()
@@ -29,6 +30,9 @@ export default function LoginPage({ onSwitchToRegister }) {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+        <div className="mb-4 flex justify-center">
+          <Logo wordmark={t('app.title')} />
+        </div>
         <h2 className="text-xl font-bold text-slate-900 mb-6">{t('login.title')}</h2>
 
         {localError && (

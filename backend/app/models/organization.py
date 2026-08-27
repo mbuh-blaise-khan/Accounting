@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -33,6 +34,17 @@ class Organization(Base):
     # True when created via the "use a sample demo business" button.
     # The demo chart-of-accounts seed data arrives in Session 5.
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # --- Optional Business Profile (Session: Business Profile). All-optional:
+    # not every workspace is a fully-registered business, so existing/ignored
+    # workspaces stay valid with these null. Only fiscal_year_start_month has a
+    # real default (January / calendar year) because period math ALWAYS needs a
+    # starting month to compute an "opening" point.
+    registered_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    rccm_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    tax_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    fiscal_year_start_month: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

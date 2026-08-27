@@ -1,4 +1,4 @@
-"""Universal Accounting Platform — FastAPI application entry point.
+"""Kinxta Docu — FastAPI application entry point.
 
 Run from the backend/ directory:
     uvicorn app.main:app --reload --port 8000
@@ -10,7 +10,7 @@ from app.api.router import api_router
 from app.core.config import settings
 
 app = FastAPI(
-    title="Universal Accounting Platform API",
+    title="Kinxta Docu API",
     description="Backend for the bilingual (EN/FR) accounting learning & practice platform.",
     version="0.1.0",
 )
@@ -29,4 +29,4 @@ app.include_router(api_router)
 
 @app.get("/")
 def root() -> dict:
-    return {"message": "Universal Accounting Platform API", "docs": "/docs"}
+    return {"message": "Kinxta Docu API", "docs": "/docs"}

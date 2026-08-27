@@ -25,7 +25,26 @@ class OrganizationOut(BaseModel):
     framework: str
     currency: str
     is_demo: bool
+    # Optional Business Profile (all-optional except the fiscal-year month,
+    # which defaults to January / calendar year for period math).
+    registered_address: Optional[str] = None
+    rccm_number: Optional[str] = None
+    tax_id: Optional[str] = None
+    fiscal_year_start_month: int = 1
     created_at: datetime
+
+
+class OrganizationUpdate(BaseModel):
+    """Partial update of the Business Profile (all fields optional; empty
+    strings are normalized to NULL on the service side so users can clear a
+    value they previously entered)."""
+
+    registered_address: Optional[str] = Field(default=None, max_length=2000)
+    rccm_number: Optional[str] = Field(default=None, max_length=80)
+    tax_id: Optional[str] = Field(default=None, max_length=80)
+    fiscal_year_start_month: Optional[int] = Field(
+        default=None, ge=1, le=12, description="1-12, defaults to 1 (January)"
+    )
 
 
 # --- Frameworks ---------------------------------------------------------------

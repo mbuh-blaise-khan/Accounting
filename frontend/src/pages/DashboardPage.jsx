@@ -12,6 +12,7 @@ import JournalPage from './JournalPage.jsx'
 import CashBookPage from './CashBookPage.jsx'
 import GeneralLedgerPage from './GeneralLedgerPage.jsx'
 import TrialBalancePage from './TrialBalancePage.jsx'
+import BusinessProfilePage from './BusinessProfilePage.jsx'
 
 export default function DashboardPage() {
   const { t } = useLanguage()
@@ -20,7 +21,7 @@ export default function DashboardPage() {
   const [frameworks, setFrameworks] = useState([])
   const [error, setError] = useState(null)
   const [activeOrg, setActiveOrg] = useState(null) // set -> inside a workspace
-  const [section, setSection] = useState('home') // home | accounts | newTransaction | journal | cashbook | ledger | trialBalance
+  const [section, setSection] = useState('home') // home | accounts | newTransaction | journal | cashbook | ledger | trialBalance | businessProfile
 
   async function load() {
     setError(null)
@@ -164,6 +165,7 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
             <NavBtn active={section === 'ledger'} onClick={() => onSectionChange('ledger')} label={t('ws.ledger')} />
             <NavBtn active={section === 'trialBalance'} onClick={() => onSectionChange('trialBalance')} label={t('ws.trialBalance')} />
             <NavBtn active={section === 'accounts'} onClick={() => onSectionChange('accounts')} label={t('ws.accounts')} />
+            <NavBtn active={section === 'businessProfile'} onClick={() => onSectionChange('businessProfile')} label={t('ws.businessProfile')} />
           </div>
         </div>
       </nav>
@@ -177,6 +179,7 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
             onCashBook={() => onSectionChange('cashbook')}
             onLedger={() => onSectionChange('ledger')}
             onTrialBalance={() => onSectionChange('trialBalance')}
+            onBusinessProfile={() => onSectionChange('businessProfile')}
           />
         )}
         {section === 'accounts' && (
@@ -204,12 +207,21 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
             }}
           />
         )}
+        {section === 'businessProfile' && (
+          <BusinessProfilePage
+            org={org}
+            onBack={() => onSectionChange('home')}
+            // Keep the dashboard's copy of the org in sync after a save so
+            // report headers immediately show the new profile data.
+            onSaved={(updated) => setActiveOrg((current) => ({ ...current, ...updated }))}
+          />
+        )}
       </main>
     </div>
   )
 }
 
-function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onLedger, onTrialBalance }) {
+function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onLedger, onTrialBalance, onBusinessProfile }) {
   const { t } = useLanguage()
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -253,6 +265,12 @@ function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onL
           desc={t('ws.accountsDesc')}
           action={t('ws.accounts')}
           onClick={onAccounts}
+        />
+        <BigCard
+          title={t('bp.title')}
+          desc={t('bp.subtitle')}
+          action={t('ws.businessProfile')}
+          onClick={onBusinessProfile}
         />
       </div>
     </div>

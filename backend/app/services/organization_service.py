@@ -90,3 +90,41 @@ def get_organization_for_user(db: Session, user: User, org_id: int) -> Organizat
             detail="Organization not found",
         )
     return org
+
+
+def update_business_profile(
+    db: Session,
+    user: User,
+    org_id: int,
+    registered_address: str | None = None,
+    rccm_number: str | None = None,
+    tax_id: str | None = None,
+    fiscal_year_start_month: int | None = None,
+) -> Organization:
+    """Update the optional Business Profile of an org the user is a member of.
+
+    All fields are optional (PATCH semantics: only provided keys change). The
+    registration/address/tax fields were intentionally never required, so a
+    blank/whitespace value CLEARS them back to None rather than storing empty
+    strings. fiscal_year_start_month is validated 1..12 and defaults to 1
+    (January / calendar year) when unset — it drives period math, not display.
+    """
+    org = get_organization_for_user(db, user, org_id)
+
+    if registered_address is not None:
+        org.registered_address = registered_address.strip() or None
+    if rccm_number is not None:
+        org.rccm_number = rccm_number.strip() or None
+    if tax_id is not None:
+        org.tax_id = tax_id.strip() or None
+    if fiscal_year_start_month is not None:
+        if not 1 <= fiscal_year_start_month <= 12:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="fiscal_year_start_month must be between 1 and 12",
+            )
+        org.fiscal_year_start_month = fiscal_year_start_month
+
+    db.commit()
+    db.refresh(org)
+    return org

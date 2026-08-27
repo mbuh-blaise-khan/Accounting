@@ -6,7 +6,19 @@ zero; opening + movement == closing on a real account (using a backdated
 entry via the shared test session); period filtering; zero-activity accounts
 are omitted; OHADA rows carry account numbers while IFRS rows don't.
 """
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+
+
+def _today_utc() -> date:
+    """Today's date on the UTC clock.
+
+    Trial-balance date bounds are interpreted as UTC day boundaries (the
+    service stores/filters on UTC `posted_at`), so the tests must derive
+    "today" from UTC too — using the local clock would make bounds race the
+    postings whenever the local date is ahead of the UTC date (e.g. after
+    local midnight in a UTC+ timezone).
+    """
+    return datetime.now(timezone.utc).date()
 
 
 def _register(client, email="tb@example.com"):
@@ -110,7 +122,7 @@ def test_reversed_pair_nets_to_zero_and_counts_as_history(client):
 
     # History check: bound the period to today so BOTH legs land in movement,
     # and the pair must cancel inside the movement totals too.
-    today = date.today().isoformat()
+    today = _today_utc().isoformat()
     moved = _tb(client, org["id"], **{"from": today})
     assert moved["balanced"] is True
     mv_dr = float(moved["totals"]["movement_debit"])
@@ -132,14 +144,14 @@ def test_opening_plus_movement_equals_closing_with_backdated_entry(client, test_
     _post_txn(client, org["id"], acc["57"], acc["70"], 1200, "New sale")
 
     # Backdate the first posting to the 1st of last month (test-only write).
-    past = date.today() - timedelta(days=35)
+    past = _today_utc() - timedelta(days=35)
     row = test_db_session.get(Transaction, old["id"])
     row.posted_at = row.posted_at.replace(year=past.year, month=past.month, day=past.day)
     test_db_session.commit()
 
-    month_start = date.today().replace(day=1).isoformat()
+    month_start = _today_utc().replace(day=1).isoformat()
     tb = _tb(client, org["id"],
-             **{"as_of": date.today().isoformat(), "from": month_start})
+             **{"as_of": _today_utc().isoformat(), "from": month_start})
 
     cash = next(r for r in tb["rows"] if r["code"] == acc["57"]["code"])
     sales = next(r for r in tb["rows"] if r["code"] == acc["70"]["code"])
@@ -165,14 +177,14 @@ def test_period_filtering_excludes_entries_after_as_of(client, test_db_session):
     acc = _accounts_by_code(client, org["id"])
     txn = _post_txn(client, org["id"], acc["57"], acc["70"], 900, "Future entry")
 
-    tomorrow = date.today() + timedelta(days=1)
+    tomorrow = _today_utc() + timedelta(days=1)
     row = test_db_session.get(Transaction, txn["id"])
     row.posted_at = row.posted_at.replace(
         year=tomorrow.year, month=tomorrow.month, day=tomorrow.day
     )
     test_db_session.commit()
 
-    past_bound = (date.today() - timedelta(days=10)).isoformat()
+    past_bound = (_today_utc() - timedelta(days=10)).isoformat()
     tb = _tb(client, org["id"], **{"as_of": past_bound})
     used_ids = {r["account_id"] for r in tb["rows"]}
     assert acc["57"]["id"] not in used_ids

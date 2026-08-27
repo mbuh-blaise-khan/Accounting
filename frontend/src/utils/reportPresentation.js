@@ -23,14 +23,28 @@ export function reportPeriodLabel({ from, to, asOf, t }) {
 }
 
 export function reportCsvHeader({ organization, title, framework, period, generatedAt, t }) {
-  // The report-info block only. csvExport.toCsv inserts the blank separator row
-  // between these rows and the column headers, so there is no trailing [] here.
-  return [
+  // The report-info block. Mirrors the on-screen ReportHeader: identity rows
+  // first, then the period + generated timestamp, then the OPTIONAL
+  // registration identifiers (address / RCCM / tax ID) in the footer-style
+  // position — each only when actually set, never as blank placeholders.
+  // csvExport.toCsv inserts the blank separator row between these rows and the
+  // column headers, so there is no trailing [] here.
+  const rows = [
     [t('report.business'), organization.name],
     [t('report.title'), `${title} (${framework})`],
-    [t('report.period'), period],
-    [t('report.generated'), formatReportDateTime(generatedAt)],
   ]
+  if (organization.registered_address) {
+    rows.push([t('bp.address'), organization.registered_address])
+  }
+  rows.push([t('report.period'), period])
+  rows.push([t('report.generated'), formatReportDateTime(generatedAt)])
+  if (organization.rccm_number) {
+    rows.push([t('report.rccm'), organization.rccm_number])
+  }
+  if (organization.tax_id) {
+    rows.push([t('report.taxId'), organization.tax_id])
+  }
+  return rows
 }
 
 /**

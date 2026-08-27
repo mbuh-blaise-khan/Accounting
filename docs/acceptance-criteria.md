@@ -147,6 +147,15 @@ Verification evidence:
 - [x] CSV for all four reports: report-info header rows → blank separator → clean column headers (Trial Balance uses two header rows mirroring the grouped table); consistent DD/MM/YYYY dates (no raw `toLocaleString()` dumps); consistent number formatting; OHADA includes N° compte / IFRS omits it
 - [x] Tests: CSV includes header rows; date + number formatting consistent; OHADA/IFRS columns correct; print CSS doesn't leak on screen (`npm run test:reports` — all 9 checks passed, RC=0; `npm run build` — 53 modules, 4.58s, RC=0)
 
+## Post-S9 round 2 — Rebrand to Kinxta Docu + Business Profile (address, RCCM, tax ID, fiscal year)
+- [x] Rebrand: product name is "Kinxta Docu" in the browser tab title, header/nav (via the new original `components/Logo.jsx` — an original SVG document+checkmark mark with a swappable `image` prop for a real asset later), landing page, login/register headlines, i18n `app.title` in BOTH en.json and fr.json, `frontend/package.json` name `kinxta-docu`, README and PROGRESS_LOG headers. No internal code identifiers mass-renamed; no invented taglines or marketing copy.
+- [x] `organizations` gains ALL-OPTIONAL `registered_address` (text), `rccm_number` (text), `tax_id` (text, generic label since the name varies by country — NIU/NINEA/IFU etc.) and `fiscal_year_start_month` (int 1–12, server default 1 = January — the one field with a real default because period math always needs a starting month). Migration `0010_add_business_profile_fields.py`. Existing orgs remain valid with the new fields null.
+- [x] `PATCH /organizations/{id}` updates the profile (PATCH semantics; blank string clears a field back to NULL; month outside 1–12 → 422). Workspace-creation flow unchanged — nothing required at creation time.
+- [x] New "Business profile" settings page inside the workspace (nav button + workspace-home card) to view/edit afterwards; save keeps the dashboard's org copy in sync.
+- [x] ⚠️ BEHAVIOUR CHANGE (not cosmetic): trial balance "opening" point uses the org's `fiscal_year_start_month` (`_fiscal_year_start` in `trial_balance_service`) instead of hardcoded January 1. Unset ⇒ calendar year ⇒ results identical for every org that doesn't set it.
+- [x] ReportHeader (screen + print) and CSV header rows show the registered address, and RCCM/tax ID in a footer-style line (OHADA convention: identifiers separate from the business name at top) — ONLY when set, omitted cleanly (no blank placeholders) when not.
+- [x] Tests: org created & used with all fields unset (no regression); profile update via API incl. partial PATCH + blank-clears + 422; trial balance opening point SHIFTS with a non-January fiscal year start and is UNCHANGED (calendar year) when unset; helper unit-tested across year boundaries (`test_business_profile.py`).
+
 ## Session 10 — Financial Statements (first milestone)
 - [ ] `financial_statement_service`: Income Statement + Statement of Financial Position from trial-balance data by account_class
 - [ ] API: GET /reports/income-statement?period=, GET /reports/financial-position?as_of=

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
 import { LanguageProvider, useLanguage } from './i18n/index.jsx'
 import LanguageToggle from './components/LanguageToggle.jsx'
+import Logo from './components/Logo.jsx'
 import HomePage from './pages/HomePage.jsx'
 import LoginPage from './pages/LoginPage.jsx'
 import RegisterPage from './pages/RegisterPage.jsx'
@@ -59,9 +60,9 @@ function Header({ onHome, onLogin, onRegister }) {
         <button
           type="button"
           onClick={onHome}
-          className="text-base font-bold text-slate-900"
+          className="flex items-center gap-2"
         >
-          {t('app.title')}
+          <Logo wordmark={t('app.title')} />
         </button>
 
         <div className="flex items-center gap-2">

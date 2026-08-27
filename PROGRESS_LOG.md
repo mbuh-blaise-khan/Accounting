@@ -1,4 +1,4 @@
-# Project Progress Log — Universal Accounting Learning & Practice Platform
+# Project Progress Log — Kinxta Docu (Universal Accounting Learning & Practice Platform)
 
 HOW TO USE THIS FILE:
 - This file is the project's memory. It is tool-agnostic — it works whether
@@ -16,26 +16,38 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Trial-balance grouped headers + print support and CSV formatting fix across Journal, Cash Book, General Ledger and Trial Balance
+**Last completed session:** Rebrand to **Kinxta Docu** + optional **Business Profile** (registered address, RCCM number, tax ID, fiscal-year start month)
 
-The trial-balance table now uses a **grouped two-row header** (top row spans "Opening balance / Movement / Closing balance" groups, each `colspan=2`; the row below carries Debit/Credit under every group), replacing the old flat "Opening · Debit" concatenated labels — the layout real accounting software (e.g. Sage) uses. Mobile decision, consistent with the rest of the app: wide tables keep `overflow-x-auto` horizontal scroll (the 2-column beginner view fits without scrolling; grouped headers stay attached to their columns rather than collapsing to cards).
+The product is renamed "Kinxta Docu" everywhere user-facing: browser tab title, app header (via the new original `components/Logo.jsx` SVG mark — document-and-checkmark motif with an `image` prop so a real asset can be swapped in later), landing page, login/register headlines, `app.title` in BOTH en.json and fr.json, `frontend/package.json` name `kinxta-docu`, README and this log's headers. No internal code identifiers were mass-renamed and no invented tagline/marketing copy was added.
 
-Print support was added to all four reports (⚠ Journal, ⚠ Cash Book, General Ledger, Trial Balance). Every page has a **Print** button calling `window.print()`. All print CSS lives strictly inside `@media print` in `index.css` (verified by a test not to leak on screen); printing hides the app header, workspace nav, back button, filters, buttons, the TB pass/fail card and drill-downs, leaving only the report-header block + report table.
+`organizations` gained **all-optional** Business Profile fields (migration `0010_add_business_profile_fields.py`): `registered_address` (text), `rccm_number` (text), `tax_id` (text, generic label — the name varies by country: NIU/NINEA/IFU), and `fiscal_year_start_month` (int 1–12, server default 1 = January — the one field with a real default because period math always needs a starting month). Existing organizations remain valid with the new fields null; the workspace-creation flow is unchanged (nothing required at creation).
 
-Every report now shows the same **REPORT HEADER block** on screen, in print and in CSV: workspace name, report title + framework label, the period / as-of date, and "Generated on [real current timestamp]" — built from real schema data only (no fabricated registration/address data).
+⚠️ **BEHAVIOUR CHANGE (not cosmetic):** the trial balance's "opening" point now uses the organization's `fiscal_year_start_month` (`_fiscal_year_start` in `trial_balance_service`) instead of a hardcoded January 1. When unset (default January) results are **identical** to before — calendar year. A fiscal year starting in June, say, makes as-of 2026-03-15 belong to the year starting 2025-06-01, so pre-June-2025 history becomes "opening". Documented in `acceptance-criteria.md` and the service docstring.
 
-CSV export for all four reports carries the report info as **header rows**, a blank separator row, clean column headers (trial balance emits two header rows mirroring the grouped table), consistent **DD/MM/YYYY dates** (not raw `toLocaleString()` dumps), consistent number formatting, and `N° compte` included for OHADA / omitted for IFRS (`reportAccountColumns`).
+A new **Business Profile** settings page inside the workspace (nav button + workspace-home card) views/edits the fields via the new `PATCH /organizations/{id}` (PATCH semantics: only provided keys change; blank string clears a field back to NULL; month outside 1–12 → 422). Report headers (screen, print AND CSV header rows) now show the registered address, and RCCM/tax ID in a **footer-style line** per OHADA convention (identifiers separate from the business name at top) — only when actually set, cleanly omitted otherwise (no blank placeholders).
 
-**Verification evidence:** `npm run test:reports` — all 9 checks passed, RC=0. `npm run build` — 53 modules transformed, built in 4.58s, RC=0. (Backend untouched this session; the Cash Book work this approval requires was verified and committed first — 7 passed / build 53 modules — in commit `a6fbe33`.)
+**Verification evidence (all observed, RC read from output files):** backend full suite **86 passed** in 14.70s, RC=0 (`backend/_bp_all2.txt`), including 8 new `test_business_profile.py` tests. Frontend `npm run test:reports` all 9 checks passed RC=0; `npm run build` 55 modules, 5.94s, RC=0 (`frontend/_bp_reports.txt`, `_bp_build.txt`).
 
-**Next session to run:** Session 10 (financial statements) — the remaining MVP milestone. This report-printing/CSV polish is complete and committed.
+One pre-existing test needed a fix en route: `test_reversed_pair_nets_to_zero_and_counts_as_history` derived "today" from the LOCAL clock while the service filters on UTC `posted_at` — after local midnight in a UTC+ timezone its `from=today` bound landed in the UTC future and movement came out 0. All five date-bound computations in `test_trial_balance.py` now use a shared `_today_utc()` helper (UTC basis, matching the service). Production code was NOT affected.
+
+**Next session to run:** Session 10 (financial statements) — the remaining MVP milestone.
 
 **Decisions:**
-- Trial balance keeps horizontal-scroll tables on mobile (matches Journal/Ledger) rather than a stacked-card collapse, so the grouped header stays readable. Documented in `TrialBalancePage.jsx`.
-- Report header uses only real data (workspace name, framework, period, generated timestamp). No fabricated business address/registration.
-- `toCsv`/`downloadCsv` now accept one-or-more header rows, so the trial balance can export a proper grouped two-row header.
-- `reportCsvHeader` no longer appends a trailing empty row; `toCsv` adds the single blank separator — avoids a double blank.
-- Print CSS for `.no-print`, `.report-page`, `.report-content`, `.report-header`, `.report-table` and the app `header`/`nav` lives only inside `@media print` (test-enforced).
+- Business Profile fields are all-optional; only `fiscal_year_start_month` defaults (to January) because period math cannot work without a start month. Not every user is a registered business.
+- Fiscal-year shift applies ONLY when no explicit `from` is given (explicit period bounds always win); with no bounds at all, all history stays "movement" as before.
+- RCCM/tax ID render in a footer-style line in `ReportHeader` (and as trailing CSV header rows), separate from the business name — OHADA convention.
+- No mass rename of internal identifiers; only user-facing text, package `name`, docs.
+
+
+### Rebrand to Kinxta Docu + Business Profile fields (2026-08-27)
+- Status: DONE; backend 86 passed (RC=0), frontend test:reports 9/9 (RC=0), build 55 modules (RC=0).
+- Rebrand: "Kinxta Docu" in tab title, header/nav via new original `components/Logo.jsx` (SVG document+checkmark, swappable `image` prop), landing/login/register headlines, i18n `app.title` (en+fr), package name `kinxta-docu`, README/log headers.
+- Migration `0010`: organizations += all-optional `registered_address`, `rccm_number`, `tax_id` (generic label; NIU/NINEA/IFU vary by country) and `fiscal_year_start_month` (1–12, server default 1). Existing orgs valid with nulls; creation flow unchanged.
+- New `PATCH /organizations/{id}` (blank clears to NULL; bad month → 422) and a Business Profile settings page in the workspace (nav + home card).
+- ⚠️ BEHAVIOUR CHANGE: trial-balance opening point now derives from the org's fiscal_year_start_month (`_fiscal_year_start`) instead of hardcoded Jan 1; unset ⇒ calendar year ⇒ unchanged results. Explicit `from` bounds still win.
+- ReportHeader + CSV header rows show address/RCCM/tax ID only when set; RCCM/tax ID in a footer-style line (OHADA convention).
+- Fixed a latent local-vs-UTC date flake in `test_trial_balance.py` (`_today_utc()` helper); production code unaffected.
+- Acceptance criteria updated with the fiscal-year change flagged as a real behaviour change.
 
 ### Trial-balance grouped headers; print support and CSV formatting fix (2026-08-27)
 - Status: DONE; `npm run test:reports` all 9 checks passed (RC=0) and `npm run build` (53 modules, 4.58s, RC=0).

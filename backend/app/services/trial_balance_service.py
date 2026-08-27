@@ -70,6 +70,22 @@ def _end_of(d: date) -> datetime:
     return datetime.combine(d, time.max, tzinfo=timezone.utc)
 
 
+def _fiscal_year_start(as_of: date, start_month: int) -> date:
+    """The FIRST DAY of the fiscal year that contains `as_of`.
+
+    Period math uses the organization's fiscal_year_start_month to decide what
+    counts as the "opening" point of a period. A fiscal year that starts in,
+    say, June (start_month=6) begins on 1 June of the PRIOR calendar year when
+    `as_of` is earlier than June (e.g. as_of=2026-03-15 belongs to the fiscal
+    year running 2025-06-01 → 2026-05-31). Default (start_month=1, unset) is
+    simply 1 January — the calendar year, i.e. unchanged behaviour.
+    """
+    year = as_of.year
+    if start_month > as_of.month:
+        year -= 1
+    return date(year, start_month, 1)
+
+
 def _to_decimal(value) -> Decimal:
     if isinstance(value, Decimal):
         return value
@@ -120,6 +136,13 @@ def _place(net: Decimal) -> tuple[Decimal, Decimal]:
     return Decimal("0"), Decimal("0")
 
 
+def _get_fiscal_year_start_month(db, org_id: int) -> int:
+    """Read the org's fiscal-year start month (defaults to January = 1 when it
+    isn't set, so period math is calendar-year for unset workspaces)."""
+    org = db.get(Organization, org_id)
+    return (org.fiscal_year_start_month if org else None) or 1
+
+
 def get_trial_balance(
     db,
     user: User,
@@ -136,6 +159,11 @@ def get_trial_balance(
     """
     _ensure_org_access(db, user, org_id)
 
+    # The org's fiscal-year start month decides the "opening" point of a period
+    # when no explicit `from` bound is given (defaults to January = calendar
+    # year for orgs that don't set it, so behaviour is unchanged for them).
+    fysm = _get_fiscal_year_start_month(db, org_id)
+
     # Closing window: everything up to the END of the as_of day (unbounded
     # when as_of is omitted). Opening window: strictly BEFORE the period
     # start. Movement = what happens between the two windows.
@@ -143,6 +171,13 @@ def get_trial_balance(
     if date_from is not None:
         opening_sums = _sums_by_account(db, org_id, None, _start_of(date_from))
         move_sums = _sums_by_account(db, org_id, _start_of(date_from), _end_of(date_as_of) if date_as_of else None)
+    elif date_as_of is not None:
+        # No explicit period start, but an as-of date: opening = everything
+        # before the CURRENT FISCAL YEAR's first day (Jan 1 by default), so
+        # "this fiscal year to date" is the natural period.
+        fiscal_start = _start_of(_fiscal_year_start(date_as_of, fysm))
+        opening_sums = _sums_by_account(db, org_id, None, fiscal_start)
+        move_sums = _sums_by_account(db, org_id, fiscal_start, _end_of(date_as_of))
     else:
         # No period start: all history is "movement", opening is zero.
         opening_sums = {}

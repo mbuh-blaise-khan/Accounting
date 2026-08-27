@@ -1,6 +1,6 @@
-# Universal Accounting Learning & Practice Platform
+# Kinxta Docu — Universal Accounting Learning & Practice Platform
 
-A bilingual (English / French, Pidgin later) learning-and-practice web platform
+**Kinxta Docu** is a bilingual (English / French, Pidgin later) learning-and-practice web platform
 for accounting. Built with **React + Tailwind CSS** (frontend), **FastAPI +
 SQLAlchemy + Alembic** (backend), and **PostgreSQL** (database).
 
@@ -172,6 +172,7 @@ python -m alembic revision --autogenerate -m "describe change"   # new migration
 | POST | `/organizations` | Create a workspace (creator becomes owner) |
 | GET | `/organizations` | My workspaces |
 | GET | `/organizations/{id}` | Workspace detail (members only) |
+| PATCH | `/organizations/{id}` | Update the optional Business Profile (registered address, RCCM number, tax ID, fiscal year start month) |
 | GET | `/frameworks` | Available accounting frameworks (descriptions + versions) |
 
 The auth JWT is stored in an **httpOnly cookie** set by the backend, so it is

@@ -5,7 +5,11 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.models.user import User
-from app.schemas.organization import OrganizationCreate, OrganizationOut
+from app.schemas.organization import (
+    OrganizationCreate,
+    OrganizationOut,
+    OrganizationUpdate,
+)
 from app.services import organization_service
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -42,3 +46,22 @@ def get_organization(
     db: Session = Depends(get_db),
 ):
     return organization_service.get_organization_for_user(db, current_user, org_id)
+
+
+@router.patch("/{org_id}", response_model=OrganizationOut)
+def update_organization(
+    org_id: int,
+    payload: OrganizationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update the optional Business Profile (address, RCCM, tax ID, fiscal
+    year start month). PATCH semantics: only provided fields change; all of
+    them are optional so a workspace that isn't a registered business stays
+    valid."""
+    return organization_service.update_business_profile(
+        db,
+        current_user,
+        org_id,
+        **payload.model_dump(exclude_unset=True),
+    )
