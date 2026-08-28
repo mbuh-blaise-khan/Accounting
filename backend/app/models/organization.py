@@ -45,6 +45,14 @@ class Organization(Base):
     fiscal_year_start_month: Mapped[int] = mapped_column(
         Integer, default=1, server_default="1", nullable=False
     )
+    # Server-side marker of the MANDATORY Business-Profile step: False for
+    # every NEWLY created workspace (the UI hard-gates features until the
+    # profile is saved), True once the blocking fields (address + fiscal year
+    # start) exist. Migration 0011 backfills True for every PRE-MANDATE org so
+    # existing workspaces are never hard-blocked (banner instead).
+    profile_completed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

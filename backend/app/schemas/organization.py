@@ -31,6 +31,10 @@ class OrganizationOut(BaseModel):
     rccm_number: Optional[str] = None
     tax_id: Optional[str] = None
     fiscal_year_start_month: int = 1
+    # Server-side marker of the mandatory Business-Profile step: False for new
+    # workspaces (the UI hard-gates until the profile is saved), True for
+    # pre-mandate orgs (migration 0011 backfill) and once saved.
+    profile_completed: bool = False
     created_at: datetime
 
 

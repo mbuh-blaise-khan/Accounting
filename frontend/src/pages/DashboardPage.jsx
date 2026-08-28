@@ -13,6 +13,7 @@ import CashBookPage from './CashBookPage.jsx'
 import GeneralLedgerPage from './GeneralLedgerPage.jsx'
 import TrialBalancePage from './TrialBalancePage.jsx'
 import BusinessProfilePage from './BusinessProfilePage.jsx'
+import { profileGateActive, profileNeedsAttention } from '../utils/profile.js'
 
 export default function DashboardPage() {
   const { t } = useLanguage()
@@ -41,6 +42,24 @@ export default function DashboardPage() {
     load()
   }, [])
 
+  // NEW workspace -> straight into the MANDATORY Business Profile step (server
+  // starts it at profile_completed=false, so the gate also survives reloads).
+  function handleCreated(created) {
+    setActiveOrg(created)
+    setSection('businessProfile')
+    load() // refresh the workspace list in the background
+  }
+
+  // Single source of org-state updates from inside WorkSpace. This is the fix
+  // for the reported "setActiveOrg is not defined" ReferenceError: WorkSpace is
+  // a SEPARATE module-level component and can never see DashboardPage's
+  // setActiveOrg directly, so the updater is passed down as a prop instead.
+  function handleOrgUpdated(updated) {
+    setActiveOrg((current) =>
+      current && current.id === updated.id ? { ...current, ...updated } : current
+    )
+  }
+
   if (activeOrg) {
     return (
       <WorkSpace
@@ -51,6 +70,7 @@ export default function DashboardPage() {
           setActiveOrg(null)
           setSection('home')
         }}
+        onOrgUpdated={handleOrgUpdated}
       />
     )
   }
@@ -81,7 +101,7 @@ export default function DashboardPage() {
           <p className="mt-10 text-center text-slate-500">{t('common.loading')}</p>
         ) : orgs.length === 0 ? (
           <div className="mt-8">
-            <CreateWorkspace frameworks={frameworks} onCreated={load} />
+            <CreateWorkspace frameworks={frameworks} onCreated={handleCreated} />
           </div>
         ) : (
           <div className="mt-8">
@@ -143,9 +163,26 @@ function NavBtn({ active, onClick, label }) {
   )
 }
 
-function WorkSpace({ org, section, onSectionChange, onExit }) {
+function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
   const { t } = useLanguage()
   const [ledgerAccount, setLedgerAccount] = useState(null) // preset by trial-balance drill-down
+
+  // MANDATORY Business-Profile gate. Driven by the SERVER-SIDE
+  // profile_completed flag (migration 0011): a brand-new workspace starts
+  // False, so the gate survives page reloads and the step genuinely cannot be
+  // skipped. While gated, ONLY the BusinessProfilePage renders — no other
+  // section is reachable through nav or home cards (real enforcement, not
+  // cosmetic). Pre-mandate orgs are backfilled True and never hard-blocked.
+  const gated = profileGateActive(org)
+
+  // Pre-mandate / incomplete orgs: a DISMISSIBLE completion banner, never a
+  // hard block (per-session dismissal; the mandate itself only hard-gates NEW
+  // workspaces). Note: a learner workspace (registration fields intentionally
+  // left empty) also matches this banner condition — it is informational only
+  // and dismissible, which keeps the learner exempt from any block.
+  const [bannerDismissed, setBannerDismissed] = useState(false)
+  const showBanner = !gated && profileNeedsAttention(org) && !bannerDismissed
+
   return (
     <div className="min-h-screen bg-slate-50">
       <nav className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-2 backdrop-blur">
@@ -157,20 +194,61 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
           >
             {org.name} — {t('dashboard.workspaces')}
           </button>
-          <div className="flex gap-1">
-            <NavBtn active={section === 'home'} onClick={() => onSectionChange('home')} label={t('ws.home')} />
-            <NavBtn active={section === 'newTransaction'} onClick={() => onSectionChange('newTransaction')} label={t('ws.newTransaction')} />
-            <NavBtn active={section === 'journal'} onClick={() => onSectionChange('journal')} label={t('ws.journal')} />
-            <NavBtn active={section === 'cashbook'} onClick={() => onSectionChange('cashbook')} label={t('ws.cashbook')} />
-            <NavBtn active={section === 'ledger'} onClick={() => onSectionChange('ledger')} label={t('ws.ledger')} />
-            <NavBtn active={section === 'trialBalance'} onClick={() => onSectionChange('trialBalance')} label={t('ws.trialBalance')} />
-            <NavBtn active={section === 'accounts'} onClick={() => onSectionChange('accounts')} label={t('ws.accounts')} />
-            <NavBtn active={section === 'businessProfile'} onClick={() => onSectionChange('businessProfile')} label={t('ws.businessProfile')} />
-          </div>
+          {gated ? (
+            // Gated: the other destinations are unreachable by design.
+            <span className="text-sm font-medium text-slate-500">
+              {t('bp.mandatoryTitle')}
+            </span>
+          ) : (
+            <div className="flex gap-1">
+              <NavBtn active={section === 'home'} onClick={() => onSectionChange('home')} label={t('ws.home')} />
+              <NavBtn active={section === 'newTransaction'} onClick={() => onSectionChange('newTransaction')} label={t('ws.newTransaction')} />
+              <NavBtn active={section === 'journal'} onClick={() => onSectionChange('journal')} label={t('ws.journal')} />
+              <NavBtn active={section === 'cashbook'} onClick={() => onSectionChange('cashbook')} label={t('ws.cashbook')} />
+              <NavBtn active={section === 'ledger'} onClick={() => onSectionChange('ledger')} label={t('ws.ledger')} />
+              <NavBtn active={section === 'trialBalance'} onClick={() => onSectionChange('trialBalance')} label={t('ws.trialBalance')} />
+              <NavBtn active={section === 'accounts'} onClick={() => onSectionChange('accounts')} label={t('ws.accounts')} />
+              <NavBtn active={section === 'businessProfile'} onClick={() => onSectionChange('businessProfile')} label={t('ws.businessProfile')} />
+            </div>
+          )}
         </div>
       </nav>
       <main>
-        {section === 'home' && (
+        {gated && (
+          <BusinessProfilePage
+            org={org}
+            mandatory
+            onSaved={onOrgUpdated}
+            onDone={() => onSectionChange('home')}
+          />
+        )}
+        {!gated && showBanner && (
+          <div className="mx-auto max-w-3xl px-4 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <span>{t('bp.banner')}</span>
+              <span className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSectionChange('businessProfile')}
+                  className="rounded-lg border border-amber-500 px-2 py-1 font-medium text-amber-800 hover:bg-amber-100"
+                >
+                  {t('bp.bannerAction')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBannerDismissed(true)}
+                  className="rounded-lg px-2 py-1 text-amber-700 hover:bg-amber-100"
+                >
+                  {t('bp.bannerDismiss')}
+                </button>
+              </span>
+            </div>
+          </div>
+        )}
+        {/* Every section below is hard-guarded by !gated: while the mandatory
+            Business Profile step is outstanding, NO other feature renders,
+            regardless of what `section` happens to be (real enforcement). */}
+        {!gated && section === 'home' && (
           <OrgHome
             org={org}
             onAccounts={() => onSectionChange('accounts')}
@@ -182,22 +260,22 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
             onBusinessProfile={() => onSectionChange('businessProfile')}
           />
         )}
-        {section === 'accounts' && (
+        {!gated && section === 'accounts' && (
           <ChartOfAccountsPage org={org} onBack={() => onSectionChange('home')} />
         )}
-        {section === 'newTransaction' && (
+        {!gated && section === 'newTransaction' && (
           <NewTransactionPage org={org} onBack={() => onSectionChange('home')} />
         )}
-        {section === 'journal' && (
+        {!gated && section === 'journal' && (
           <JournalPage org={org} onBack={() => onSectionChange('home')} />
         )}
-        {section === 'cashbook' && (
+         {!gated && section === 'cashbook' && (
           <CashBookPage org={org} onBack={() => onSectionChange('home')} />
         )}
-                {section === 'ledger' && (
+        {!gated && section === 'ledger' && (
           <GeneralLedgerPage org={org} onBack={() => onSectionChange('home')} initialAccountId={ledgerAccount} />
         )}
-        {section === 'trialBalance' && (
+        {!gated && section === 'trialBalance' && (
           <TrialBalancePage
             org={org}
             onBack={() => onSectionChange('home')}
@@ -207,13 +285,15 @@ function WorkSpace({ org, section, onSectionChange, onExit }) {
             }}
           />
         )}
-        {section === 'businessProfile' && (
+        {!gated && section === 'businessProfile' && (
           <BusinessProfilePage
             org={org}
             onBack={() => onSectionChange('home')}
-            // Keep the dashboard's copy of the org in sync after a save so
-            // report headers immediately show the new profile data.
-            onSaved={(updated) => setActiveOrg((current) => ({ ...current, ...updated }))}
+            // PART 1 FIX: use the prop passed down from DashboardPage (where
+            // setActiveOrg actually lives) — the previous inline
+            // `setActiveOrg(...)` here threw "setActiveOrg is not defined"
+            // because WorkSpace is a separate component scope.
+            onSaved={onOrgUpdated}
           />
         )}
       </main>

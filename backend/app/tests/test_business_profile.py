@@ -139,6 +139,63 @@ def test_invalid_fiscal_year_start_month_rejected(client):
     assert _patch(client, org["id"], fiscal_year_start_month=13).status_code == 422
 
 
+# --- 5) Mandatory-step flag (profile_completed) --------------------------------
+def test_new_org_is_not_profile_completed(client):
+    """A brand-new workspace starts hard-gated (profile_completed=False)."""
+    _register(client, email="gate@example.com", name="Gate")
+    org = _create_org(client, name="GateCo")
+    got = _get(client, org["id"])
+    assert got["profile_completed"] is False
+
+
+def test_saving_full_profile_completes_the_mandatory_step(client):
+    _register(client, email="done@example.com", name="Done")
+    org = _create_org(client, name="DoneCo")
+    r = _patch(
+        client,
+        org["id"],
+        registered_address="Bonanjo, Douala, Cameroon",
+        rccm_number="RC/DLA/2024/B/1234",
+        tax_id="M012345678901X",
+        fiscal_year_start_month=1,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["profile_completed"] is True
+
+
+def test_learner_save_without_registration_still_completes(client):
+    """Learner exemption server-side: address + fiscal year are enough."""
+    _register(client, email="learn@example.com", name="Learn")
+    org = _create_org(client, name="LearnCo")
+    r = _patch(
+        client,
+        org["id"],
+        registered_address="Nkolbisson, Yaoundé, Cameroon",
+        rccm_number="",  # learner: cleared
+        tax_id="",  # learner: cleared
+        fiscal_year_start_month=7,
+    )
+    assert r.status_code == 200, r.text
+    got = r.json()
+    assert got["profile_completed"] is True
+    assert got["rccm_number"] is None
+    assert got["tax_id"] is None
+
+
+def test_partial_save_without_blocking_fields_does_not_complete(client):
+    _register(client, email="part@example.com", name="Part")
+    org = _create_org(client, name="PartCo")
+    # Only a tax id — no registered_address, so the step is NOT complete.
+    r = _patch(client, org["id"], tax_id="P123")
+    assert r.status_code == 200, r.text
+    assert r.json()["profile_completed"] is False
+
+    # Adding the address completes it (fiscal month defaults to 1).
+    r2 = _patch(client, org["id"], registered_address="Bafoussam, Cameroon")
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["profile_completed"] is True
+
+
 # --- 3) Fiscal-year start helper ----------------------------------------------
 def test_fiscal_year_start_helper():
     assert _fiscal_year_start(date(2026, 3, 15), 6) == date(2025, 6, 1)

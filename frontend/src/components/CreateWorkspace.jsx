@@ -22,8 +22,10 @@ export default function CreateWorkspace({ frameworks, onCreated }) {
     setError(null)
     setBusy(true)
     try {
-      await createOrganization(payload)
-      onCreated()
+      // Hand the created org back so the dashboard can send NEW workspaces
+      // straight into the mandatory Business Profile step.
+      const created = await createOrganization(payload)
+      onCreated(created)
     } catch {
       setError(t('workspace.error'))
     } finally {

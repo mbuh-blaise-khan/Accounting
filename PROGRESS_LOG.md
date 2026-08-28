@@ -16,6 +16,21 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
+**Last completed session:** setActiveOrg bugfix + Business Profile made a MANDATORY workspace-creation step (learner exemption) — **code DONE, verification INCOMPLETE (see below); NOT committed.**
+
+- **BUGFIX (Part 1):** clicking Save on Business Profile threw `ReferenceError: setActiveOrg is not defined`. Root cause CONFIRMED by reading the code: the `onSaved={(updated) => setActiveOrg(...)}` callback lived in `WorkSpace` — a separate module-level component with no `setActiveOrg` in scope (that updater is declared in `DashboardPage`). Fixed by threading an `onOrgUpdated` prop `DashboardPage → WorkSpace → BusinessProfilePage`.
+- **⚠️ DECISION REVERSAL (explicit):** the prior session made the Business Profile "purely optional, never at creation". That is REVERSED: it is now a MANDATORY step immediately after workspace creation (a profile nobody fills in voluntarily can't produce the OHADA-style report headers the reports need), with a **learner exemption** checkbox so beginners without a registered business are never locked out (RCCM/tax ID optional when checked; address + fiscal month required for everyone). "Mandatory with an exemption" — neither "fully optional" nor "unconditionally mandatory".
+- New workspaces redirect straight into the profile form; the gate is enforced via a server-side `profile_completed` flag (migration `0011_add_profile_completed.py`: new orgs start `false`; PATCH with required blocking fields sets it `true`; clearing them sets it `false`) checked in `DashboardPage` (`profileGateActive`), so it survives reloads and can't be bypassed by just navigating. Pre-mandate orgs are NOT hard-blocked — they get a dismissible amber completion banner (`profileNeedsAttention`). DB columns stay nullable BY DESIGN (learner workspaces legitimately have NULL rccm/tax_id); no schema change beyond the boolean.
+- Mandatory-mode form: explicit month dropdown (disabled placeholder, no silent January default), realistic placeholders (e.g. `RC/DLA/2024/B/1234`, `NIU: M012345678901X (Cameroon) · NINEA (Senegal) · IFU (Benin/Togo/Burkina Faso/Niger)`), required-field error listing.
+- **Tests written:** pure gating rules in `frontend/src/utils/profile.js` (`npm run test:profile`, new script) covering: new workspace cannot skip the step unless the learner toggle is used; learner toggle makes RCCM/tax ID optional while address/fiscal-year stay required; pre-change orgs accessible with banner not block. Backend `test_business_profile.py` extended with `profile_completed` lifecycle tests.
+- **VERIFICATION STATUS — NOT OBSERVED, DO NOT TRUST BLINDLY:** the backend full suite and frontend `test:profile` + build were launched twice detached; both times the shell integration killed the processes early (`backend/_bp3_all.txt` stalls at 7 dots; `frontend/_bp3_profile.txt` has only the npm banner; `_bp3_build.txt` never created). Per the session's anti-loop rule, NO commit was made. **Next session / the user must run once:** `cd backend && ./.venv/Scripts/python.exe -m pytest app/tests -q` and `cd frontend && npm run test:profile && npm run build`, then commit everything as "Fix setActiveOrg bug; make Business Profile mandatory in workspace creation flow with learner exemption".
+
+**Next session to run:** verify + commit the above, then Session 10 (financial statements) — the remaining MVP milestone.
+
+---
+
+## Previous status (before the mandatory-flow reversal)
+
 **Last completed session:** Rebrand to **Kinxta Docu** + optional **Business Profile** (registered address, RCCM number, tax ID, fiscal-year start month)
 
 The product is renamed "Kinxta Docu" everywhere user-facing: browser tab title, app header (via the new original `components/Logo.jsx` SVG mark — document-and-checkmark motif with an `image` prop so a real asset can be swapped in later), landing page, login/register headlines, `app.title` in BOTH en.json and fr.json, `frontend/package.json` name `kinxta-docu`, README and this log's headers. No internal code identifiers were mass-renamed and no invented tagline/marketing copy was added.
@@ -38,6 +53,15 @@ One pre-existing test needed a fix en route: `test_reversed_pair_nets_to_zero_an
 - RCCM/tax ID render in a footer-style line in `ReportHeader` (and as trailing CSV header rows), separate from the business name — OHADA convention.
 - No mass rename of internal identifiers; only user-facing text, package `name`, docs.
 
+
+### setActiveOrg bugfix + mandatory Business Profile step (2026-08-27)
+- Status: CODE DONE, **verification INCOMPLETE** (pytest/npm outputs stalled twice — shell integration kills detached processes; no RC ever observed). **NOT COMMITTED** — user must run `pytest app/tests -q` (backend) and `npm run test:profile` + `npm run build` (frontend) manually, then commit.
+- Bugfix: `ReferenceError: setActiveOrg is not defined` on Business Profile save — the `onSaved` callback in `WorkSpace` referenced a state updater that only exists in `DashboardPage`. Fixed via an `onOrgUpdated` prop threaded down the component tree.
+- Decision reversal (documented in acceptance-criteria.md): Business Profile is now MANDATORY immediately after workspace creation, with a learner exemption checkbox (no registered business yet → RCCM/tax ID optional/disabled; address + fiscal month still required). Prior session's "purely optional" stance deliberately reversed.
+- Enforcement: server-side `profile_completed` boolean (migration `0011`; new orgs start false; PATCH sets/unsets it from the required blocking fields) + frontend gate in DashboardPage (`profileGateActive`) that forces the profile section and blocks accounts/transactions pages; reload-safe. Pre-mandate orgs: dismissible banner, never blocked. DB columns remain nullable by design.
+- Mandatory-mode form: explicit month dropdown (no silent January default), realistic placeholders per field, missing-field error list.
+- Tests written (NOT yet observed passing): `frontend/src/utils/profile.test.mjs` via new `npm run test:profile` script; backend `test_business_profile.py` extended with the `profile_completed` lifecycle.
+- i18n: new `bp.mandatory*`, `bp.learner*`, `bp.*Placeholder`, `bp.requiredFields` keys in BOTH en.json and fr.json.
 
 ### Rebrand to Kinxta Docu + Business Profile fields (2026-08-27)
 - Status: DONE; backend 86 passed (RC=0), frontend test:reports 9/9 (RC=0), build 55 modules (RC=0).

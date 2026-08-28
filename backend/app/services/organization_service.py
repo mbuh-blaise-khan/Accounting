@@ -125,6 +125,15 @@ def update_business_profile(
             )
         org.fiscal_year_start_month = fiscal_year_start_month
 
+    # Server-side mirror of the mandatory-step rules (frontend/src/utils/profile.js):
+    # the step is complete when the BLOCKING fields exist — registered_address
+    # plus fiscal_year_start_month. RCCM/tax stay optional (the learner
+    # exemption is expressible server-side too): a learner who saves with them
+    # cleared still completes the step.
+    org.profile_completed = bool(org.registered_address) and bool(
+        org.fiscal_year_start_month
+    )
+
     db.commit()
     db.refresh(org)
     return org

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:lookup": "node src/utils/accountLookup.test.mjs",
     "test:txn": "node src/utils/txnCalculations.test.mjs",
-    "test:reports": "node src/utils/report.test.mjs"
+    "test:reports": "node src/utils/report.test.mjs",
+    "test:profile": "node src/utils/profile.test.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
