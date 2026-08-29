@@ -47,3 +47,22 @@ class TransactionStatus(str, enum.Enum):
     draft = "draft"
     posted = "posted"
     reversed = "reversed"
+
+
+class IdentityType(str, enum.Enum):
+    """Who the workspace owner is (Business Profile Part 2).
+
+    Determines which Business Profile fields are required:
+    - learner:              student / learning accounting — RCCM/tax ID are
+                            not even shown; legal form skippable via the
+                            explicit "not applicable" option.
+    - unregistered_business: real business, not formally registered — RCCM/
+                            tax ID stay optional; legal form required.
+    - registered_business:  fully registered — legal form + RCCM + tax ID all
+                            required (country/address/fiscal year required
+                            for EVERY identity type).
+    """
+
+    learner = "learner"
+    unregistered_business = "unregistered_business"
+    registered_business = "registered_business"

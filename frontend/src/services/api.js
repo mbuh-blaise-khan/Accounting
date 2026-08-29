@@ -81,6 +81,13 @@ export function createOrganization(data) {
   return request('/organizations', { method: 'POST', body: JSON.stringify(data) })
 }
 
+/** GET /organizations/identity-options?framework=OHADA|IFRS -> country +
+ * legal-form dropdown data (single source of truth: OHADA = 17 member states
+ * + AUSCGIE forms; IFRS = full ISO list + international forms). */
+export function fetchIdentityOptions(framework) {
+  return request(`/organizations/identity-options?framework=${encodeURIComponent(framework)}`)
+}
+
 /**
  * PATCH /organizations/{id} -> update the optional Business Profile
  * (registered address, RCCM number, tax ID, fiscal year start month).

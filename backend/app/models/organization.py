@@ -27,6 +27,13 @@ class Organization(Base):
     owner_user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id"), nullable=False, index=True
     )
+    # IMMUTABLE after creation (Business Profile Part 2 decision): the entire
+    # seeded chart of accounts (OHADA SYSCOHADA subset / IFRS IAS-1 template,
+    # seeded since Session 6b) is framework-specific. Letting OHADA<->IFRS be
+    # switched post-creation would invalidate every seeded account and every
+    # posted line, so NO edit path exists anywhere: the field is deliberately
+    # absent from OrganizationUpdate, and the service rejects any attempt to
+    # change it (belt-and-braces guard in organization_service).
     framework: Mapped[str] = mapped_column(
         Enum(FrameworkCode, native_enum=False, length=10), nullable=False
     )
@@ -47,12 +54,25 @@ class Organization(Base):
     )
     # Server-side marker of the MANDATORY Business-Profile step: False for
     # every NEWLY created workspace (the UI hard-gates features until the
-    # profile is saved), True once the blocking fields (address + fiscal year
-    # start) exist. Migration 0011 backfills True for every PRE-MANDATE org so
-    # existing workspaces are never hard-blocked (banner instead).
+    # profile is saved), True once the blocking fields exist. Migration 0011
+    # backfills True for every PRE-MANDATE org so existing workspaces are
+    # never hard-blocked (banner instead).
     profile_completed: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False
     )
+    # --- Identity (Business Profile Part 2). ALL NULLABLE on purpose:
+    # organizations created before this change must remain valid with these
+    # unset (the mandate is a frontend/API rule, not a DB constraint).
+    # identity_type decides which OTHER profile fields are required — see
+    # app.accounting.identity_reference and frontend/src/utils/profile.js.
+    # - identity_type: 'learner' | 'unregistered_business' | 'registered_business'
+    # - country:       ISO 3166-1 alpha-2 code (OHADA workspaces: one of the
+    #                  17 member states, validated at the API layer)
+    # - legal_form:    framework-specific code (AUSCGIE forms for OHADA) or
+    #                  'NOT_APPLICABLE' for learning-only workspaces
+    identity_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    legal_form: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

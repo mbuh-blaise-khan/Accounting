@@ -1,11 +1,13 @@
 """Organization (workspace) endpoints. All routes are protected."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
+from app.models.enums import FrameworkCode
 from app.models.user import User
 from app.schemas.organization import (
+    IdentityOptionsOut,
     OrganizationCreate,
     OrganizationOut,
     OrganizationUpdate,
@@ -13,6 +15,18 @@ from app.schemas.organization import (
 from app.services import organization_service
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
+
+
+@router.get("/identity-options", response_model=IdentityOptionsOut)
+def get_identity_options(
+    framework: str = Query(..., description="OHADA or IFRS"),
+    current_user: User = Depends(get_current_user),
+):
+    """Country + legal-form dropdown data for ONE framework. OHADA: only the
+    17 member states and the AUSCGIE forms. IFRS: full international list."""
+    if framework not in (FrameworkCode.OHADA.value, FrameworkCode.IFRS.value):
+        return IdentityOptionsOut(countries=[], legal_forms=[])
+    return IdentityOptionsOut(**organization_service.get_identity_options(framework))
 
 
 @router.post("", response_model=OrganizationOut, status_code=201)

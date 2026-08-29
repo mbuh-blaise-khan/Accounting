@@ -246,3 +246,181 @@ def test_trial_balance_opening_shifts_with_non_january_fiscal_year(client, test_
     assert jan_tb["balanced"] is True
     assert jun_tb["balanced"] is True
     assert float(jan_tb["totals"]["closing_debit"]) == float(jun_tb["totals"]["closing_debit"])
+
+
+# --- 5) Business Profile Part 2: identity type, country, legal form ----------
+# Acceptance points: OHADA country restricted to the 17 real member states
+# (anything else rejected); IFRS accepts any valid ISO country; legal-form
+# options differ correctly by framework; identity_type=learner skips RCCM/tax
+# and may use the explicit NOT_APPLICABLE legal form; identity_type=
+# registered_business requires RCCM + tax ID; framework is immutable after
+# creation via ANY code path; existing pre-change orgs stay valid unset.
+
+# The 17 OHADA member states (ISO 3166-1 alpha-2) — see identity_reference.py.
+OHADA_CODES = {
+    "BJ", "BF", "CM", "CF", "TD", "KM", "CG", "CI", "CD",
+    "GA", "GN", "GW", "GQ", "ML", "NE", "SN", "TG",
+}
+
+
+def _org(client, email, name, framework="OHADA"):
+    _register(client, email=email, name=name)
+    return _create_org(client, framework=framework, name=name)
+
+
+def test_identity_options_differ_by_framework(client):
+    """GET /organizations/identity-options is the single source of truth."""
+    _register(client, email="opts@example.com", name="Opts")
+    ohada = client.get("/organizations/identity-options?framework=OHADA")
+    assert ohada.status_code == 200, ohada.text
+    ohada_ok = ohada.json()
+    # ONLY the 17 member states.
+    assert {c["code"] for c in ohada_ok["countries"]} == OHADA_CODES
+    ohada_forms = {f["code"] for f in ohada_ok["legal_forms"]}
+    expected_ohada = {"SARL", "SARLU", "SA", "SA_UNI", "SAS", "SASU", "SNC", "SCS", "GIE", "EI"}
+    assert expected_ohada <= ohada_forms
+    assert "LLC" not in ohada_forms
+
+    ifrs = client.get("/organizations/identity-options?framework=IFRS")
+    assert ifrs.status_code == 200, ifrs.text
+    ifrs_ok = ifrs.json()
+    assert len(ifrs_ok["countries"]) > 100  # full international list
+    ifrs_forms = {f["code"] for f in ifrs_ok["legal_forms"]}
+    assert ifrs_forms == {
+        "SOLE_PROP", "PARTNERSHIP", "LLC", "LTD", "PLC", "CORPORATION", "NONPROFIT", "COOPERATIVE",
+    }
+    assert "SARL" not in ifrs_forms
+
+
+def test_ohada_country_must_be_a_member_state(client):
+    org = _org(client, "oh@example.com", "OhadaCo")
+    # France / Nigeria are NOT OHADA member states -> rejected.
+    for bad in ("FR", "NG"):
+        r = _patch(client, org["id"], identity_type="unregistered_business", country=bad, legal_form="SARL")
+        assert r.status_code == 422, (bad, r.text)
+    # Case-insensitive: "cm" normalizes to the valid member code "CM".
+    r = _patch(client, org["id"], identity_type="unregistered_business", country="cm", legal_form="SARL")
+    assert r.status_code == 200, r.text
+    assert r.json()["country"] == "CM"
+
+
+def test_ifrs_accepts_any_valid_country_rejects_garbage(client):
+    org = _org(client, "if@example.com", "IfrsCo", framework="IFRS")
+    r = _patch(client, org["id"], identity_type="unregistered_business", country="FR", legal_form="SOLE_PROP")
+    assert r.status_code == 200, r.text
+    assert r.json()["country"] == "FR"
+    # GB + LLC all work together; providing RCCM/tax keeps the
+    # registered_business identity valid (that identity REQUIRES them).
+    r2 = _patch(
+        client, org["id"],
+        identity_type="registered_business", country="GB", legal_form="LLC",
+        rccm_number="RC/LON/12345", tax_id="GB123456789",
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["country"] == "GB"
+    # "ZZ" is not a real ISO 3166-1 alpha-2 code.
+    r3 = _patch(client, org["id"], country="ZZ")
+    assert r3.status_code == 422, r3.text
+
+
+def test_legal_form_valid_per_framework_and_not_applicable_learner_only(client):
+    org = _org(client, "lf@example.com", "LegalCo")
+    # LLC is not an OHADA form -> rejected.
+    r = _patch(client, org["id"], identity_type="unregistered_business", country="CM", legal_form="LLC")
+    assert r.status_code == 422, r.text
+    # NOT_APPLICABLE is allowed ONLY for identity_type=learner.
+    r2 = _patch(client, org["id"], identity_type="unregistered_business", country="CM", legal_form="NOT_APPLICABLE")
+    assert r2.status_code == 422, r2.text
+    r3 = _patch(
+        client, org["id"],
+        identity_type="learner", country="CM", legal_form="NOT_APPLICABLE",
+        registered_address="Yaoundé, Cameroon",
+    )
+    assert r3.status_code == 200, r3.text
+    assert r3.json()["profile_completed"] is True
+
+
+def test_registered_business_requires_rccm_and_tax_id(client):
+    org = _org(client, "reg@example.com", "RegCo")
+    # Missing RCCM + tax ID -> 422 even though country + legal form are set.
+    r = _patch(client, org["id"], identity_type="registered_business", country="CM", legal_form="SARL")
+    assert r.status_code == 422, r.text
+    r2 = _patch(
+        client, org["id"],
+        identity_type="registered_business", country="CM", legal_form="SARL",
+        rccm_number="RC/DLA/2024/B/1234", tax_id="NIU:M012345678901X",
+        registered_address="Bonanjo, Douala, Cameroon",
+    )
+    assert r2.status_code == 200, r2.text
+    got = r2.json()
+    assert got["identity_type"] == "registered_business"
+    assert got["rccm_number"] == "RC/DLA/2024/B/1234"
+    assert got["profile_completed"] is True
+
+
+def test_unregistered_business_requires_legal_form_only(client):
+    org = _org(client, "und@example.com", "UndCo")
+    # Missing legal form -> 422.
+    r = _patch(client, org["id"], identity_type="unregistered_business", country="CM")
+    assert r.status_code == 422, r.text
+    r2 = _patch(client, org["id"], identity_type="unregistered_business", country="CM", legal_form="SCS")
+    assert r2.status_code == 200, r2.text
+    got = r2.json()
+    assert got["identity_type"] == "unregistered_business"
+    assert got["rccm_number"] is None  # optional for this identity
+    assert got["tax_id"] is None
+
+
+def test_learner_skips_rccm_tax_and_allows_na_legal_form(client):
+    org = _org(client, "learn2@example.com", "Learn2Co")
+    # The backend does NOT hard-require country for a learner (that requirement
+    # is enforced in the frontend form + frontend/src/utils/profile.js
+    # missingIdentityFields, which demands country for EVERY identity) — so a
+    # bare learner PATCH succeeds but does NOT complete the profile step.
+    r = _patch(client, org["id"], identity_type="learner")
+    assert r.status_code == 200, r.text
+    assert r.json()["identity_type"] == "learner"
+    assert r.json()["profile_completed"] is False
+    # Full learner save: country + address + fiscal-month(+N/A legal form) —
+    # no RCCM/tax needed.
+    r2 = _patch(
+        client, org["id"],
+        identity_type="learner", country="CM", legal_form="NOT_APPLICABLE",
+        registered_address="Nkolbisson, Yaoundé, Cameroon",
+    )
+    assert r2.status_code == 200, r2.text
+    got = r2.json()
+    assert got["identity_type"] == "learner"
+    assert got["legal_form"] == "NOT_APPLICABLE"
+    assert got["rccm_number"] is None and got["tax_id"] is None
+    assert got["profile_completed"] is True
+
+
+def test_framework_cannot_be_changed_via_api(client):
+    org = _org(client, "fw@example.com", "FwCo")
+    # OrganizationUpdate has NO framework field (deliberate), so a PATCH body
+    # attempting to change it is simply not exposed: it is ignored and the org
+    # keeps its framework.
+    r = client.patch(f"/organizations/{org['id']}", json={"framework": "IFRS"})
+    assert r.status_code == 200, r.text
+    assert r.json()["framework"] == "OHADA"
+
+
+def test_framework_immutability_guard_at_service_layer(client, test_db_session):
+    """The belt-and-braces service guard rejects a framework change directly."""
+    from fastapi import HTTPException
+
+    from app.models.user import User
+    from app.services import organization_service
+
+    org = _org(client, "fwsvc@example.com", "FwSvcCo")
+    user = test_db_session.query(User).filter(User.email == "fwsvc@example.com").one()
+    raised = None
+    try:
+        organization_service.update_business_profile(
+            db=test_db_session, user=user, org_id=org["id"], framework="IFRS"
+        )
+    except HTTPException as exc:
+        raised = exc
+    assert raised is not None
+    assert raised.status_code == 422

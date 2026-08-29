@@ -1,21 +1,26 @@
 // Business-Profile gating rules — PURE functions (no React, no DOM) so the
 // mandatory-step rules are provable in plain node (`npm run test:profile`).
 //
-// Two deliberate tiers:
+// Three deliberate tiers:
 // - BLOCKING fields (registered_address, fiscal_year_start_month): every
 //   workspace has SOME location and SOME fiscal year, even an informal
 //   learner's. Missing these hard-blocks the mandatory creation step.
-// - REGISTRATION fields (rccm_number, tax_id): only real registered
-//   businesses have them. Missing these NEVER hard-blocks (the learner
-//   exemption) — it triggers a dismissible completion banner instead.
+// - IDENTITY fields (country for everyone; legal_form for the two business
+//   identities): required by Business Profile Part 2's identity rules. They
+//   do NOT hard-block (pre-mandate orgs must keep access) but DO drive the
+//   completion banner.
+// - REGISTRATION fields (rccm_number, tax_id): ONLY a fully
+//   registered_business requires them. Learners and unregistered businesses
+//   never raise a banner for missing registration numbers — that is exactly
+//   what the old "learner exemption" checkbox became: the identity_type
+//   choice REPLACED it (one mechanism, not two overlapping ones).
 //
 // The hard gate is the SERVER-SIDE `profile_completed` flag (migration 0011),
 // not an in-memory session marker: a session flag would reset on page reload
 // and let a brand-new workspace dodge the mandate. New orgs start at False;
 // every pre-mandate org is backfilled to True (never hard-blocked, banner
-// instead); saving the profile sets it True server-side when the blocking
-// fields exist. All profile columns stay nullable — the learner exemption has
-// to remain expressible in the data.
+// instead); saving the profile sets it True server-side. All profile columns
+// stay nullable — these rules have to remain expressible in the data.
 
 export function missingProfileFields(org) {
   const missing = []
@@ -28,10 +33,33 @@ export function missingProfileFields(org) {
   return missing
 }
 
-export function missingRegistrationFields(org) {
+/**
+ * Identity-driven requirements (Business Profile Part 2, mirrored in the
+ * backend's update_business_profile validation):
+ * - country: required for EVERY identity type (even a learner has a country).
+ * - legal_form: required for unregistered_business and registered_business;
+ *   a learner may use the explicit NOT_APPLICABLE skip value (which counts
+ *   as filled) or leave it unset without any banner.
+ */
+export function missingIdentityFields(org) {
   const missing = []
-  if (!org || !String(org.rccm_number || '').trim()) missing.push('rccm_number')
-  if (!org || !String(org.tax_id || '').trim()) missing.push('tax_id')
+  if (!org || !String(org.country || '').trim()) missing.push('country')
+  const identity = org?.identity_type
+  if (
+    (identity === 'unregistered_business' || identity === 'registered_business') &&
+    !(org && String(org.legal_form || '').trim())
+  ) {
+    missing.push('legal_form')
+  }
+  return missing
+}
+
+/** Registration numbers are required ONLY for a fully registered business. */
+export function missingRegistrationFields(org) {
+  if (!org || org.identity_type !== 'registered_business') return []
+  const missing = []
+  if (!String(org.rccm_number || '').trim()) missing.push('rccm_number')
+  if (!String(org.tax_id || '').trim()) missing.push('tax_id')
   return missing
 }
 
@@ -42,7 +70,11 @@ export function profileBlocking(org) {
 
 /** Soft attention: show the completion banner (never hard-blocks). */
 export function profileNeedsAttention(org) {
-  return profileBlocking(org) || missingRegistrationFields(org).length > 0
+  return (
+    profileBlocking(org) ||
+    missingIdentityFields(org).length > 0 ||
+    missingRegistrationFields(org).length > 0
+  )
 }
 
 /**
