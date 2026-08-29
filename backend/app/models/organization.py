@@ -73,6 +73,20 @@ class Organization(Base):
     identity_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     country: Mapped[str | None] = mapped_column(String(2), nullable=True)
     legal_form: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # --- Business Profile Session 2: purpose, activity, basis, description. ---
+    # ALL optional at the DB level (backward compatibility — existing orgs
+    # remain valid with these unset) EXCEPT accounting_basis, which is
+    # informational-only metadata with a default of 'accrual' (a basis always
+    # exists implicitly even when the user never chooses). IMPORTANT
+    # constraint, enforced by test: accounting_basis has ZERO effect on any
+    # posting / ledger / statement computation — the engine is accrual-based
+    # and this field is never read by transaction logic.
+    org_purpose: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    business_activity: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    accounting_basis: Mapped[str] = mapped_column(
+        String(20), default="accrual", server_default="accrual", nullable=False
+    )
+    company_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

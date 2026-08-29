@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.enums import FrameworkCode, IdentityType
+from app.models.enums import AccountingBasis, FrameworkCode, IdentityType, OrgPurpose
 
 
 # --- Organizations ------------------------------------------------------------
@@ -40,6 +40,12 @@ class OrganizationOut(BaseModel):
     identity_type: Optional[str] = None
     country: Optional[str] = None
     legal_form: Optional[str] = None
+    # Business Profile Session 2 — all optional; accounting_basis defaults to
+    # 'accrual' and is informational-only (never affects computations).
+    org_purpose: Optional[str] = None
+    business_activity: Optional[str] = None
+    accounting_basis: str = "accrual"
+    company_description: Optional[str] = None
     created_at: datetime
 
 
@@ -66,6 +72,16 @@ class OrganizationUpdate(BaseModel):
         description="ISO 3166-1 alpha-2 code (OHADA: one of the 17 member states)",
     )
     legal_form: Optional[str] = Field(default=None, max_length=40)
+    # Business Profile Session 2 — every field OPTIONAL (never blocks saving).
+    # accounting_basis is informational-only metadata and has ZERO effect on
+    # posting/ledger/statement logic (the engine is accrual-based).
+    org_purpose: Optional[OrgPurpose] = None
+    business_activity: Optional[str] = Field(
+        default=None, max_length=120,
+        description="Category code, or the free-text description when 'Other' is chosen",
+    )
+    accounting_basis: Optional[AccountingBasis] = None
+    company_description: Optional[str] = Field(default=None, max_length=1000)
 
 
 # --- Identity options (dropdown data for the Business Profile form) -----------

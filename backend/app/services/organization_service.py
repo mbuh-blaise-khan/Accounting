@@ -16,11 +16,23 @@ from app.accounting.identity_reference import (
     is_valid_legal_form,
     legal_form_options,
 )
-from app.models.enums import FrameworkCode, IdentityType, MembershipRole
+from app.models.enums import (
+    AccountingBasis,
+    FrameworkCode,
+    IdentityType,
+    MembershipRole,
+    OrgPurpose,
+)
 from app.models.organization import Organization, OrganizationMember
 from app.models.user import User
 
 DEFAULT_CURRENCY = "XAF"
+
+# Sentinel the frontend uses for "Other" in the business-activity dropdown. When
+# a user picks "Other", the free-text description REPLACES this sentinel on
+# submit; a bare sentinel reaching the service is rejected (the free text is
+# required when "Other" is chosen).
+BUSINESS_ACTIVITY_OTHER = "OTHER"
 
 
 def create_organization(
@@ -113,6 +125,10 @@ def update_business_profile(
     country: str | None = None,
     legal_form: str | None = None,
     framework: str | None = None,
+    org_purpose: OrgPurpose | None = None,
+    business_activity: str | None = None,
+    accounting_basis: AccountingBasis | None = None,
+    company_description: str | None = None,
 ) -> Organization:
     """Update the Business Profile of an org the user is a member of.
 
@@ -203,6 +219,35 @@ def update_business_profile(
                 detail="fiscal_year_start_month must be between 1 and 12",
             )
         org.fiscal_year_start_month = fiscal_year_start_month
+
+    # --- Session 2: purpose / activity / basis / description (all optional) ---
+    # These four NEVER block saving (no required-field rules) and never feed
+    # any computation — accounting_basis in particular is informational-only
+    # metadata with ZERO effect on posting/ledger/statement logic (the app is
+    # accrual-based; the value is stored, displayed, and nothing else).
+    if org_purpose is not None:
+        org.org_purpose = org_purpose.value
+    if business_activity is not None:
+        business_activity = business_activity.strip()
+        if business_activity == BUSINESS_ACTIVITY_OTHER:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "business_activity 'OTHER' requires the free-text description "
+                    "(pick Other and fill the description field)"
+                ),
+            )
+        org.business_activity = business_activity or None
+    if accounting_basis is not None:
+        org.accounting_basis = accounting_basis.value
+    if company_description is not None:
+        company_description = company_description.strip()
+        if len(company_description) > 1000:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="company_description must be 1000 characters or fewer",
+            )
+        org.company_description = company_description or None
 
     # --- Identity-driven required fields (server-side mirror of profile.js) ---
     # The FINAL org state matters: a PATCH that would leave a required field

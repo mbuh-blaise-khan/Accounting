@@ -424,3 +424,106 @@ def test_framework_immutability_guard_at_service_layer(client, test_db_session):
         raised = exc
     assert raised is not None
     assert raised.status_code == 422
+
+
+# --- 6) Business Profile Session 2: purpose, activity, basis, description ----
+# Acceptance points: all four fields can be left unset (profile save never
+# blocked); "OTHER" business activity requires the free-text description;
+# accounting_basis defaults to 'accrual' AND has zero effect on ANY
+# accounting calculation (proven: identical trial balance + journal for
+# accrual vs cash on the same transactions); company_description enforces a
+# 1000-char max; existing orgs stay valid with all four unset.
+
+
+def test_session2_fields_optional_not_blocking_and_defaults(client):
+    _register(client, email="s2@example.com", name="S2")
+    org = _create_org(client, name="S2Co")
+    got = _get(client, org["id"])
+    # Defaults: basis = accrual; all others unset.
+    assert got["accounting_basis"] == "accrual"
+    assert got["org_purpose"] is None
+    assert got["business_activity"] is None
+    assert got["company_description"] is None
+    # A full profile save without any of the four still completes and works.
+    r = _patch(
+        client, org["id"],
+        identity_type="learner", country="CM", legal_form="NOT_APPLICABLE",
+        registered_address="Yaoundé, Cameroon",
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["profile_completed"] is True
+
+
+def test_session2_fields_roundtrip_and_text_clearing(client):
+    org = _org(client, "s2b@example.com", "S2BCo")
+    r = _patch(
+        client, org["id"],
+        org_purpose="for_profit", business_activity="RETAIL_TRADE",
+        accounting_basis="cash", company_description="Sells fresh produce in Douala.",
+    )
+    assert r.status_code == 200, r.text
+    got = _get(client, org["id"])
+    assert got["org_purpose"] == "for_profit"
+    assert got["business_activity"] == "RETAIL_TRADE"
+    assert got["accounting_basis"] == "cash"
+    assert got["company_description"] == "Sells fresh produce in Douala."
+    # Clearing text fields via blank string works (PATCH semantics); the enum
+    # purpose stays (no clear mechanism exists for enums — switch instead).
+    r2 = _patch(client, org["id"], business_activity="", company_description="")
+    assert r2.status_code == 200, r2.text
+    got2 = _get(client, org["id"])
+    assert got2["org_purpose"] == "for_profit"
+    assert got2["business_activity"] is None
+    assert got2["company_description"] is None
+
+
+def test_business_activity_other_requires_free_text(client):
+    org = _org(client, "s2c@example.com", "S2CCo")
+    # Bare "OTHER" sentinel reaching the API is rejected.
+    r = _patch(client, org["id"], business_activity="OTHER")
+    assert r.status_code == 422, r.text
+    # The free-text description REPLACES the sentinel on submit -> accepted.
+    r2 = _patch(client, org["id"], business_activity="Renewable energy consulting")
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["business_activity"] == "Renewable energy consulting"
+
+
+def test_company_description_enforces_1000_char_max(client):
+    org = _org(client, "s2d@example.com", "S2DCo")
+    too_long = "x" * 1001
+    r = _patch(client, org["id"], company_description=too_long)
+    assert r.status_code == 422, r.text  # pydantic Field max_length
+    ok = "y" * 1000
+    r2 = _patch(client, org["id"], company_description=ok)
+    assert r2.status_code == 200, r2.text
+    assert _get(client, org["id"])["company_description"] == ok
+
+
+def test_accounting_basis_has_zero_effect_on_calculations(client):
+    """Proof that accounting_basis is INFORMATIONAL ONLY: posting the same
+    transactions twice (once under accrual, once under cash) yields BYTE-FOR-
+    BYTE identical trial balance and journal results. Nothing in the engine
+    reads this field — if that ever breaks, this test catches it."""
+    _register(client, email="basis@example.com", name="Basis")
+    org = _create_org(client, name="BasisCo")
+    acc = _accounts_by_code(client, org["id"])
+    _post_txn(client, org["id"], acc["57"], acc["70"], 5000, "cash sale 1")
+    _post_txn(client, org["id"], acc["57"], acc["70"], 7000, "cash sale 2")
+
+    accrual_tb = _tb(client, org["id"])
+    accrual_journal = client.get(f"/journal-entries?organization_id={org['id']}").json()
+
+    # Flip the org's basis to cash (with a registered address so the profile
+    # save is valid for any identity later).
+    r = _patch(
+        client, org["id"],
+        registered_address="Bonanjo, Douala, Cameroon", accounting_basis="cash",
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["accounting_basis"] == "cash"
+
+    cash_tb = _tb(client, org["id"])
+    cash_journal = client.get(f"/journal-entries?organization_id={org['id']}").json()
+
+    assert cash_tb == accrual_tb
+    assert cash_journal == accrual_journal

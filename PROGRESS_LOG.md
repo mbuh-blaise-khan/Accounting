@@ -16,6 +16,25 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
+**Last completed session:** Business Profile Session 2 — organization purpose, business activity, accounting basis, company description — **DONE and observed green** (build RC=0, backend suite 104 passed RC=0); committed in this session.
+
+- **What was built this session:**
+  - Verified the prior session's uncommitted backend work (migration `0013` + `OrgPurpose`/`AccountingBasis` enums + schema/service/tests) — tree matched expectations exactly at STEP 0 (8 modified files + untracked 0013 migration, HEAD `97ae192`).
+  - Rebuilt `frontend/src/pages/BusinessProfilePage.jsx` as ONE complete new file (the prior session had corrupted it to 42 lines via repeated small edits; the restored git version lacked the four Session-2 fields). New: purpose radios (for_profit/non_profit/ngo_association/government), sector SearchSelect (12 options, "Other" reveals free text), accrual/cash radios with explanations + visible "informational only" note (default accrual), description textarea (max 1000, char counter). All four optional — they NEVER block saving. All Part-2 behaviour preserved.
+  - `business_activity` storage contract: fixed sectors = category code; "Other" = free text (a bare OTHER sentinel is never sent — backend 422s it). `ReportHeader.jsx` now translates known codes to localized labels, free text as-is.
+  - i18n cleanup: en.json/fr.json had DUPLICATE + orphan `bp.*` keys from two prior attempts (`bp.act.*`, doubled purpose/activity/basis/description keys). Consolidated to one canonical set (78 `bp.*` keys, EN/FR parity script-verified; new `bp.clearSelection`). FR basis labels now use proper French terms ("Exercice (engagement)" / "Trésorerie (caisse)").
+- **Key decisions / limitations (read before touching this feature again):**
+  - The four fields are informational ONLY — no accounting code reads them (engine is accrual-based).
+  - `org_purpose` CANNOT be unset via the API once set (enum + `exclude_unset` PATCH semantics; `''` would 422, `null` = "no change"). Text fields clear via empty string. Documented in the page header + acceptance criteria; future enhancement if ever needed.
+  - `accounting_basis` is NOT NULL with server default 'accrual' (a basis always exists implicitly) and has a visible UI note that it changes no calculation.
+- **Environment note for future sessions:** the sandbox terminal output capture was BROKEN all session (commands run but report "exited code 1" / capture nothing; `node`/`npm` wrappers refuse redirected stdout). Working pattern: redirect command output to a scratch file in the repo root (`cmd > _scratch.txt 2>&1; echo RC=$? >> _scratch.txt`), do a non-shell action, then read the file. Backend venv is at `backend/.venv` (run tests via `cd backend && ./.venv/Scripts/python.exe -m pytest app/tests -q`). System python has NO pytest.
+
+**Next session to run:** Session 10 (financial statements) — the remaining MVP milestone.
+
+---
+
+## Previous status (Business Profile Part 2 — kept for history)
+
 **Last completed session:** Business Profile Part 2 — identity type, OHADA/IFRS-aware country and legal-form selection — **DONE and observed green, committed as `b83a3c4`.**
 
 - **This session (Part 2) verified REAL, uncommitted work from a prior session** (backend fully wired: migration `0012` `identity_type`/`country`/`legal_form`, `IdentityType` enum, `identity_reference.py` with the 17 OHADA member states + AUSCGIE/IFRS legal forms with plain-language descriptions, `identity-options` endpoint, service validation + framework-immutability guard, frontend `SearchSelect.jsx` + `fetchIdentityOptions()` + identity-aware `profile.js`). The Business Profile PAGE was NOT yet wired to those — this session completed the wiring: identity radio group, searchable country + legal-form dropdowns (OHADA-restricted to 17 states / IFRS full list), learner handling (RCCM/tax hidden; explicit "Not applicable — personal/learning use" legal-form option), identity-driven client-side required-field validation, and the missing Part-2 backend tests.

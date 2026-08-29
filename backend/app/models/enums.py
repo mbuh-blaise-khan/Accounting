@@ -66,3 +66,23 @@ class IdentityType(str, enum.Enum):
     learner = "learner"
     unregistered_business = "unregistered_business"
     registered_business = "registered_business"
+
+
+class OrgPurpose(str, enum.Enum):
+    """Why the organization exists (Business Profile Session 2). Optional,
+    purely informational — never affects posting/ledger/statement logic."""
+
+    for_profit = "for_profit"
+    non_profit = "non_profit"
+    ngo_association = "ngo_association"
+    government = "government"
+
+
+class AccountingBasis(str, enum.Enum):
+    """Accounting basis. INFORMATIONAL METADATA ONLY: this value MUST NOT
+    change any posting, ledger, or statement calculation. Accrual is the
+    default; the title of a basis never rewrites how the engine posts a
+    balanced double-entry transaction (the app itself is accrual-based)."""
+
+    accrual = "accrual"
+    cash = "cash"
