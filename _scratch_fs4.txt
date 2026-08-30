@@ -1,0 +1,156 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.8, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\blaizo\Desktop\Accounting\backend\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\blaizo\Desktop\Accounting\backend
+plugins: anyio-4.14.2
+collecting ... collected 4 items
+
+app/tests/test_financial_statements.py::test_ohada_bilan_balances_and_has_correct_labels PASSED [ 25%]
+app/tests/test_financial_statements.py::test_ifrs_financial_position_balances_and_has_correct_labels FAILED [ 50%]
+app/tests/test_financial_statements.py::test_ohada_income_statement_separates_hao FAILED [ 75%]
+app/tests/test_financial_statements.py::test_reversed_pair_nets_to_zero_and_drafts_excluded FAILED [100%]
+
+================================== FAILURES ===================================
+________ test_ifrs_financial_position_balances_and_has_correct_labels _________
+
+client = <starlette.testclient.TestClient object at 0x000002010EBCC830>
+
+    def test_ifrs_financial_position_balances_and_has_correct_labels(client):
+        """Parallel IFRS scenario: assets == liabilities + equity, with the
+        IFRS document labels. IFRS accounts carry no code, so they are looked
+        up by name."""
+        _register(client)
+        org = _create_org(client, framework="IFRS")
+        accounts = client.get(f"/accounts?organization_id={org['id']}").json()
+        by_name = {a["name_en"]: a for a in accounts}
+    
+        # 1) Owner cash injection: Cash Dr 10000, Share capital Cr 10000
+        _post_txn(client, org["id"], by_name["Cash and cash equivalents"],
+                  by_name["Share capital"], 10000, "Owner capital")
+        # 2) Borrowing: Cash Dr 3000, Trade payables Cr 3000
+        _post_txn(client, org["id"], by_name["Cash and cash equivalents"],
+                  by_name["Trade and other payables"], 3000, "Bank loan")
+    
+        fs = client.get(f"/reports/financial-position?organization_id={org['id']}")
+        assert fs.status_code == 200, fs.text
+        body = fs.json()
+        assert body["framework"] == "IFRS"
+        assert body["statement_name_en"] == "Statement of Financial Position"
+        assert body["statement_name_fr"] == "Bilan"
+        assert body["balanced"] is True
+>       assert float(body["assets"]) == float(body["liabilities"] + body["equity"])
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ValueError: could not convert string to float: '3000.0010000.00'
+
+app\tests\test_financial_statements.py:116: ValueError
+__________________ test_ohada_income_statement_separates_hao __________________
+
+client = <starlette.testclient.TestClient object at 0x000002010EBCC320>
+
+    def test_ohada_income_statement_separates_hao(client):
+        """Ordinary result = class-7 revenue - class-6 expenses; a class-8 (HAO)
+        entry appears in a SEPARATE result section, NOT blended into ordinary
+        result. net_result adds the HAO net contribution back."""
+        _register(client)
+        org = _create_org(client, framework="OHADA")
+        acc = _accounts_by_code(client, org["id"])
+    
+        # Capital base so the ledger stays balanced (cash 5711, capital 10).
+        _post_txn(client, org["id"], acc["5711"], acc["10"], 15000, "Capital")
+    
+        # Ordinary revenue: Sales(70) Cr 2000, Cash(5711) Dr 2000
+        _post_txn(client, org["id"], acc["5711"], acc["70"], 2000, "Cash sale")
+        # Ordinary expense: Purchases(6011) Dr 500, Cash(5711) Cr 500
+        _post_txn(client, org["id"], acc["6011"], acc["5711"], 500, "Stock purchase")
+        # HAO revenue: Income outside ordinary(84) Cr 1000, Cash(5711) Dr 1000
+        _post_txn(client, org["id"], acc["5711"], acc["84"], 1000, "Asset disposal gain")
+        # HAO expense: Expenses outside ordinary(83) Dr 200, Cash(5711) Cr 200
+        _post_txn(client, org["id"], acc["83"], acc["5711"], 200, "Loss on disposal")
+    
+        isrep = client.get(f"/reports/income-statement?organization_id={org['id']}")
+        assert isrep.status_code == 200, isrep.text
+        b = isrep.json()
+        assert b["framework"] == "OHADA"
+        assert b["statement_name_en"] == "Compte de résultat"
+        assert b["statement_name_fr"] == "Compte de résultat"
+    
+        # Ordinary: 2000 revenue - 500 expense = 1500
+        assert float(b["revenue_total"]) == 2000.0
+        assert float(b["expense_total"]) == 500.0
+        assert float(b["ordinary_result"]) == 1500.0
+        # HAO (class 8) separated, not blended into ordinary:
+        assert float(b["extraordinary_total"]) == 1200.0  # 1000 + 200 magnitudes
+        assert float(b["net_result"]) == 2300.0  # 1500 + (1000 - 200)
+        assert float(b["net_result"]) != float(b["ordinary_result"])  # separation
+    
+        # A dedicated extraordinary section exists with the two class-8 lines.
+        extra = next(s for s in b["sections"] if s["key"] == "extraordinary")
+        codes = sorted(l["code"] for l in extra["lines"])
+        assert codes == ["83", "84"]
+        # Ordinary revenue/expense sections must NOT contain class-8 accounts.
+        for s in b["sections"]:
+            if s["key"] in ("revenue", "expenses"):
+                assert all(l["code"] not in ("83", "84") for l in s["lines"])
+>       assert r.status_code == 200, r.text
+               ^
+E       NameError: name 'r' is not defined
+
+app\tests\test_financial_statements.py:162: NameError
+_____________ test_reversed_pair_nets_to_zero_and_drafts_excluded _____________
+
+client = <starlette.testclient.TestClient object at 0x000002010EC60F20>
+
+    def test_reversed_pair_nets_to_zero_and_drafts_excluded(client):
+        """A posted transaction + its reversal BOTH contribute (net to zero) on
+        both statements; a separate DRAFT transaction is never counted."""
+        _register(client)
+        org = _create_org(client, framework="OHADA")
+        acc = _accounts_by_code(client, org["id"])
+    
+        # 1) Capital base (posted): Cash(5711) Dr 10000, Capital(10) Cr 10000
+        _post_txn(client, org["id"], acc["5711"], acc["10"], 10000, "Capital")
+        # 2) Expense (posted): Purchases(6011) Dr 1000, Cash(5711) Cr 1000
+        expense_txn = _post_txn(client, org["id"], acc["6011"], acc["5711"], 1000, "Purchase")
+        # 3) Reverse the expense -> mirror cancels it (both posted/reversed count)
+        _reverse(client, org["id"], expense_txn["id"])
+        # 4) DRAFT (never posted): Taxes(64) Dr 500, Cash(5711) Cr 500
+        draft = client.post(
+            "/transactions",
+            json={
+                "organization_id": org["id"],
+                "description": "Draft tax accrual (unposted)",
+                "lines": [
+                    {"account_id": acc["64"]["id"], "debit": 500, "credit": 0},
+                    {"account_id": acc["5711"]["id"], "debit": 0, "credit": 500},
+                ],
+            },
+        )
+        assert draft.status_code in (200, 201), draft.text
+    
+        # Income statement: every IS account nets to zero (reversed pair
+        # canceled, draft excluded) -> totals are zero.
+        isrep = client.get(f"/reports/income-statement?organization_id={org['id']}")
+        assert isrep.status_code == 200, isrep.text
+        ib = isrep.json()
+        assert float(ib["revenue_total"]) == 0.0
+        assert float(ib["expense_total"]) == 0.0
+        assert float(ib["ordinary_result"]) == 0.0
+        assert float(ib["net_result"]) == 0.0
+        is_names = [l["name_en"] for s in ib["sections"] for l in s["lines"]]
+>       assert "Purchases of goods - local" not in is_names  # reversed -> zero
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: assert 'Purchases of goods - local' not in ['Purchases of goods - local']
+
+app\tests\test_financial_statements.py:201: AssertionError
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\blaizo\Desktop\Accounting\backend\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED app/tests/test_financial_statements.py::test_ifrs_financial_position_balances_and_has_correct_labels
+FAILED app/tests/test_financial_statements.py::test_ohada_income_statement_separates_hao
+FAILED app/tests/test_financial_statements.py::test_reversed_pair_nets_to_zero_and_drafts_excluded
+=================== 3 failed, 1 passed, 1 warning in 4.61s ====================
+RC=1

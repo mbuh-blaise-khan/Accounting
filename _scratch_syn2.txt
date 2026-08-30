@@ -1,0 +1,29 @@
+SYNTAX_OK
+LINES 220
+1:    assert r.status_code == 200, r.text
+2:    return r.json()
+3:
+4:
+5:def test_ohada_bilan_balances_and_has_correct_labels(client):
+6:    """A simple balanced OHADA scenario: the Bilan must satisfy
+7:    assets == liabilities + equity, with the OHADA document labels and
+8:    closing balances derived purely from posted lines."""
+1:    assert body["statement_name_fr"] == "Bilan"
+2:    assert body["balanced"] is True
+3:    assert float(body["assets"]) == float(body["liabilities"]) + float(body["equity"])
+4:    assert float(body["assets"]) == 13000.0
+5:
+6:
+7:def test_ohada_income_statement_separates_hao(client):
+8:    """Ordinary result = class-7 revenue - class-6 expenses; a class-8 (HAO)
+9:    entry appears in a SEPARATE result section, NOT blended into ordinary
+1:    # Ordinary revenue/expense sections must NOT contain class-8 accounts.
+2:    for s in b["sections"]:
+3:        if s["key"] in ("revenue", "expenses"):
+4:            assert all(l["code"] not in ("83", "84") for l in s["lines"])
+5:
+6:
+7:def test_reversed_pair_nets_to_zero_and_drafts_excluded(client):
+8:    """A posted transaction + its reversal BOTH contribute (net to zero) on
+9:    both statements; a separate DRAFT transaction is never counted."""
+RC=0

@@ -1,0 +1,16 @@
+    _post_txn(client, org["id"], by_name["Cash and cash equivalents"],
+              by_name["Share capital"], 10000, "Owner capital")
+    # 2) Borrowing: Cash Dr 3000, Trade payables Cr 3000
+    _post_txn(client, org["id"], by_name["Cash and cash equivalents"],
+              by_name["Trade and other payables"], 3000, "Bank loan")
+
+    fs = client.get(f"/reports/financial-position?organization_id={org['id']}")
+    assert fs.status_code == 200, fs.text
+        body = fs.json()
+    assert body["framework"] == "IFRS"
+    assert body["statement_name_en"] == "Statement of Financial Position"
+    assert body["statement_name_fr"] == "Bilan"
+    assert body["balanced"] is True
+    assert float(body["assets"]) == float(body["liabilities"] + body["equity"])
+    assert float(body["assets"]) == 13000.0
+OK

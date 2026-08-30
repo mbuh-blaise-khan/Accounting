@@ -1,0 +1,28 @@
+    """Ordinary result = class-7 revenue - class-6 expenses; a class-8 (HAO)
+    entry appears in a SEPARATE result section, NOT blended into ordinary
+    result. net_result adds the HAO net contribution back."""
+    _register(client)
+    org = _create_org(client, framework="OHADA")
+    acc = _accounts_by_code(client, org["id"])
+
+    # Capital base so the ledger stays balanced (cash 5711, capital 10).
+    _post_txn(client, org["id"], acc["5711"], acc["10"], 15000, "Capital")
+
+    # Ordinary revenue: Sales(70) Cr 2000, Cash(5711) Dr 2000
+    _post_txn(client, org["id"], acc["5711"], acc["70"], 2000, "Cash sale")
+    # Ordinary expense: Purchases(6011) Dr 500, Cash(5711) Cr 500
+    _post_txn(client, org["id"], acc["6011"], acc["5711"], 500, "Stock purchase")
+    # HAO revenue: Income outside ordinary(84) Cr 1000, Cash(5711) Dr 1000
+    _post_txn(client, org["id"], acc["5711"], acc["84"], 1000, "Asset disposal gain")
+    # HAO expense: Expenses outside ordinary(83) Dr 200, Cash(5711) Cr 200
+    _post_txn(client, org["id"], acc["83"], acc["5711"], 200, "Loss on disposal")
+
+    isrep = client.get(f"/reports/income-statement?organization_id={org['id']}")
+    assert isrep.status_code == 200, isrep.text
+    b = isrep.json()
+    assert b["framework"] == "OHADA"
+    assert b["statement_name_en"] == "Compte de résultat"
+    assert b["statement_name_fr"] == "Compte de résultat"
+
+    # Ordinary: 2000 revenue - 500 expense = 1500
+OK

@@ -190,11 +190,15 @@ Verification evidence:
 
 
 ## Session 10 — Financial Statements (first milestone)
-- [ ] `financial_statement_service`: Income Statement + Statement of Financial Position from trial-balance data by account_class
-- [ ] API: GET /reports/income-statement?period=, GET /reports/financial-position?as_of=
-- [ ] Frontend statements page: both statements, framework-labeled, drill-down per line
-- [ ] Plain-language summary above each statement
-- [ ] Tests: SOFP balances (A = L + E); income statement = revenue − expenses; only posted transactions included
+
+### Part A — backend (this session; ⚠️ code complete + syntax-verified, final pytest run NOT observed — see PROGRESS_LOG "STATE AT END OF SESSION")
+- [x] `financial_statement_service`: Income Statement + Statement of Financial Position generated FROM the ledger (posted + correctly-reversed journal lines aggregated per account; drafts never included; date basis = real `posted_at` — same rules as the Trial Balance). OHADA workspaces use the REAL `ohada_class_number` (classes 1-5 → Bilan; 6-7 → ordinary result; **class 8 = SEPARATE "résultat hors activités ordinaires" section**, not blended into ordinary; class 9 excluded). IFRS workspaces use the simplified `account_class`. Response carries framework-correct names (Bilan / Compte de résultat vs Statement of Financial Position / Statement of Profit or Loss) so the frontend never guesses.
+- [x] KNOWN LIMITATION (documented in the service docstring — a decision, not an oversight): SIMPLIFIED presentation; full IAS 1 current/non-current classification is NOT implemented (the accounts schema has no maturity flag yet).
+- [x] API: GET /reports/income-statement?organization_id=&date_from=&as_of= and GET /reports/financial-position?organization_id=&as_of= (org-scoped, 404-safe).
+- [x] Tests: OHADA Bilan balances (A = L + E) for BOTH frameworks; income statement totals = revenue − expenses with `ordinary_result` vs `net_result` split; OHADA class-8 (HAO) separated into its own section (not blended into ordinary); a reversed transaction + its mirror both contribute so the pair nets to zero on BOTH statements; a draft transaction never appears on either statement. (⚠️ Last observed run: 1/4 passing; the 3 failures' causes were all fixed in code after that run — re-run required.)
+- [ ] DEFERRED FUTURE SCOPE (explicitly out of scope for Session 10 Part A, not silently ignored): OHADA's full legal statement set — **TAFIRE** (the mandatory cash-flow statement; a substantial standalone undertaking), the **Notes** to the financial statements, and the **statistical annex**.
+- [ ] Frontend statements page: both statements, framework-labeled, drill-down per line (Part B — next session)
+- [ ] Plain-language summary above each statement (Part B)
 - [ ] MANUAL WALKTHROUGH: create workspace → post 3–4 varied transactions → trace through journal → ledger → trial balance → statements → language toggle works → tests cover core rules
 
 ## Session 11 — Learning Engine (basic) — MVP complete

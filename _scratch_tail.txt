@@ -1,0 +1,17 @@
+    # Ordinary revenue/expense sections must NOT contain class-8 accounts.
+    for s in b["sections"]:
+        if s["key"] in ("revenue", "expenses"):
+            assert all(l["code"] not in ("83", "84") for l in s["lines"])
+    assert r.status_code == 200, r.text
+    return r.json()
+def test_reversed_pair_nets_to_zero_and_drafts_excluded(client):
+    """A posted transaction + its reversal BOTH contribute (net to zero) on
+    both statements; a separate DRAFT transaction is never counted."""
+    _register(client)
+    org = _create_org(client, framework="OHADA")
+    acc = _accounts_by_code(client, org["id"])
+
+---TAIL---
+    assert float(fb["assets"]) == 10000.0  # cash returned to its posted level
+    all_names = [l["name_en"] for s in fb["sections"] for l in s["lines"]]
+    assert "Taxes and duties" not in all_names  # draft excluded from FS tooOK

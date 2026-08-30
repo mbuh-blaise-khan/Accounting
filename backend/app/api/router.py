@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     accounts,
     auth,
+    financial_statements,
     frameworks,
     health,
     journal,
@@ -25,3 +26,4 @@ api_router.include_router(transactions.router)
 api_router.include_router(journal.router)
 api_router.include_router(ledger.router)
 api_router.include_router(trial_balance.router)
+api_router.include_router(financial_statements.router)

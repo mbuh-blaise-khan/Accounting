@@ -16,7 +16,36 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Business Profile Session 2 — organization purpose, business activity, accounting basis, company description — **DONE and observed green** (build RC=0, backend suite 104 passed RC=0); committed in this session.
+**Session:** Session 10, Part A — financial statements backend (Income Statement + Bilan / Statement of Financial Position), generated FROM the ledger.
+
+**STATE AT END OF SESSION — NOT yet verified/committed (read this before anything else):**
+
+The sandbox shell DIED mid-session (every command — even `echo > file` — reports "exited code 1" and creates nothing; this started after ~23:27 and never recovered). All code work is COMPLETE and syntax-verified (`ast.parse` → SYNTAX_OK at 23:27, no edits after), but the final pytest observation and the git commit could NOT be done. **The next session's FIRST actions must be:**
+
+1. `cd backend && ./.venv/Scripts/python.exe -m pytest app/tests -q` — expect **4 new tests passing** in `app/tests/test_financial_statements.py` (104 → 108 total). If any fail, the failure causes of the last observed run (`_scratch_fs4.txt`, 3 fails) have ALL been fixed in code since; see below.
+2. Delete ALL `_scratch_*` / `_fs_*` / `_alive*` / `_shell_*` / `_where_am_i.txt` / `_check_i18n*` scratch files in the repo root (they are untracked; do not commit).
+3. Commit everything as: "Session 10 Part A: financial statements backend (Income Statement + Bilan/Statement of Financial Position)".
+4. Update the acceptance-criteria Session 10 checkboxes `[x]` for the backend items (this file's Session 10 section still shows `[ ]` because the run wasn't observed).
+
+**What was built (all complete on disk):**
+- `backend/app/services/financial_statement_service.py` — NEW service. Two statements derived purely from posted+reversed journal lines (`_account_sums` aggregates per account; statuses = posted + reversed, exactly like Trial Balance; drafts never; date basis = real `posted_at`).
+  - OHADA workspaces: real `ohada_class_number` drives assignment — classes 1-5 → Bilan (via `account_class` within those classes; the SYSCOHADA seed sets it correctly), classes 6-7 → ordinary revenue/expenses in the Compte de résultat, **class 8 (HAO) is a SEPARATE "extraordinary" result section** (`ordinary_result` excludes it; `net_result` adds its signed contribution back), class 9 (off-balance-sheet/CAGE) excluded.
+  - IFRS workspaces: simplified `account_class` (asset/liability/equity/revenue/expense); no HAO section (OHADA-only concept).
+  - KNOWN LIMITATION (documented in the service docstring): SIMPLIFIED presentation — IAS 1 current/non-current classification NOT implemented (schema has no maturity flag). Fully-reversed pairs (net exactly zero) are OMITTED as lines rather than shown as 0.00 (matches the trial balance's zero-activity-omission decision; totals unaffected).
+- `backend/app/schemas/financial_statement.py` — `StatementLine` (code/name_en/name_fr/amount/type), `StatementSection` (key/labels/lines/total), `IncomeStatementOut` (framework-correct statement names, revenue/expense/extraordinary totals, ordinary_result, net_result), `FinancialPositionOut` (assets/liabilities/equity, `balanced` flag).
+- `backend/app/api/routes/financial_statements.py` — `GET /reports/income-statement?organization_id=&date_from=&as_of=` and `GET /reports/financial-position?organization_id=&as_of=` (org-scoped via membership, 404-safe like other report routes). Registered in `api/router.py`.
+- `backend/app/tests/test_financial_statements.py` — 4 tests: (1) OHADA Bilan balances A = L + E (Cash 13000 = Borrowings 3000 + Capital 10000) with correct "Bilan" labels; (2) IFRS Statement of Financial Position parallel scenario with IAS-1 labels; (3) OHADA income statement: ordinary result = class-7 − class-6 (2000−500=1500), class-8 HAO in a SEPARATE section (extraordinary_total=1200 as magnitudes, net_result=2300), ordinary sections contain no class-8 accounts; (4) reversed pair nets to zero on BOTH statements AND a draft transaction is never counted (draft-only account appears on neither statement).
+- TAFIRE (OHADA's mandatory cash-flow statement), the Notes, and the statistical annex are **DEFERRED future scope** (documented here and in acceptance-criteria.md — explicitly out of scope for this session, not silently ignored).
+
+**Bugs found & fixed during this session (in the new files):** `_account_sums` returned None when no `as_of` bound (return was nested inside an if); `total=extra_total` NameError (undefined var) in the HAO section; `return FinancialPositionOut(...)` was nested inside `if eq_items:` (None return for orgs without equity activity). All three fixed.
+
+**Environment note (carry-over + new failure mode):** the terminal-output-capture problem from last session worsened — the shell eventually died entirely mid-session. The working pattern when it was alive: `cd backend && ./.venv/Scripts/python.exe -m pytest ...` with output redirected to a scratch file, then read the file with a non-shell action. Also: the `editor` tool wrote leading `\n\n` in `insert_line` chunks as LITERAL backslash-n text (fixed by a one-shot python replace); prefer whole-file writes over chunked inserts.
+
+**Next session to run:** Session 10, Part B (frontend Financial Statements page) — AFTER completing Part A's pytest + commit steps above.
+
+---
+
+## Previous status (Business Profile Session 2 — kept for history)
 
 - **What was built this session:**
   - Verified the prior session's uncommitted backend work (migration `0013` + `OrgPurpose`/`AccountingBasis` enums + schema/service/tests) — tree matched expectations exactly at STEP 0 (8 modified files + untracked 0013 migration, HEAD `97ae192`).

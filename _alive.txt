@@ -1,0 +1,2 @@
+ALIVE_CHECK
+cat: _alive.txt: input file is output file

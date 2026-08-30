@@ -1,0 +1,383 @@
+1:"""Financial-statement service (Session 10, Part A).
+2:
+3:Generates two statements purely from posted journal lines (never manually
+4:entered):
+5:  * Income Statement  -> OHADA "Compte de résultat" / IFRS "Statement of
+6:    Profit or Loss"
+7:  * Financial Position -> OHADA "Bilan" / IFRS "Statement of Financial
+8:    Position"
+9:
+10:Class assignment:
+11:  * OHADA workspaces: driven by the REAL `ohada_class_number` (1-9).
+12:      Classes 1-5 -> Bilan (balance-sheet accounts); Classes 6-7 -> ordinary
+13:      revenue/expense in the Compte de résultat; Class 8 (HAO - "hors
+14:      activités ordinaires") revenue/expenses are shown as a SEPARATE
+15:      "résultat hors activités ordinaires" section, NOT blended into the
+16:      ordinary operating result. Class 9 (off-balance-sheet / CAGE) is
+17:      intentionally excluded from the core statements.
+18:  * IFRS workspaces: `ohada_class_number` is NULL, so the simplified
+19:      `account_class` (asset/liability/equity/revenue/expense) is used.
+20:      There is no "extraordinary" section under IFRS; the Class-8 split is
+21:      an OHADA-only concept here.
+22:
+23:KNOWN LIMITATION (not an oversight): this is a SIMPLIFIED presentation.
+24:Full IAS 1 current/non-current classification of balance-sheet items is
+25:NOT implemented — the schema has no maturity flag, so every balance-sheet
+26:account is shown under a single "current" bucket. A future iteration can
+27:split assets/liabilities into current vs. non-current once the model gains
+28:a maturity dimension.
+29:
+30:Reversed transactions: handled EXACTLY like the Trial Balance. A reversed
+31:original + its mirror BOTH contribute their lines, so the pair nets to
+32:zero across both statements. Drafts are never included. The date basis is
+33:the real `posted_at` timestamp.
+34:
+35:This is a deterministic computation — no heuristic/AI logic decides any
+36:debit/credit outcome; balances are summed directly from the journal.
+37:"""
+38:from datetime import date, datetime, time, timezone
+39:from decimal import Decimal
+40:
+41:from fastapi import HTTPException, status
+42:from sqlalchemy import func
+43:from sqlalchemy.orm import Session
+44:
+45:from app.models.account import Account
+46:from app.models.enums import AccountClass, FrameworkCode, TransactionStatus
+47:from app.models.organization import Organization, OrganizationMember
+48:from app.models.transaction import Transaction, TransactionLine
+49:from app.models.user import User
+50:from app.schemas.financial_statement import (
+51:    FinancialPositionOut,
+52:    IncomeStatementOut,
+53:    StatementLine,
+54:    StatementSection,
+55:)
+56:
+57:# A posted OR a reversed transaction both count as real history; together a
+58:# reversed pair nets to zero. Drafts never contribute (mirrors Trial Balance).
+59:_INCLUDE_STATUSES = [TransactionStatus.posted, TransactionStatus.reversed]
+60:
+61:# Framework-native document names. OHADA workspaces use the genuine French
+62:# OHADA terms "Bilan" / "Compte de résultat" (these ARE the correct legal
+63:# document names under OHADA); IFRS workspaces use the English IAS 1 terms
+64:# plus their standard French equivalents.
+65:_STATEMENT_NAMES = {
+66:    FrameworkCode.OHADA: {
+67:        "is_en": "Compte de résultat",
+68:        "is_fr": "Compte de résultat",
+69:        "fs_en": "Bilan",
+70:        "fs_fr": "Bilan",
+71:    },
+72:    FrameworkCode.IFRS: {
+73:        "is_en": "Statement of Profit or Loss",
+74:        "is_fr": "État de résultat",
+75:        "fs_en": "Statement of Financial Position",
+76:        "fs_fr": "Bilan",
+77:    },
+78:}
+79:
+80:
+81:def _ensure_org_access(db: Session, user: User, org_id: int) -> Organization:
+82:    """Return the org if `user` is a member; raise 404 otherwise (no existence leak)."""
+83:    org = db.get(Organization, org_id)
+84:    if org is None:
+85:        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+86:    if (
+87:        db.query(OrganizationMember)
+88:        .filter(OrganizationMember.org_id == org.id, OrganizationMember.user_id == user.id)
+89:        .first()
+90:    ) is None:
+91:        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+92:    return org
+93:
+94:
+95:def _start_of(d: date) -> datetime:
+96:    return datetime.combine(d, time.min, tzinfo=timezone.utc)
+97:
+98:
+99:def _end_of(d: date) -> datetime:
+100:    return datetime.combine(d, time.max, tzinfo=timezone.utc)
+101:
+102:
+103:def _to_decimal(value) -> Decimal:
+104:    if isinstance(value, Decimal):
+105:        return value
+106:    try:
+107:        return Decimal(str(value))
+108:    except (TypeError, ValueError):
+109:        return Decimal("0")
+110:
+111:
+112:def _account_sums(db: Session, org_id: int, after_incl, before_excl):
+113:    """Aggregate (debit_sum, credit_sum) per account over [after_incl, before_excl).
+114:
+115:    Either bound is optional (None = unbounded). Posted OR reversed lines
+116:    only, on the real `posted_at` timestamp. Mirrors trial_balance_service.
+117:    """
+118:    q = (
+119:        db.query(
+120:            TransactionLine.account_id,
+121:            func.coalesce(func.sum(TransactionLine.debit_amount), 0),
+122:            func.coalesce(func.sum(TransactionLine.credit_amount), 0),
+123:        )
+124:        .join(Transaction, TransactionLine.transaction_id == Transaction.id)
+125:        .filter(
+126:            Transaction.organization_id == org_id,
+127:            Transaction.status.in_(_INCLUDE_STATUSES),
+128:            Transaction.posted_at.is_not(None),
+129:        )
+130:    )
+131:    if after_incl is not None:
+132:        q = q.filter(Transaction.posted_at >= after_incl)
+133:    if before_excl is not None:
+134:        q = q.filter(Transaction.posted_at < before_excl)
+135:        return {
+136:        account_id: (_to_decimal(d), _to_decimal(c))
+137:        for account_id, d, c in q.group_by(TransactionLine.account_id).all()
+138:    }
+139:
+140:
+141:def _line(account: Account, amount: Decimal, line_type: str | None = None) -> StatementLine:
+142:    return StatementLine(
+143:        code=getattr(account, "code", None),
+144:        name_en=account.name_en,
+145:        name_fr=account.name_fr,
+146:        amount=amount,
+147:        type=line_type,
+148:    )
+149:
+150:
+151:def _sorted_lines(items: list[tuple[Account, Decimal, str | None]]) -> list[StatementLine]:
+152:    """Stable ordering: OHADA by code (uncoded last), IFRS by name_en."""
+153:    items.sort(key=lambda it: (it[0].code is None, it[0].code or "", it[0].name_en))
+154:    return [_line(a, amt, t) for a, amt, t in items]
+155:
+156:
+157:def _is_ohada(framework) -> bool:
+158:    fw = framework.value if hasattr(framework, "value") else framework
+159:    return fw == "OHADA"
+160:
+161:
+162:def _fw_value(framework) -> str:
+163:    return framework.value if hasattr(framework, "value") else framework
+164:
+165:
+166:def _build_income_statement(db, org, date_from, as_of) -> IncomeStatementOut:
+167:    ohada = _is_ohada(org.framework)
+168:    names = _STATEMENT_NAMES[FrameworkCode.OHADA if ohada else FrameworkCode.IFRS]
+169:    currency = org.currency or "XAF"
+170:
+171:    # Movement window = [date_from, as_of] (None bound = unbounded). When no
+172:    # period is supplied the movement spans all history (date_from is None
+173:    # -> everything from the beginning).
+174:    move_after = _start_of(date_from) if date_from else None
+175:    move_before = _end_of(as_of) if as_of else None
+176:    sums = _account_sums(db, org.id, move_after, move_before)
+177:
+178:    rev_items, exp_items, extra_items = [], [], []
+179:    accounts = db.query(Account).filter(Account.organization_id == org.id).all()
+180:    for acct in accounts:
+181:        debit, credit = sums.get(acct.id, (Decimal("0"), Decimal("0")))
+182:        if debit == 0 and credit == 0:
+183:            continue
+184:        net = credit - debit  # revenue convention (positive = net credit)
+185:
+186:        if ohada:
+187:            cls = acct.ohada_class_number
+188:            if cls is None or cls == 9:  # 9 = off-balance-sheet / CAGE, excluded
+189:                continue
+190:            if cls == 8:  # HAO — separate section, amount stored as magnitude
+191:                extra_items.append((acct, abs(net), "revenue" if net >= 0 else "expense"))
+192:            elif cls == 7 and acct.account_class == AccountClass.revenue.value:
+193:                rev_items.append((acct, net, "revenue"))
+194:            elif cls == 6 and acct.account_class == AccountClass.expense.value:
+195:                exp_items.append((acct, -net, "expense"))
+196:            # classes 1-5 are balance-sheet accounts; they are not IS lines
+197:        else:
+198:            if acct.account_class == AccountClass.revenue.value:
+199:                rev_items.append((acct, net, "revenue"))
+200:            elif acct.account_class == AccountClass.expense.value:
+201:                exp_items.append((acct, -net, "expense"))
+202:
+203:    rev_lines = _sorted_lines(rev_items)
+204:    rev_total = sum((l.amount for l in rev_lines), Decimal("0"))
+205:    exp_lines = _sorted_lines(exp_items)
+206:    exp_total = sum((l.amount for l in exp_lines), Decimal("0"))
+207:    ordinary = rev_total - exp_total
+208:
+209:    sections: list[StatementSection] = []
+210:    if rev_lines:
+211:        sections.append(StatementSection(
+212:            key="revenue",
+213:            label_en="Revenue",
+214:            label_fr="Produits",
+215:            lines=rev_lines,
+216:            total=rev_total,
+217:        ))
+218:    if exp_lines:
+219:        sections.append(StatementSection(
+220:            key="expenses",
+221:            label_en="Expenses",
+222:            label_fr="Charges",
+223:            lines=exp_lines,
+224:            total=exp_total,
+225:        ))
+226:
+227:    extraordinary_total = Decimal("0")
+228:    net_result = ordinary
+229:    if ohada and extra_items:
+230:        extra_lines = _sorted_lines(extra_items)
+231:        extraordinary_total = sum((l.amount for l in extra_lines), Decimal("0"))
+232:        sections.append(StatementSection(
+233:            key="extraordinary",
+234:            label_en="Extraordinary result (HAO)",
+235:            label_fr="Résultat hors activités ordinaires",
+236:            lines=extra_lines,
+237:            total=extra_total,
+238:        ))
+239:        # Recover the SIGNED contribution: extraordinary revenue adds to net,
+240:        # extraordinary expense subtracts. Magnitudes are positive, so the
+241:        # line's `type` field carries the side.
+242:        extra_signed = Decimal("0")
+243:        for l in extra_lines:
+244:            extra_signed += l.amount if l.type == "revenue" else -l.amount
+245:        net_result += extra_signed
+246:
+247:    return IncomeStatementOut(
+248:        framework=_fw_value(org.framework),
+249:        statement_name_en=names["is_en"],
+250:        statement_name_fr=names["is_fr"],
+251:        currency=currency,
+252:        date_from=date_from,
+253:        as_of=as_of,
+254:        sections=sections,
+255:        revenue_total=rev_total,
+256:        expense_total=exp_total,
+257:        extraordinary_total=extraordinary_total,
+258:                ordinary_result=ordinary,
+259:        net_result=net_result,
+260:    )
+261:
+262:
+263:def _classify_balance_sheet_account(acct: Account, ohada: bool):
+264:    """Return 'asset' | 'liability' | 'equity' for a balance-sheet account, else None.
+265:
+266:    Class 8 (HAO) and Class 9 (off-balance-sheet) are NOT balance-sheet
+267:    accounts -> return None so they are skipped here.
+268:    """
+269:    if ohada:
+270:        cls = acct.ohada_class_number
+271:        if cls is None or cls in (8, 9):
+272:            return None
+273:        # Classes 1-5 ARE balance-sheet. The SYSCOHADA seed sets
+274:        # `account_class` correctly for every entry (e.g. 41 Clients ->
+275:        # asset; 40 Fournisseurs -> liability), so assignment by
+276:        # account_class is sound. Return the raw value (str-enum compares
+277:        # equal to its string form, and SQLAlchemy may yield either).
+278:        return acct.account_class or None
+279:    # IFRS: account_class is the only grouping key available.
+280:    return acct.account_class or None
+281:
+282:
+283:def _build_financial_position(db, org, as_of) -> FinancialPositionOut:
+284:    ohada = _is_ohada(org.framework)
+285:    names = _STATEMENT_NAMES[FrameworkCode.OHADA if ohada else FrameworkCode.IFRS]
+286:    currency = org.currency or "XAF"
+287:
+288:    close_before = _end_of(as_of) if as_of else None
+289:    sums = _account_sums(db, org.id, None, close_before)
+290:
+291:    ast_items, lia_items, eq_items = [], [], []
+292:    accounts = db.query(Account).filter(Account.organization_id == org.id).all()
+293:    for acct in accounts:
+294:        debit, credit = sums.get(acct.id, (Decimal("0"), Decimal("0")))
+295:        if debit == 0 and credit == 0:
+296:            continue
+297:        # Net signed balance: debit side positive, credit side negative.
+298:        net_signed = debit - credit
+299:        kind = _classify_balance_sheet_account(acct, ohada)
+300:        if kind is None:
+301:            continue
+302:        # Amount is shown as a positive magnitude on its balance-sheet side.
+303:        amount = abs(net_signed)
+304:        if kind == "asset":
+305:            ast_items.append((acct, amount, None))
+306:        elif kind == "liability":
+307:            lia_items.append((acct, amount, None))
+308:        elif kind == "equity":
+309:            eq_items.append((acct, amount, None))
+310:
+311:    assets = sum((a for _, a, _ in ast_items), Decimal("0"))
+312:    liabilities = sum((a for _, a, _ in lia_items), Decimal("0"))
+313:    equity = sum((a for _, a, _ in eq_items), Decimal("0"))
+314:
+315:    sections: list[StatementSection] = []
+316:    if ast_items:
+317:        sections.append(StatementSection(
+318:            key="assets", label_en="Assets", label_fr="Actif",
+319:            lines=_sorted_lines(ast_items), total=assets,
+320:        ))
+321:    if lia_items:
+322:        sections.append(StatementSection(
+323:            key="liabilities", label_en="Liabilities", label_fr="Dettes",
+324:            lines=_sorted_lines(lia_items), total=liabilities,
+325:        ))
+326:    if eq_items:
+327:        sections.append(StatementSection(
+328:            key="equity",
+329:            label_en="Equity",
+330:            label_fr="Capitaux propres",
+331:            lines=_sorted_lines(eq_items),
+332:            total=equity,
+333:        ))
+334:
+335:        return FinancialPositionOut(
+336:        framework=_fw_value(org.framework),
+337:        statement_name_en=names["fs_en"],
+338:        statement_name_fr=names["fs_fr"],
+339:        currency=currency,
+340:        as_of=as_of,
+341:        sections=sections,
+342:        assets=assets,
+343:        liabilities=liabilities,
+344:        equity=equity,
+345:        balanced=(assets == liabilities + equity),
+346:    )
+347:
+348:
+349:def get_income_statement(
+350:    db: Session,
+351:    user: User,
+352:    org_id: int,
+353:    date_from: date | None = None,
+354:    as_of: date | None = None,
+355:) -> IncomeStatementOut:
+356:    """Compte de résultat / Statement of Profit or Loss for one org over [date_from, as_of].
+357:
+358:    Both bounds optional (None = unbounded on that side). The movement
+359:    covers ordinary revenue (class 7 / IFRS revenue) minus ordinary expenses
+360:    (class 6 / IFRS expense), plus a SEPARATE HAO section for OHADA class 8.
+361:    `ordinary_result` excludes HAO; `net_result` adds the extraordinary
+362:    (HAO) contribution back.
+363:    """
+364:    org = _ensure_org_access(db, user, org_id)
+365:    return _build_income_statement(db, org, date_from, as_of)
+366:
+367:
+368:def get_financial_position(
+369:    db: Session,
+370:    user: User,
+371:    org_id: int,
+372:    as_of: date | None = None,
+373:) -> FinancialPositionOut:
+374:    """Bilan / Statement of Financial Position as of `as_of` (None = all history).
+375:
+376:    Uses closing balances (everything up to `as_of`). A reversed pair and
+377:    its original BOTH contribute their lines, so the pair nets to zero
+378:    across the statement — exactly like the Trial Balance. Drafts are
+379:    excluded.
+380:    """
+381:    org = _ensure_org_access(db, user, org_id)
+382:    return _build_financial_position(db, org, as_of)
+RC=0

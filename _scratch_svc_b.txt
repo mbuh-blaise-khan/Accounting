@@ -1,0 +1,98 @@
+1:            elif acct.account_class == AccountClass.expense.value:
+2:                exp_items.append((acct, -net, "expense"))
+3:
+4:    rev_lines = _sorted_lines(rev_items)
+5:    rev_total = sum((l.amount for l in rev_lines), Decimal("0"))
+6:    exp_lines = _sorted_lines(exp_items)
+7:    exp_total = sum((l.amount for l in exp_lines), Decimal("0"))
+8:    ordinary = rev_total - exp_total
+9:
+10:    sections: list[StatementSection] = []
+11:    if rev_lines:
+12:        sections.append(StatementSection(
+13:            key="revenue",
+14:            label_en="Revenue",
+15:            label_fr="Produits",
+16:            lines=rev_lines,
+17:            total=rev_total,
+18:        ))
+19:    if exp_lines:
+20:        sections.append(StatementSection(
+21:            key="expenses",
+22:            label_en="Expenses",
+23:            label_fr="Charges",
+24:            lines=exp_lines,
+25:            total=exp_total,
+26:        ))
+27:
+28:    extraordinary_total = Decimal("0")
+29:    net_result = ordinary
+30:    if ohada and extra_items:
+31:        extra_lines = _sorted_lines(extra_items)
+32:        extraordinary_total = sum((l.amount for l in extra_lines), Decimal("0"))
+33:        sections.append(StatementSection(
+34:            key="extraordinary",
+35:            label_en="Extraordinary result (HAO)",
+36:            label_fr="Résultat hors activités ordinaires",
+37:            lines=extra_lines,
+38:            total=extra_total,
+39:        ))
+40:        # Recover the SIGNED contribution: extraordinary revenue adds to net,
+41:        # extraordinary expense subtracts. Magnitudes are positive, so the
+42:        # line's `type` field carries the side.
+43:        extra_signed = Decimal("0")
+44:        for l in extra_lines:
+45:            extra_signed += l.amount if l.type == "revenue" else -l.amount
+46:        net_result += extra_signed
+47:
+48:    return IncomeStatementOut(
+49:        framework=_fw_value(org.framework),
+50:        statement_name_en=names["is_en"],
+51:        statement_name_fr=names["is_fr"],
+52:        currency=currency,
+53:        date_from=date_from,
+54:        as_of=as_of,
+55:        sections=sections,
+56:        revenue_total=rev_total,
+57:        expense_total=exp_total,
+58:        extraordinary_total=extraordinary_total,
+59:                ordinary_result=ordinary,
+60:        net_result=net_result,
+61:    )
+62:
+63:
+64:def _classify_balance_sheet_account(acct: Account, ohada: bool):
+65:    """Return 'asset' | 'liability' | 'equity' for a balance-sheet account, else None.
+66:
+67:    Class 8 (HAO) and Class 9 (off-balance-sheet) are NOT balance-sheet
+68:    accounts -> return None so they are skipped here.
+69:    """
+70:    if ohada:
+71:        cls = acct.ohada_class_number
+72:        if cls is None or cls in (8, 9):
+73:            return None
+74:        # Classes 1-5 ARE balance-sheet. The SYSCOHADA seed sets
+75:        # `account_class` correctly for every entry (e.g. 41 Clients ->
+76:        # asset; 40 Fournisseurs -> liability), so assignment by
+77:        # account_class is sound. Return the raw value (str-enum compares
+78:        # equal to its string form, and SQLAlchemy may yield either).
+79:        return acct.account_class or None
+80:    # IFRS: account_class is the only grouping key available.
+81:    return acct.account_class or None
+82:
+83:
+84:def _build_financial_position(db, org, as_of) -> FinancialPositionOut:
+85:    ohada = _is_ohada(org.framework)
+86:    names = _STATEMENT_NAMES[FrameworkCode.OHADA if ohada else FrameworkCode.IFRS]
+87:    currency = org.currency or "XAF"
+88:
+89:    close_before = _end_of(as_of) if as_of else None
+90:    sums = _account_sums(db, org.id, None, close_before)
+91:
+92:    ast_items, lia_items, eq_items = [], [], []
+93:    accounts = db.query(Account).filter(Account.organization_id == org.id).all()
+94:    for acct in accounts:
+95:        debit, credit = sums.get(acct.id, (Decimal("0"), Decimal("0")))
+96:        if debit == 0 and credit == 0:
+97:            continue
+RC=0

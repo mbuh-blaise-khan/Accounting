@@ -1,0 +1,2 @@
+SYNTAX_OK
+RC=0

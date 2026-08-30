@@ -1,0 +1,215 @@
+1:"""Financial-statement tests (Session 10, Part A).
+2:
+3:Covers:
+4:  1. OHADA Bilan balances (assets == liabilities + equity) for a known
+5:     seeded scenario, with correct OHADA document labels.
+6:  2. IFRS Statement of Financial Position balances for the parallel case.
+7:  3. OHADA income statement (Compte de résultat) ordinary result matches
+8:     revenue-class (7) totals minus expense-class (6) totals, and a class-8
+9:     (HAO) entry appears in a SEPARATE result section, NOT blended into
+10:     ordinary result.
+11:  4. A reversed transaction + its mirror BOTH contribute, so the pair nets
+12:     to zero on BOTH statements; and a draft transaction is never counted.
+13:"""
+14:from datetime import date, datetime, timezone
+15:
+16:
+17:def _register(client, email="fs@example.com", name="FS"):
+18:    r = client.post(
+19:        "/auth/register",
+20:        json={
+21:            "email": email,
+22:            "password": "supersecret123",
+23:            "display_name": name,
+24:            "language_preference": "en",
+25:        },
+26:    )
+27:    assert r.status_code in (200, 201), r.text
+28:    return r.json()
+29:
+30:
+31:def _create_org(client, framework="OHADA", name="FS Co"):
+32:    r = client.post(
+33:        "/organizations",
+34:        json={"name": name, "framework": framework, "currency": "XAF", "is_demo": True},
+35:    )
+36:    assert r.status_code in (200, 201), r.text
+37:    return r.json()
+38:
+39:
+40:def _accounts_by_code(client, org_id):
+41:    return {a["code"]: a for a in client.get(f"/accounts?organization_id={org_id}").json()}
+42:
+43:
+44:def _post_txn(client, org_id, acc_d, acc_c, amount, description="entry"):
+45:    r = client.post(
+46:        "/transactions",
+47:        json={
+48:            "organization_id": org_id,
+49:            "description": description,
+50:            "lines": [
+51:                {"account_id": acc_d["id"], "debit": amount, "credit": 0},
+52:                {"account_id": acc_c["id"], "debit": 0, "credit": amount},
+53:            ],
+54:        },
+55:    )
+56:    assert r.status_code in (200, 201), r.text
+57:    txn = r.json()
+58:    p = client.post(f"/transactions/{txn['id']}/post?organization_id={org_id}")
+59:    assert p.status_code == 200, p.text
+60:    return txn
+61:
+62:
+63:def _reverse(client, org_id, txn_id):
+64:    r = client.post(f"/transactions/{txn_id}/reverse?organization_id={org_id}")
+65:    assert r.status_code == 200, r.text
+66:    return r.json()
+67:\n\ndef test_ohada_bilan_balances_and_has_correct_labels(client):
+68:    """A simple balanced OHADA scenario: the Bilan must satisfy
+69:    assets == liabilities + equity, with the OHADA document labels and
+70:    closing balances derived purely from posted lines."""
+71:    _register(client)
+72:    org = _create_org(client, framework="OHADA")
+73:    acc = _accounts_by_code(client, org["id"])
+74:
+75:    # 1) Owner cash injection: Cash(5711) Dr 10000, Capital(10) Cr 10000
+76:    _post_txn(client, org["id"], acc["5711"], acc["10"], 10000, "Owner capital")
+77:    # 2) Borrowing: Cash(5711) Dr 3000, Borrowings(16) Cr 3000
+78:    _post_txn(client, org["id"], acc["5711"], acc["16"], 3000, "Bank loan")
+79:
+80:    # Closing: assets=Cash 13000 ; liabilities=Borrowings 3000 ;
+81:    #          equity=Capital 10000 -> 13000 == 3000 + 10000
+82:    fs = client.get(f"/reports/financial-position?organization_id={org['id']}")
+83:    assert fs.status_code == 200, fs.text
+84:    body = fs.json()
+85:    assert body["framework"] == "OHADA"
+86:    assert body["statement_name_en"] == "Bilan"
+87:    assert body["statement_name_fr"] == "Bilan"
+88:    assert body["currency"] == "XAF"
+89:    assert body["balanced"] is True
+90:    assert float(body["assets"]) == 13000.0
+91:    assert float(body["liabilities"]) == 3000.0
+92:    assert float(body["equity"]) == 10000.0
+93:
+94:
+95:def test_ifrs_financial_position_balances_and_has_correct_labels(client):
+96:    """Parallel IFRS scenario: assets == liabilities + equity, with the
+97:    IFRS document labels. IFRS accounts carry no code, so they are looked
+98:    up by name."""
+99:    _register(client)
+100:    org = _create_org(client, framework="IFRS")
+101:    accounts = client.get(f"/accounts?organization_id={org['id']}").json()
+102:    by_name = {a["name_en"]: a for a in accounts}
+103:
+104:    # 1) Owner cash injection: Cash Dr 10000, Share capital Cr 10000
+105:    _post_txn(client, org["id"], by_name["Cash and cash equivalents"],
+106:              by_name["Share capital"], 10000, "Owner capital")
+107:    # 2) Borrowing: Cash Dr 3000, Trade payables Cr 3000
+108:    _post_txn(client, org["id"], by_name["Cash and cash equivalents"],
+109:              by_name["Trade and other payables"], 3000, "Bank loan")
+110:
+111:    fs = client.get(f"/reports/financial-position?organization_id={org['id']}")
+112:    assert fs.status_code == 200, fs.text
+113:    body = fs.json()
+114:    assert body["framework"] == "IFRS"
+115:    assert body["statement_name_en"] == "Statement of Financial Position"
+116:    assert body["statement_name_fr"] == "Bilan"
+117:    assert body["balanced"] is True
+118:    assert float(body["assets"]) == float(body["liabilities"]) + float(body["equity"])
+119:    assert float(body["assets"]) == 13000.0
+120:\n\ndef test_ohada_income_statement_separates_hao(client):
+121:    """Ordinary result = class-7 revenue - class-6 expenses; a class-8 (HAO)
+122:    entry appears in a SEPARATE result section, NOT blended into ordinary
+123:    result. net_result adds the HAO net contribution back."""
+124:    _register(client)
+125:    org = _create_org(client, framework="OHADA")
+126:    acc = _accounts_by_code(client, org["id"])
+127:
+128:    # Capital base so the ledger stays balanced (cash 5711, capital 10).
+129:    _post_txn(client, org["id"], acc["5711"], acc["10"], 15000, "Capital")
+130:
+131:    # Ordinary revenue: Sales(70) Cr 2000, Cash(5711) Dr 2000
+132:    _post_txn(client, org["id"], acc["5711"], acc["70"], 2000, "Cash sale")
+133:    # Ordinary expense: Purchases(6011) Dr 500, Cash(5711) Cr 500
+134:    _post_txn(client, org["id"], acc["6011"], acc["5711"], 500, "Stock purchase")
+135:    # HAO revenue: Income outside ordinary(84) Cr 1000, Cash(5711) Dr 1000
+136:    _post_txn(client, org["id"], acc["5711"], acc["84"], 1000, "Asset disposal gain")
+137:    # HAO expense: Expenses outside ordinary(83) Dr 200, Cash(5711) Cr 200
+138:    _post_txn(client, org["id"], acc["83"], acc["5711"], 200, "Loss on disposal")
+139:
+140:    isrep = client.get(f"/reports/income-statement?organization_id={org['id']}")
+141:    assert isrep.status_code == 200, isrep.text
+142:    b = isrep.json()
+143:    assert b["framework"] == "OHADA"
+144:    assert b["statement_name_en"] == "Compte de résultat"
+145:    assert b["statement_name_fr"] == "Compte de résultat"
+146:
+147:    # Ordinary: 2000 revenue - 500 expense = 1500
+148:    assert float(b["revenue_total"]) == 2000.0
+149:    assert float(b["expense_total"]) == 500.0
+150:    assert float(b["ordinary_result"]) == 1500.0
+151:    # HAO (class 8) separated, not blended into ordinary:
+152:    assert float(b["extraordinary_total"]) == 1200.0  # 1000 + 200 magnitudes
+153:    assert float(b["net_result"]) == 2300.0  # 1500 + (1000 - 200)
+154:    assert float(b["net_result"]) != float(b["ordinary_result"])  # separation
+155:
+156:    # A dedicated extraordinary section exists with the two class-8 lines.
+157:    extra = next(s for s in b["sections"] if s["key"] == "extraordinary")
+158:    codes = sorted(l["code"] for l in extra["lines"])
+159:    assert codes == ["83", "84"]
+160:    # Ordinary revenue/expense sections must NOT contain class-8 accounts.
+161:    for s in b["sections"]:
+162:        if s["key"] in ("revenue", "expenses"):
+163:            assert all(l["code"] not in ("83", "84") for l in s["lines"])
+164:\n\ndef test_reversed_pair_nets_to_zero_and_drafts_excluded(client):
+165:    """A posted transaction + its reversal BOTH contribute (net to zero) on
+166:    both statements; a separate DRAFT transaction is never counted."""
+167:    _register(client)
+168:    org = _create_org(client, framework="OHADA")
+169:    acc = _accounts_by_code(client, org["id"])
+170:
+171:    # 1) Capital base (posted): Cash(5711) Dr 10000, Capital(10) Cr 10000
+172:    _post_txn(client, org["id"], acc["5711"], acc["10"], 10000, "Capital")
+173:    # 2) Expense (posted): Purchases(6011) Dr 1000, Cash(5711) Cr 1000
+174:    expense_txn = _post_txn(client, org["id"], acc["6011"], acc["5711"], 1000, "Purchase")
+175:    # 3) Reverse the expense -> mirror cancels it (both posted/reversed count)
+176:    _reverse(client, org["id"], expense_txn["id"])
+177:    # 4) DRAFT (never posted): Taxes(64) Dr 500, Cash(5711) Cr 500
+178:    draft = client.post(
+179:        "/transactions",
+180:        json={
+181:            "organization_id": org["id"],
+182:            "description": "Draft tax accrual (unposted)",
+183:            "lines": [
+184:                {"account_id": acc["64"]["id"], "debit": 500, "credit": 0},
+185:                {"account_id": acc["5711"]["id"], "debit": 0, "credit": 500},
+186:            ],
+187:        },
+188:    )
+189:    assert draft.status_code in (200, 201), draft.text
+190:
+191:    # Income statement: every IS account nets to zero (reversed pair
+192:    # canceled, draft excluded) -> totals are zero.
+193:    isrep = client.get(f"/reports/income-statement?organization_id={org['id']}")
+194:    assert isrep.status_code == 200, isrep.text
+195:    ib = isrep.json()
+196:    assert float(ib["revenue_total"]) == 0.0
+197:    assert float(ib["expense_total"]) == 0.0
+198:    assert float(ib["ordinary_result"]) == 0.0
+199:    assert float(ib["net_result"]) == 0.0
+200:    is_names = [l["name_en"] for s in ib["sections"] for l in s["lines"]]
+201:    assert "Purchases of goods - local" not in is_names  # reversed -> net zero
+202:    assert "Taxes and duties" not in is_names            # draft excluded
+203:
+204:    # Financial position: assets == liabilities + equity holds, Cash(5711) is
+205:    # back to 10000 (reversal canceled, not double-counted), and the draft-only
+206:    # account (64) never appears on the balance sheet.
+207:    fs = client.get(f"/reports/financial-position?organization_id={org['id']}")
+208:    assert fs.status_code == 200, fs.text
+209:    fb = fs.json()
+210:    assert fb["balanced"] is True
+211:    assert float(fb["assets"]) == float(fb["liabilities"]) + float(fb["equity"])
+212:    assert float(fb["assets"]) == 10000.0  # cash returned to its posted level
+213:    all_names = [l["name_en"] for s in fb["sections"] for l in s["lines"]]
+214:    assert "Taxes and duties" not in all_names  # draft excluded from FS too
+RC=0
