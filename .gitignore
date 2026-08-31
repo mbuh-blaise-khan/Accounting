@@ -90,3 +90,4 @@ lerna-debug.log*
 # ---- Cline/temp verification artifacts ----
 *.flag
 out.txt
+_scratch_*
