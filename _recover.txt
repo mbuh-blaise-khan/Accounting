@@ -1,2 +1,0 @@
-RECOVERY_TEST
-cat: _recover.txt: input file is output file

@@ -1,2 +1,0 @@
--rw-r--r-- 1 blaizo 197121 0 Aug 30 23:28 _scratch_fs6.txt
-P

@@ -1,2 +1,0 @@
--rw-r--r-- 1 blaizo 197121 759 Aug 30 23:03 _scratch_fs_pytest.txt
-DONE
