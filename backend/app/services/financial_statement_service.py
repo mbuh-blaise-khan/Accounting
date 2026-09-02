@@ -140,6 +140,7 @@ def _account_sums(db: Session, org_id: int, after_incl, before_excl):
 
 def _line(account: Account, amount: Decimal, line_type: str | None = None) -> StatementLine:
     return StatementLine(
+        account_id=account.id,
         code=getattr(account, "code", None),
         name_en=account.name_en,
         name_fr=account.name_fr,

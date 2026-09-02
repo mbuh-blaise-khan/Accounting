@@ -89,6 +89,11 @@ def test_ohada_bilan_balances_and_has_correct_labels(client):
     assert body["statement_name_fr"] == "Bilan"
     assert body["currency"] == "XAF"
     assert body["balanced"] is True
+    # Drill-down data (Session 10 Part B): every statement line carries its
+    # account_id so the frontend can open that account's General Ledger.
+    for section in body["sections"]:
+        for line in section["lines"]:
+            assert isinstance(line["account_id"], int) and line["account_id"] > 0
     assert float(body["assets"]) == 13000.0
     assert float(body["liabilities"]) == 3000.0
     assert float(body["equity"]) == 10000.0

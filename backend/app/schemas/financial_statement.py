@@ -12,8 +12,14 @@ from pydantic import BaseModel
 
 
 class StatementLine(BaseModel):
-    """One account line within a statement section."""
+    """One account line within a statement section.
 
+    `account_id` powers the frontend drill-down (statement line -> that
+    account's General Ledger page); it is additive since Part A and never
+    affects any computed amount.
+    """
+
+    account_id: int
     code: Optional[str] = None  # OHADA only; IFRS accounts carry no code
     name_en: str
     name_fr: str

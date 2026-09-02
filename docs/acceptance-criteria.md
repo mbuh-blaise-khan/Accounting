@@ -191,15 +191,24 @@ Verification evidence:
 
 ## Session 10 — Financial Statements (first milestone)
 
-### Part A — backend (this session; ⚠️ code complete + syntax-verified, final pytest run NOT observed — see PROGRESS_LOG "STATE AT END OF SESSION")
+### Part A — backend (done, verified: full suite 108 passed RC=0; committed as f5b8e06)
 - [x] `financial_statement_service`: Income Statement + Statement of Financial Position generated FROM the ledger (posted + correctly-reversed journal lines aggregated per account; drafts never included; date basis = real `posted_at` — same rules as the Trial Balance). OHADA workspaces use the REAL `ohada_class_number` (classes 1-5 → Bilan; 6-7 → ordinary result; **class 8 = SEPARATE "résultat hors activités ordinaires" section**, not blended into ordinary; class 9 excluded). IFRS workspaces use the simplified `account_class`. Response carries framework-correct names (Bilan / Compte de résultat vs Statement of Financial Position / Statement of Profit or Loss) so the frontend never guesses.
 - [x] KNOWN LIMITATION (documented in the service docstring — a decision, not an oversight): SIMPLIFIED presentation; full IAS 1 current/non-current classification is NOT implemented (the accounts schema has no maturity flag yet).
-- [x] API: GET /reports/income-statement?organization_id=&date_from=&as_of= and GET /reports/financial-position?organization_id=&as_of= (org-scoped, 404-safe).
-- [x] Tests: OHADA Bilan balances (A = L + E) for BOTH frameworks; income statement totals = revenue − expenses with `ordinary_result` vs `net_result` split; OHADA class-8 (HAO) separated into its own section (not blended into ordinary); a reversed transaction + its mirror both contribute so the pair nets to zero on BOTH statements; a draft transaction never appears on either statement. (⚠️ Last observed run: 1/4 passing; the 3 failures' causes were all fixed in code after that run — re-run required.)
-- [ ] DEFERRED FUTURE SCOPE (explicitly out of scope for Session 10 Part A, not silently ignored): OHADA's full legal statement set — **TAFIRE** (the mandatory cash-flow statement; a substantial standalone undertaking), the **Notes** to the financial statements, and the **statistical annex**.
-- [ ] Frontend statements page: both statements, framework-labeled, drill-down per line (Part B — next session)
-- [ ] Plain-language summary above each statement (Part B)
-- [ ] MANUAL WALKTHROUGH: create workspace → post 3–4 varied transactions → trace through journal → ledger → trial balance → statements → language toggle works → tests cover core rules
+- [x] API: GET /reports/income-statement?organization_id=&date_from=&as_of= and GET /reports/financial-position?organization_id=&as_of= (org-scoped, 404-safe). Each `StatementLine` carries `account_id` for the frontend drill-down (added in Part B, additive — never affects amounts).
+- [x] Tests: OHADA Bilan balances (A = L + E) for BOTH frameworks; income statement totals = revenue − expenses with `ordinary_result` vs `net_result` split; OHADA class-8 (HAO) separated into its own section (not blended into ordinary); a reversed transaction + its mirror both contribute so the pair nets to zero on BOTH statements; a draft transaction never appears on either statement. **Verified: full suite 108 passed, RC=0.**
+
+### Part B — frontend (done this session, verified: build 59 modules RC=0, npm run test:financial 11 checks RC=0)
+- [x] `FinancialStatementsPage` with two views (income statement / balance-sheet) reachable from workspace nav + home card, consistent with the other reports.
+- [x] Framework-correct statement names come from the BACKEND payload (Bilan / Compte de résultat for OHADA; Statement of Financial Position / Statement of Profit or Loss for IFRS) as the page titles — never hardcoded generic English names for OHADA.
+- [x] Reuses the existing patterns: `ReportHeader` (business name, framework, period / as-of, generated), print (`window.print()` + `@media print`), CSV export (`csvExport.js`, framework-aware N° compte / name-only columns), and the grouped section-header styling from the Trial Balance redesign.
+- [x] OHADA income statement renders ordinary result and HAO (class 8) as TWO distinct sections → a final combined NET RESULT (never merged into a flat list).
+- [x] Plain-language summary block above each statement (beginner-friendly, framework-neutral wording), built from the same payload so numbers can't disagree.
+- [x] Drill-down: each line item's "View →" opens that account's General Ledger (reuses the Trial Balance `onOpenLedger` pattern via the added `account_id`).
+- [x] Mobile-responsive: statement tables scroll horizontally on phone widths (same decision as Journal/Ledger/Trial Balance) — documented in the file; summary/controls/balance strip stack naturally.
+- [x] i18n (en.json + fr.json): statement titles, section headers, summary templates, balance messages — all bilingual with framework-correct terminology.
+- [x] Tests (`frontend/src/utils/financial.test.mjs`, run via `npm run test:financial`): page data renders for both frameworks, drill-down targets the correct account (account_id present on every line), plain-language summary numbers match the statement totals, CSV/print consistent with existing reports. Plus build + full backend suite green.
+- [ ] DEFERRED FUTURE SCOPE (explicitly out of scope for Session 10, not silently ignored): OHADA's full legal statement set — **TAFIRE** (the mandatory cash-flow statement; a substantial standalone undertaking), the **Notes** to the financial statements, and the **statistical annex**.
+- [ ] MANUAL WALKTHROUGH: create workspace → post 3–4 varied transactions → trace through journal → ledger → trial balance → statements → language toggle works → tests cover core rules (still to be walked through manually)
 
 ## Session 11 — Learning Engine (basic) — MVP complete
 - [ ] Tables: lessons, lesson_sections, questions, answers, attempts, progress (no AI)

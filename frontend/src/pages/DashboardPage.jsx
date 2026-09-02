@@ -12,6 +12,7 @@ import JournalPage from './JournalPage.jsx'
 import CashBookPage from './CashBookPage.jsx'
 import GeneralLedgerPage from './GeneralLedgerPage.jsx'
 import TrialBalancePage from './TrialBalancePage.jsx'
+import FinancialStatementsPage from './FinancialStatementsPage.jsx'
 import BusinessProfilePage from './BusinessProfilePage.jsx'
 import { profileGateActive, profileNeedsAttention } from '../utils/profile.js'
 
@@ -207,6 +208,7 @@ function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
               <NavBtn active={section === 'cashbook'} onClick={() => onSectionChange('cashbook')} label={t('ws.cashbook')} />
               <NavBtn active={section === 'ledger'} onClick={() => onSectionChange('ledger')} label={t('ws.ledger')} />
               <NavBtn active={section === 'trialBalance'} onClick={() => onSectionChange('trialBalance')} label={t('ws.trialBalance')} />
+              <NavBtn active={section === 'financialStatements'} onClick={() => onSectionChange('financialStatements')} label={t('ws.financialStatements')} />
               <NavBtn active={section === 'accounts'} onClick={() => onSectionChange('accounts')} label={t('ws.accounts')} />
               <NavBtn active={section === 'businessProfile'} onClick={() => onSectionChange('businessProfile')} label={t('ws.businessProfile')} />
             </div>
@@ -257,6 +259,7 @@ function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
             onCashBook={() => onSectionChange('cashbook')}
             onLedger={() => onSectionChange('ledger')}
             onTrialBalance={() => onSectionChange('trialBalance')}
+            onFinancialStatements={() => onSectionChange('financialStatements')}
             onBusinessProfile={() => onSectionChange('businessProfile')}
           />
         )}
@@ -285,6 +288,16 @@ function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
             }}
           />
         )}
+        {!gated && section === 'financialStatements' && (
+          <FinancialStatementsPage
+            org={org}
+            onBack={() => onSectionChange('home')}
+            onOpenLedger={(accountId) => {
+              setLedgerAccount(accountId)
+              onSectionChange('ledger')
+            }}
+          />
+        )}
         {!gated && section === 'businessProfile' && (
           <BusinessProfilePage
             org={org}
@@ -301,7 +314,7 @@ function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
   )
 }
 
-function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onLedger, onTrialBalance, onBusinessProfile }) {
+function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onLedger, onTrialBalance, onFinancialStatements, onBusinessProfile }) {
   const { t } = useLanguage()
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -339,6 +352,12 @@ function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onL
           desc={t('ws.trialBalanceDesc')}
           action={t('ws.trialBalanceAction')}
           onClick={onTrialBalance}
+        />
+        <BigCard
+          title={t('ws.financialStatementsTitle')}
+          desc={t('ws.financialStatementsDesc')}
+          action={t('ws.financialStatementsAction')}
+          onClick={onFinancialStatements}
         />
         <BigCard
           title={t('ws.accountsTitle')}

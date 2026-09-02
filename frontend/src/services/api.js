@@ -202,4 +202,30 @@ export function fetchTrialBalance(organizationId, params = {}) {
 }
 
 
+/**
+ * GET /reports/income-statement?organization_id=&from=&as_of=
+ * Compte de résultat (OHADA) / Statement of Profit or Loss (IFRS). The
+ * framework-correct statement names come back IN the payload — the UI never
+ * hardcodes them (Session 10 Part B requirement).
+ */
+export function fetchIncomeStatement(organizationId, params = {}) {
+  const qs = new URLSearchParams({ organization_id: organizationId })
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, v)
+  }
+  return request(`/reports/income-statement?${qs.toString()}`)
+}
+
+/**
+ * GET /reports/financial-position?organization_id=&as_of=
+ * Bilan (OHADA) / Statement of Financial Position (IFRS).
+ */
+export function fetchFinancialPosition(organizationId, params = {}) {
+  const qs = new URLSearchParams({ organization_id: organizationId })
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, v)
+  }
+  return request(`/reports/financial-position?${qs.toString()}`)
+}
+
 export default { fetchHealth }
