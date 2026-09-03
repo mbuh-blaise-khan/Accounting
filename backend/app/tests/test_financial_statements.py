@@ -86,8 +86,11 @@ def test_ohada_bilan_balances_and_has_correct_labels(client):
     assert fs.status_code == 200, fs.text
     body = fs.json()
     assert body["framework"] == "OHADA"
-    assert body["statement_name_en"] == "Bilan"
-    assert body["statement_name_fr"] == "Bilan"
+    # OHADA: LEGAL document names — identical in BOTH UI languages, like "SARL"
+    # which is never rendered as "LLC". Never translated.
+    assert body["statement_name_en"] == "Bilan (OHADA)"
+    assert body["statement_name_fr"] == "Bilan (OHADA)"
+    assert body["statement_name_en"] == body["statement_name_fr"]
     assert body["currency"] == "XAF"
     assert body["balanced"] is True
     # Drill-down data (Session 10 Part B): every statement line carries its
@@ -151,8 +154,11 @@ def test_ohada_income_statement_separates_hao(client):
     assert isrep.status_code == 200, isrep.text
     b = isrep.json()
     assert b["framework"] == "OHADA"
-    assert b["statement_name_en"] == "Compte de résultat"
-    assert b["statement_name_fr"] == "Compte de résultat"
+    # OHADA: LEGAL document names — identical in BOTH UI languages. Never
+    # translated.
+    assert b["statement_name_en"] == "Compte de résultat (OHADA)"
+    assert b["statement_name_fr"] == "Compte de résultat (OHADA)"
+    assert b["statement_name_en"] == b["statement_name_fr"]
 
     # Ordinary: 2000 revenue - 500 expense = 1500
     assert float(b["revenue_total"]) == 2000.0

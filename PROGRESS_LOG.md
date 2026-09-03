@@ -16,6 +16,16 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
+**Last completed session:** Small fix — **OHADA statement names are the LEGAL names in BOTH UI languages** ("Bilan (OHADA)" / "Compte de résultat (OHADA)", never translated — like "SARL" is never rendered as "LLC"). Backend `_STATEMENT_NAMES` updated; frontend dedup + i18n fallbacks updated; all verification green (backend **109 passed** RC=0, frontend `npm run test:financial` **14 checks** RC=0, `npm run build` **59 modules / 6.69s** RC=0, i18n parity 365↔365 keys).
+
+### What this fix changed
+- **Backend** `financial_statement_service._STATEMENT_NAMES`: OHADA now returns `is_en == is_fr == "Compte de résultat (OHADA)"` and `fs_en == fs_fr == "Bilan (OHADA)"` — the `(OHADA)` suffix is part of the legal name, identical in both languages. IFRS unchanged ("Statement of Profit or Loss" / "État de résultat", "Statement of Financial Position" / its French equivalent).
+- **Backend tests** (`test_financial_statements.py`): OHADA assertions now expect the `(OHADA)` names and explicitly assert `statement_name_en == statement_name_fr` for both statements. IFRS assertions untouched.
+- **Frontend dedup:** `ReportHeader` and `reportCsvHeader` detect a title that already contains `(OHADA)` and do NOT append the framework suffix a second time (no "Bilan (OHADA) (OHADA)").
+- **Frontend page:** `FinancialStatementsPage` selects `statement_name_fr` / `statement_name_en` per active language — for OHADA both are the same string, so the title cannot differ between languages. Pre-fetch/tab fallbacks are framework-aware via NEW i18n keys `fs.tabIncomeOhada` / `fs.tabPositionOhada` (values identical in en.json and fr.json: "Compte de résultat (OHADA)" / "Bilan (OHADA)"). Generic `fs.tabIncome` / `fs.tabPosition` remain for IFRS.
+- **Tests:** `financial.test.mjs` OHADA fixture names updated to the legal names; 3 new checks added (OHADA names identical in both languages; IFRS keeps per-language English names; the ReportHeader/CSV dedup rule) → 14 checks total, all passing.
+
+
 **Last completed session:** URGENT investigation + hotfix — **Financial Position "Unbalanced" warning on balanced ledgers** — root cause CONFIRMED with live-DB evidence, fix applied, regression test added, full suite green (109 passed).
 
 ### The report (Session 10 — UI / statement reconciliation)

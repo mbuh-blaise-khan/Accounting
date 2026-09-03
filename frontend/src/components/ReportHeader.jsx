@@ -29,10 +29,16 @@ const ACTIVITY_CODES = [
 
 export default function ReportHeader({ org, title, from, to, asOf, generatedAt, t }) {
   const hasRegistration = Boolean(org.rccm_number || org.tax_id)
+  // Some document titles already carry the framework as part of their legal
+  // name (the OHADA financial statements are "Bilan (OHADA)" / "Compte de
+  // résultat (OHADA)" in BOTH UI languages and are never translated). Detect
+  // that and don't append "({org.framework})" a second time.
+  const frameworkSuffix =
+    title && String(title).includes(`(${org.framework})`) ? '' : ` (${org.framework})`
   return (
     <div className="report-header mt-3 border-b border-slate-200 pb-3">
       <p className="text-2xl font-bold text-slate-900">{org.name}</p>
-      <p className="text-lg font-semibold text-slate-800">{title} ({org.framework})</p>
+      <p className="text-lg font-semibold text-slate-800">{title}{frameworkSuffix}</p>
       {org.registered_address && (
         <p className="text-sm text-slate-600">{org.registered_address}</p>
       )}

@@ -91,15 +91,17 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
   const nameOf = (line) => (lang === 'fr' ? line.name_fr : line.name_en)
 
   // Requirement 2: the statement NAMES come from the backend payload — the
-  // OHADA legal names ("Compte de résultat" / "Bilan") or the IAS 1 names —
-  // selected per active language. Generic i18n labels are only the fallback
-  // shown for the instant before the fetch resolves.
+  // OHADA LEGAL document names ("Compte de résultat (OHADA)" / "Bilan (OHADA)")
+  // or the IAS 1 names — selected per active language. For OHADA the backend
+  // returns the SAME string for both languages (the legal names are never
+  // translated, like "SARL"). Generic i18n labels are only the fallback shown
+  // for the instant before the fetch resolves (also framework-aware below).
   const incomeTitle = income
     ? lang === 'fr' ? income.statement_name_fr : income.statement_name_en
-    : t('fs.tabIncome')
+    : isOhada ? t('fs.tabIncomeOhada') : t('fs.tabIncome')
   const positionTitle = position
     ? lang === 'fr' ? position.statement_name_fr : position.statement_name_en
-    : t('fs.tabPosition')
+    : isOhada ? t('fs.tabPositionOhada') : t('fs.tabPosition')
   const currentTitle = view === 'income' ? incomeTitle : positionTitle
   function exportCsv() {
     if (!income || !position) return
@@ -164,7 +166,7 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
                   view === 'income' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'
                 }`}
               >
-                {t('fs.tabIncome')}
+                {isOhada ? t('fs.tabIncomeOhada') : t('fs.tabIncome')}
               </button>
               <button
                 type="button"
@@ -173,7 +175,7 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
                   view === 'position' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'
                 }`}
               >
-                {t('fs.tabPosition')}
+                {isOhada ? t('fs.tabPositionOhada') : t('fs.tabPosition')}
               </button>
             </div>
           </div>

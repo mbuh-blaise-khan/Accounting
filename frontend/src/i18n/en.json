@@ -371,6 +371,8 @@
   "fs.title": "Financial statements",
   "fs.tabIncome": "Income statement",
   "fs.tabPosition": "Balance sheet",
+  "fs.tabIncomeOhada": "Compte de résultat (OHADA)",
+  "fs.tabPositionOhada": "Bilan (OHADA)",
   "fs.from": "From (optional)",
   "fs.asOf": "As of",
   "fs.empty": "Nothing to show yet — post some transactions first.",

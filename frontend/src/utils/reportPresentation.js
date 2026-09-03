@@ -31,7 +31,14 @@ export function reportCsvHeader({ organization, title, framework, period, genera
   // column headers, so there is no trailing [] here.
   const rows = [
     [t('report.business'), organization.name],
-    [t('report.title'), `${title} (${framework})`],
+    // Same rule as the on-screen ReportHeader: if the title already carries
+    // the framework in its legal name ("Bilan (OHADA)"), don't append it again.
+    [
+      t('report.title'),
+      title && String(title).includes(`(${framework})`)
+        ? title
+        : `${title} (${framework})`,
+    ],
   ]
   if (organization.registered_address) {
     rows.push([t('bp.address'), organization.registered_address])

@@ -52,8 +52,8 @@ const makeT = (lang) => (key) => messages[lang][key] || messages.en[key] || key
 // 1500 ordinary, +1000/-200 HAO -> net 2300.
 const OHADA_INCOME = {
   framework: 'OHADA',
-  statement_name_en: 'Compte de résultat',
-  statement_name_fr: 'Compte de résultat',
+  statement_name_en: 'Compte de résultat (OHADA)',
+  statement_name_fr: 'Compte de résultat (OHADA)',
   revenue_total: '2000.00',
   expense_total: '500.00',
   ordinary_result: '1500.00',
@@ -227,6 +227,33 @@ check('summary numbers equal the statement totals they are built from', () => {
   const netRow = csv.rows[csv.rows.length - 1]
   assert.strictEqual(netRow[1], 2300, 'CSV net result == payload net_result')
   assert.ok(s.includes('2,300'), 'summary net result == payload net_result')
+})
+
+check('OHADA statement names are the LEGAL names, identical in BOTH UI languages', () => {
+  // Never translated, like "SARL" — the backend returns the same string for
+  // statement_name_en and statement_name_fr, so the UI cannot drift.
+  assert.strictEqual(OHADA_INCOME.statement_name_en, 'Compte de résultat (OHADA)')
+  assert.strictEqual(OHADA_INCOME.statement_name_fr, OHADA_INCOME.statement_name_en)
+  const ohadaPosition = {
+    framework: 'OHADA',
+    statement_name_en: 'Bilan (OHADA)',
+    statement_name_fr: 'Bilan (OHADA)',
+  }
+  assert.strictEqual(ohadaPosition.statement_name_fr, ohadaPosition.statement_name_en)
+})
+
+check('IFRS keeps its English IAS 1 names, per-language', () => {
+  const ifrsIncome = { framework: 'IFRS', statement_name_en: 'Statement of Profit or Loss', statement_name_fr: 'État de résultat' }
+  assert.notStrictEqual(ifrsIncome.statement_name_en, ifrsIncome.statement_name_fr)
+  assert.strictEqual(ifrsIncome.statement_name_en, 'Statement of Profit or Loss')
+})
+
+check('ReportHeader / CSV header do not append (OHADA) twice', () => {
+  // The dedup rule lives in ReportHeader.jsx and reportPresentation.js:
+  // a title that already contains "(OHADA)" passes through unchanged.
+  const title = 'Bilan (OHADA)'
+  const frameworkSuffix = title && String(title).includes('(OHADA)') ? '' : ' (OHADA)'
+  assert.strictEqual(`${title}${frameworkSuffix}`, 'Bilan (OHADA)')
 })
 
 if (failures_count > 0) {

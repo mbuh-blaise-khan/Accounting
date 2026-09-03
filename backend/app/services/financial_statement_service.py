@@ -58,16 +58,21 @@ from app.schemas.financial_statement import (
 # reversed pair nets to zero. Drafts never contribute (mirrors Trial Balance).
 _INCLUDE_STATUSES = [TransactionStatus.posted, TransactionStatus.reversed]
 
-# Framework-native document names. OHADA workspaces use the genuine French
-# OHADA terms "Bilan" / "Compte de résultat" (these ARE the correct legal
-# document names under OHADA); IFRS workspaces use the English IAS 1 terms
-# plus their standard French equivalents.
+# Framework-native document names.
+# OHADA workspaces: the statement names are the actual LEGAL document names
+# in the OHADA zone — "Bilan (OHADA)" / "Compte de résultat (OHADA)" — and are
+# NEVER translated. They read identically in both the English and the French
+# UI (like "SARL" is never rendered as "LLC" elsewhere in the app). The
+# disambiguating "(OHADA)" suffix is part of the name itself; ReportHeader /
+# reportCsvHeader detect it and do not append the framework again.
+# IFRS workspaces keep the IAS 1 English names (+ standard French
+# equivalents), unchanged.
 _STATEMENT_NAMES = {
     FrameworkCode.OHADA: {
-        "is_en": "Compte de résultat",
-        "is_fr": "Compte de résultat",
-        "fs_en": "Bilan",
-        "fs_fr": "Bilan",
+        "is_en": "Compte de résultat (OHADA)",
+        "is_fr": "Compte de résultat (OHADA)",
+        "fs_en": "Bilan (OHADA)",
+        "fs_fr": "Bilan (OHADA)",
     },
     FrameworkCode.IFRS: {
         "is_en": "Statement of Profit or Loss",
