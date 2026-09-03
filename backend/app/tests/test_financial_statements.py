@@ -12,6 +12,7 @@ Covers:
      to zero on BOTH statements; and a draft transaction is never counted.
 """
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
 
 def _register(client, email="fs@example.com", name="FS"):
@@ -223,3 +224,38 @@ def test_reversed_pair_nets_to_zero_and_drafts_excluded(client):
     assert float(fb["assets"]) == 10000.0  # cash returned to its posted level
     all_names = [l["name_en"] for s in fb["sections"] for l in s["lines"]]
     assert "Taxes and duties" not in all_names  # draft excluded from FS too
+
+
+def test_position_reconciles_with_wrong_side_account_balance(client):
+    """Regression (Session 10 hotfix for the "Unbalanced" warning): an asset
+    account left with a NET CREDIT balance (e.g. an overdrawn cash account)
+    must still reconcile on the Financial Position statement. The raw ledger
+    is perfectly balanced (every transaction is double-entry); the old
+    abs() flip in _build_financial_position double-counted the wrong-side
+    balance and broke assets = liabilities + equity + net_result."""
+    _register(client)
+    org = _create_org(client, framework="OHADA")
+    acc = _accounts_by_code(client, org["id"])
+
+    # 1) Owner capital: Cash(5711) Dr 1000, Capital(10) Cr 1000
+    _post_txn(client, org["id"], acc["5711"], acc["10"], 1000, "Capital")
+    # 2) Overdraft the cash account: Purchases(6011) Dr 1500, Cash(5711) Cr 1500
+    _post_txn(client, org["id"], acc["6011"], acc["5711"], 1500, "Overdraft purchase")
+
+    inc = client.get(f"/reports/income-statement?organization_id={org['id']}")
+    pos = client.get(f"/reports/financial-position?organization_id={org['id']}")
+    assert inc.status_code == 200, inc.text
+    assert pos.status_code == 200, pos.text
+
+    ib = inc.json()
+    fb = pos.json()
+    a = Decimal(fb["assets"])
+    l = Decimal(fb["liabilities"])
+    e = Decimal(fb["equity"])
+    net = Decimal(ib["net_result"])
+    # The identity MUST hold for a balanced ledger: with the old abs() flip
+    # cash became +500 (instead of -500) and the statement would not reconcile.
+    assert a == l + e + net
+    # The overdrawn cash account shows as a NEGATIVE asset (signed position),
+    # never a flipped positive magnitude.
+    assert a == Decimal("-500.00")

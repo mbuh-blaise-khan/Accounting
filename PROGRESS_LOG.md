@@ -16,7 +16,35 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Session 10, Part B — **financial statements frontend** (Income Statement + Bilan / Statement of Financial Position) — **DONE and observed green** (backend 108 passed RC=0, frontend `npm run test:financial` 11 checks RC=0, `npm run build` 59 modules RC=0); committed in this session.
+**Last completed session:** URGENT investigation + hotfix — **Financial Position "Unbalanced" warning on balanced ledgers** — root cause CONFIRMED with live-DB evidence, fix applied, regression test added, full suite green (109 passed).
+
+### The report (Session 10 — UI / statement reconciliation)
+Symptom: a Financial Position statement showed Assets=4,500, Liabilities=5,500, Equity=0 and the app's own "Unbalanced" warning fired even after including the period result.
+
+**Step 1 — raw ledger check (live PostgreSQL, direct SQL):** for EVERY organization, summing all posted+reversed `transaction_lines` debits vs credits → **all orgs balanced, INCLUDING a per-transaction check (PASS 1.5) → every single transaction is double-entry balanced**. So this was NOT corrupted/inherited demo data (user's branch #3 does not apply).
+
+**Step 2 — statement builders vs data (the real service code):**
+```
+BEFORE FIX (live):  org 2 [IFRS]  A=11900 L=200  E=200  net=2300  -> A ≠ L+E+net  ✗
+                    org 6 [OHADA] A=14700 L=8500 E=0    net=-4000 -> A ≠ L+E+net  ✗
+```
+
+**Step 3 — per-account classification dump** showed the exact mechanism: accounts holding a balance on the OPPOSITE side of their classification:
+- org 6: `521 cash` (asset) D=500 C=10000 → net −9500; `5211` (asset) −600; `40 suppliers` (liability) +5000
+- org 2: `Accounts receivable` (asset) −3800; `Inventory` (asset) −1000; `Current tax liabilities` (liability) +200
+
+**ROOT CAUSE (code, not data):** `financial_statement_service._build_financial_position` used `abs(net_signed)` on every balance-sheet account. That silently FLIPS a wrong-side balance (asset with net credit = overdraft-type/sloppy post; liability with net debit) into a positive magnitude on its declared side → each such account is DOUBLE-COUNTED, and `assets = liabilities + equity + net_result` breaks even though the ledger is perfectly balanced. The app's honest "Unbalanced" warning then fired correctly — it was the statement math that was wrong.
+
+**The fix (code only — NO user data was modified; the probe is read-only):** accumulate SIGNED contributions per section: assets += net_signed, liabilities/equity += -net_signed. Wrong-side balances now legitimately reduce their section (an overdrawn cash account shows as a negative asset), and the identity holds BY CONSTRUCTION for any balanced ledger.
+
+**Verification:**
+- Full backend suite: `pytest app/tests -q` → **109 passed** (new regression test `test_position_reconciles_with_wrong_side_account_balance`).
+- Live-DB probe re-run (same read-only script): **all 22 orgs now reconcile** — org 2 became A=2300 L=-200 E=200 net=2300; org 6 became A=-5500 L=-1500 E=0 net=-4000 (e.g. −5500 = −1500 + 0 + (−4000) ✓).
+- Diagnostic kept: `backend/_probe_fs.py` (read-only; PASS 1/1.5/2/3) for future re-verification.
+
+### What Session 10 Part B built (previous entry, retained for history)
+
+**Last completed session:** Session 10, Part B — **financial statements frontend** (Income Statement + Bilan / Statement of Financial Position) — **DONE and observed green** (backend 108+1 passed RC=0, frontend `npm run test:financial` 11 checks RC=0, `npm run build` 59 modules RC=0); committed in this session.
 
 ### What Session 10 Part B built
 - **`frontend/src/pages/FinancialStatementsPage.jsx`** — NEW page with two views (income statement / balance sheet) reachable from workspace nav + home BigCard (same pattern as Journal/Ledger/Trial Balance). Framework-correct titles come from the BACKEND payload (`statement_name_en/_fr`): OHADA shows "Compte de résultat" / "Bilan", IFRS the IAS 1 names — nothing hardcoded per framework.

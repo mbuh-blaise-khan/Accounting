@@ -302,16 +302,23 @@ def _build_financial_position(db, org, as_of) -> FinancialPositionOut:
         kind = _classify_balance_sheet_account(acct, ohada)
         if kind is None:
             continue
-        # Amount is shown as a positive magnitude on its balance-sheet side.
-        amount = abs(net_signed)
-        if amount == 0:
+        if net_signed == 0:
             continue  # fully-reversed pair -> net zero, not a live line
+        # SIGNED contribution on the account's own side (root-cause fix for
+        # the "Unbalanced" warning on balanced ledgers): an ASSET with a net
+        # CREDIT balance (bank overdraft, sloppy/demo post) and a LIABILITY
+        # or EQUITY account with a net DEBIT balance must count NEGATIVELY in
+        # their section. Using abs() here (as the code once did) silently
+        # flips such balances to a positive magnitude, doubling their
+        # contribution and breaking
+        #     assets = liabilities + equity + net_result
+        # even when the raw ledger (debits == credits) is perfectly balanced.
         if kind == "asset":
-            ast_items.append((acct, amount, None))
+            ast_items.append((acct, net_signed, None))
         elif kind == "liability":
-            lia_items.append((acct, amount, None))
+            lia_items.append((acct, -net_signed, None))
         elif kind == "equity":
-            eq_items.append((acct, amount, None))
+            eq_items.append((acct, -net_signed, None))
 
     assets = sum((a for _, a, _ in ast_items), Decimal("0"))
     liabilities = sum((a for _, a, _ in lia_items), Decimal("0"))
