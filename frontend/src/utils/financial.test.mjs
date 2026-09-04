@@ -5,6 +5,7 @@ import assert from 'node:assert/strict'
 
 import {
   incomeCsvParts,
+  netResultRowLabel,
   plainSummaryIncome,
   plainSummaryPosition,
   positionBalanceKind,
@@ -32,7 +33,11 @@ const messages = {
     'fs.ordinaryResult': 'RESULT OF ORDINARY ACTIVITIES',
     'fs.extraordinaryResult': 'Result of extraordinary activities (HAO)',
     'fs.netResult': 'NET RESULT',
+    'fs.netResultNp': 'SURPLUS/(DEFICIT)',
+    'fs.summaryNpSurplus': 'You received {revenue} of income and spent {expenses} this period — a surplus of {result}.',
+    'fs.summaryNpDeficit': 'You received {revenue} of income and spent {expenses} this period — a deficit of {result}.',
     'fs.resultOfPeriod': 'Result of the period (not yet transferred to equity)',
+    'fs.resultOfPeriodNp': 'Surplus/(deficit) of the period',
     'fs.totalEquityAndResult': 'Total equity including the period result',
     'journal.accountNo': 'N° compte',
     'journal.accountName': 'Account name',
@@ -40,6 +45,9 @@ const messages = {
   fr: {
     'fs.summaryIncomeProfit':
       'Vous avez reçu {revenue} de produits et dépensé {expenses} sur la période — un bénéfice de {result}.',
+    'fs.summaryNpSurplus': 'Vous avez reçu {revenue} de recettes et dépensé {expenses} sur la période — un excédent de {result}.',
+    'fs.summaryNpDeficit': 'Vous avez reçu {revenue} de recettes et dépensé {expenses} sur la période — un déficit de {result}.',
+    'fs.netResultNp': 'EXCÉDENT/(DÉFICIT)',
     'fs.summaryPosition':
       'Votre entreprise possède {assets}, doit {liabilities}, et dispose de {equity} investis en capitaux propres.',
     'fs.section.revenue': 'Produits — activités ordinaires',
@@ -254,6 +262,59 @@ check('ReportHeader / CSV header do not append (OHADA) twice', () => {
   const title = 'Bilan (OHADA)'
   const frameworkSuffix = title && String(title).includes('(OHADA)') ? '' : ' (OHADA)'
   assert.strictEqual(`${title}${frameworkSuffix}`, 'Bilan (OHADA)')
+})
+
+// --- org_purpose-adapted terminology (presentation-only) ---------------------
+// The backend signals the non-profit/NGO "Income and Expenditure" presentation
+// via statement_kind; the math NEVER changes — only labels/wording do.
+const NP_INCOME = {
+  framework: 'OHADA',
+  statement_kind: 'income_expenditure',
+  revenue_total: '5000.00',
+  expense_total: '3800.00',
+  ordinary_result: '1200.00',
+  extraordinary_total: '0.00',
+  net_result: '1200.00',
+  sections: [],
+}
+const identityFmt = (v) => String(v)
+
+check('non-profit/NGO summary uses surplus wording (EN + FR)', () => {
+  const en = plainSummaryIncome(NP_INCOME, makeT('en'), identityFmt)
+  assert.strictEqual(
+    en,
+    'You received 5000.00 of income and spent 3800.00 this period — a surplus of 1200.',
+  )
+  const fr = plainSummaryIncome(NP_INCOME, makeT('fr'), identityFmt)
+  assert.strictEqual(
+    fr,
+    'Vous avez reçu 5000.00 de recettes et dépensé 3800.00 sur la période — un excédent de 1200.',
+  )
+  // For-profit wording is untouched for the same positive numbers.
+  const fp = plainSummaryIncome(
+    { ...NP_INCOME, statement_kind: 'profit_loss' },
+    makeT('en'),
+    identityFmt,
+  )
+  assert.ok(fp.includes('a profit of 1200.'), fp)
+  assert.ok(!fp.includes('surplus'), fp)
+})
+
+check('non-profit/NGO summary uses deficit wording on a negative result', () => {
+  const deficit = { ...NP_INCOME, net_result: '-800.00' }
+  const en = plainSummaryIncome(deficit, makeT('en'), identityFmt)
+  assert.ok(en.includes('a deficit of 800'), en)
+  const fr = plainSummaryIncome(deficit, makeT('fr'), identityFmt)
+  assert.ok(fr.includes('un déficit de 800'), fr)
+})
+
+check('bottom-line row label: SURPLUS/(DEFICIT) for income_expenditure, NET RESULT otherwise', () => {
+  assert.strictEqual(netResultRowLabel(NP_INCOME, makeT('en')), 'SURPLUS/(DEFICIT)')
+  assert.strictEqual(netResultRowLabel(NP_INCOME, makeT('fr')), 'EXCÉDENT/(DÉFICIT)')
+  assert.strictEqual(
+    netResultRowLabel({ ...NP_INCOME, statement_kind: 'profit_loss' }, makeT('en')),
+    'NET RESULT',
+  )
 })
 
 if (failures_count > 0) {

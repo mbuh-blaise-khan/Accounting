@@ -210,6 +210,14 @@ Verification evidence:
 - [ ] DEFERRED FUTURE SCOPE (explicitly out of scope for Session 10, not silently ignored): OHADA's full legal statement set — **TAFIRE** (the mandatory cash-flow statement; a substantial standalone undertaking), the **Notes** to the financial statements, and the **statistical annex**.
 - [ ] MANUAL WALKTHROUGH: create workspace → post 3–4 varied transactions → trace through journal → ledger → trial balance → statements → language toggle works → tests cover core rules (still to be walked through manually)
 
+### Addendum — org_purpose-adapted terminology (presentation-only)
+- [x] Non-profit / NGO-association orgs: income statement labeled **"Income and Expenditure Account"** (EN) / **"Compte de résultat de l'association"** (FR), bottom line **"SURPLUS/(DEFICIT)"** / **"EXCÉDENT/(DÉFICIT)"**, plain-language summary uses surplus/deficit wording — in BOTH UI languages.
+- [x] for_profit / government / unset orgs: terminology unchanged (Profit|Bénéfice / Loss|Perte, "NET RESULT"/"RÉSULTAT NET").
+- [x] **Government decision documented**: no distinct convention implemented — public-sector reporting is budget/cash-oriented and jurisdiction-specific; a distinct accrual label would be invented rather than standard. Standard terms kept.
+- [x] `accounting_basis` deliberately untouched — its informational-only note is a separate, correct, deliberate limitation.
+- [x] Math completely unchanged: additive payload fields only (`statement_kind`, result labels); totals/sections/balance identity untouched. Backend tests assert identical `net_result` across purpose variants.
+- [x] Tests: backend `test_non_profit_and_ngo_purpose_get_income_expenditure_terminology` + `test_for_profit_and_government_keep_standard_terminology` (both languages, both frameworks via OHADA+IFRS scenarios); frontend 3 new presentation checks (surplus EN+FR, deficit, bottom-line row label) → suite totals: backend 111 passed, frontend 17 checks, build green.
+
 ## Session 11 — Learning Engine (basic) — MVP complete
 - [ ] Tables: lessons, lesson_sections, questions, answers, attempts, progress (no AI)
 - [ ] Seed 3–5 plain-language lessons (basics, accounting equation, debit/credit, journal entries, reading a trial balance) in English and French

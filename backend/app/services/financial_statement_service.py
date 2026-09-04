@@ -43,7 +43,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.account import Account
-from app.models.enums import AccountClass, FrameworkCode, TransactionStatus
+from app.models.enums import (
+    AccountClass,
+    FrameworkCode,
+    OrgPurpose,
+    TransactionStatus,
+)
 from app.models.organization import Organization, OrganizationMember
 from app.models.transaction import Transaction, TransactionLine
 from app.models.user import User
@@ -81,6 +86,65 @@ _STATEMENT_NAMES = {
         "fs_fr": "Bilan",
     },
 }
+
+
+# Purpose-adapted terminology (presentation ONLY — never affects any amount).
+# Research basis (documented, not guessed):
+#  * EN: "Income and Expenditure Account" is the standard accrual statement
+#    for non-profits (UK/Irish charity SORP); its bottom line is a "surplus"
+#    or "deficit" of income over expenditure.
+#  * FR: the French association chart of accounts (ANC) keeps the statutory
+#    "compte de résultat" for associations, with the bottom line labelled
+#    "excédent" / "déficit". The "compte emploi-ressources" is a DIFFERENT
+#    additional analytical statement (resources vs. uses) — NOT the
+#    equivalent, so it is deliberately NOT used here.
+#  * government: public-sector reporting conventions are budget/cash-oriented
+#    and jurisdiction-specific — no single accrual-statement name exists, so
+#    government orgs KEEP the standard terminology (documented decision).
+# Applies to BOTH frameworks: the purpose-specific name replaces the standard
+# one (so the OHADA legal suffix is not appended for these orgs). The Bilan /
+# Statement of Financial Position name is unchanged for every purpose —
+# surplus/deficit is an income-statement concept only.
+_INCOME_EXPENDITURE_NAMES = {
+    "is_en": "Income and Expenditure Account",
+    "is_fr": "Compte de résultat de l'association",
+}
+_INCOME_EXPENDITURE_RESULT = {
+    "kind": "income_expenditure",
+    "positive_en": "Surplus",
+    "positive_fr": "Excédent",
+    "negative_en": "Deficit",
+    "negative_fr": "Déficit",
+    "net_row_en": "SURPLUS/(DEFICIT)",
+    "net_row_fr": "EXCÉDENT/(DÉFICIT)",
+}
+_PROFIT_LOSS_RESULT = {
+    "kind": "profit_loss",
+    "positive_en": "Profit",
+    "positive_fr": "Bénéfice",
+    "negative_en": "Loss",
+    "negative_fr": "Perte",
+    "net_row_en": "NET RESULT",
+    "net_row_fr": "RÉSULTAT NET",
+}
+
+
+def _income_terminology(org: Organization) -> dict:
+    """Income-statement terminology, adapted to the organization's purpose.
+
+    non_profit / ngo_association -> Income & Expenditure + Surplus/Deficit.
+    for_profit / government / unset -> standard Profit/Loss terminology.
+    Presentation-only: changes labels, never amounts.
+    """
+    purpose = (getattr(org, "org_purpose", None) or "").strip()
+    if purpose in (OrgPurpose.non_profit.value, OrgPurpose.ngo_association.value):
+        return {"names": _INCOME_EXPENDITURE_NAMES, "result": _INCOME_EXPENDITURE_RESULT}
+    return {
+        "names": _STATEMENT_NAMES[
+            FrameworkCode.OHADA if _is_ohada(org.framework) else FrameworkCode.IFRS
+        ],
+        "result": _PROFIT_LOSS_RESULT,
+    }
 
 
 def _ensure_org_access(db: Session, user: User, org_id: int) -> Organization:
@@ -171,7 +235,12 @@ def _fw_value(framework) -> str:
 
 def _build_income_statement(db, org, date_from, as_of) -> IncomeStatementOut:
     ohada = _is_ohada(org.framework)
-    names = _STATEMENT_NAMES[FrameworkCode.OHADA if ohada else FrameworkCode.IFRS]
+    # Presentation-only terminology adapts to the organization's purpose
+    # (non_profit / ngo_association -> "Income and Expenditure Account" with
+    # Surplus/Deficit); every amount below is computed exactly as before.
+    terminology = _income_terminology(org)
+    names = terminology["names"]
+    result_labels = terminology["result"]
     currency = org.currency or "XAF"
 
     # Movement window = [date_from, as_of] (None bound = unbounded). When no
@@ -256,6 +325,13 @@ def _build_income_statement(db, org, date_from, as_of) -> IncomeStatementOut:
         framework=_fw_value(org.framework),
         statement_name_en=names["is_en"],
         statement_name_fr=names["is_fr"],
+        statement_kind=result_labels["kind"],
+        result_positive_en=result_labels["positive_en"],
+        result_positive_fr=result_labels["positive_fr"],
+        result_negative_en=result_labels["negative_en"],
+        result_negative_fr=result_labels["negative_fr"],
+        net_result_row_en=result_labels["net_row_en"],
+        net_result_row_fr=result_labels["net_row_fr"],
         currency=currency,
         date_from=date_from,
         as_of=as_of,

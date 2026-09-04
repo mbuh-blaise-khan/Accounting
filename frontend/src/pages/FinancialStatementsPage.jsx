@@ -38,6 +38,7 @@ import {
 } from '../utils/reportPresentation.js'
 import {
   incomeCsvParts,
+  netResultRowLabel,
   plainSummaryIncome,
   plainSummaryPosition,
   positionBalanceKind,
@@ -50,6 +51,11 @@ const fmt = formatReportNumber
 export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
   const { t, lang } = useLanguage()
   const isOhada = org.framework === 'OHADA'
+  // Non-profit / NGO orgs get Income & Expenditure terminology: the backend
+  // adapts the statement name and surplus/deficit labels (presentation only).
+  // The tab/fallback here just matches before the fetch resolves.
+  const isNp =
+    org.org_purpose === 'non_profit' || org.org_purpose === 'ngo_association'
   const [view, setView] = useState('income') // 'income' | 'position'
   const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10))
   const [from, setFrom] = useState('')
@@ -98,7 +104,8 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
   // for the instant before the fetch resolves (also framework-aware below).
   const incomeTitle = income
     ? lang === 'fr' ? income.statement_name_fr : income.statement_name_en
-    : isOhada ? t('fs.tabIncomeOhada') : t('fs.tabIncome')
+    : isNp ? t('fs.tabIncomeNp')
+      : isOhada ? t('fs.tabIncomeOhada') : t('fs.tabIncome')
   const positionTitle = position
     ? lang === 'fr' ? position.statement_name_fr : position.statement_name_en
     : isOhada ? t('fs.tabPositionOhada') : t('fs.tabPosition')
@@ -122,7 +129,7 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
       downloadCsv(`income-statement-${asOf}`, headerRows, rows, meta)
     } else {
       const { headerRows, rows } = positionCsvParts(position, {
-        t, isOhada, lang, netResult: income.net_result,
+        t, isOhada, lang, netResult: income.net_result, statementKind: income.statement_kind,
       })
       downloadCsv(`financial-position-${asOf}`, headerRows, rows, meta)
     }
@@ -166,7 +173,11 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
                   view === 'income' ? 'bg-blue-600 text-white' : 'text-slate-700 hover:bg-slate-100'
                 }`}
               >
-                {isOhada ? t('fs.tabIncomeOhada') : t('fs.tabIncome')}
+                {isNp
+                  ? t('fs.tabIncomeNp')
+                  : isOhada
+                    ? t('fs.tabIncomeOhada')
+                    : t('fs.tabIncome')}
               </button>
               <button
                 type="button"
@@ -387,7 +398,7 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
                 {/* FINAL COMBINED NET RESULT (ordinary + extraordinary) */}
                 <tr className="bg-slate-800 font-bold text-white">
                   {isOhada && <td className="px-3 py-2" />}
-                  <td className="px-3 py-2">{t('fs.netResult')}</td>
+                  <td className="px-3 py-2">{netResultRowLabel(income, t)}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right">
                     {fmt(income.net_result)}
                   </td>
@@ -474,7 +485,11 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
                   <Fragment>
                     <tr className="border-b border-slate-200 bg-blue-50 font-semibold text-slate-900">
                       {isOhada && <td className="px-3 py-2" />}
-                      <td className="px-3 py-2">{t('fs.resultOfPeriod')}</td>
+                      <td className="px-3 py-2">
+                        {income.statement_kind === 'income_expenditure'
+                          ? t('fs.resultOfPeriodNp')
+                          : t('fs.resultOfPeriod')}
+                      </td>
                       <td className="whitespace-nowrap px-3 py-2 text-right">
                         {fmt(income.net_result)}
                       </td>

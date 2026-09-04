@@ -17,12 +17,19 @@ function fill(template, values) {
 /**
  * Plain-language summary above the INCOME statement, built from the SAME
  * payload the detailed table renders (totals can never disagree with it).
- * OHADA & IFRS wording is identical by design — beginners first, jargon below.
+ * Non-profit/NGO orgs (backend statement_kind 'income_expenditure') get the
+ * surplus/deficit wording; for-profit wording otherwise.
  */
 export function plainSummaryIncome(income, t, fmt = formatReportNumber) {
   if (!income) return ''
-  const template =
-    Number(income.net_result) >= 0 ? t('fs.summaryIncomeProfit') : t('fs.summaryIncomeLoss')
+  const np = income.statement_kind === 'income_expenditure'
+  const template = np
+    ? Number(income.net_result) >= 0
+      ? t('fs.summaryNpSurplus')
+      : t('fs.summaryNpDeficit')
+    : Number(income.net_result) >= 0
+      ? t('fs.summaryIncomeProfit')
+      : t('fs.summaryIncomeLoss')
   return fill(template, {
     revenue: fmt(income.revenue_total),
     expenses: fmt(income.expense_total),
@@ -72,6 +79,16 @@ export function sectionLabel(section, t, lang = 'en') {
 }
 
 /**
+ * Bottom-line label for the income statement: "NET RESULT" for profit-oriented
+ * orgs; "SURPLUS/(DEFICIT)" when the backend payload signals the non-profit /
+ * NGO "Income and Expenditure" presentation (statement_kind).
+ */
+export function netResultRowLabel(income, t) {
+  if (income && income.statement_kind === 'income_expenditure') return t('fs.netResultNp')
+  return t('fs.netResult')
+}
+
+/**
  * CSV rows for the INCOME statement, mirroring the on-screen structure:
  * one section-header row per section, its line rows, the ordinary result,
  * the HAO result (OHADA only, signed) and the final NET RESULT. Framework
@@ -101,7 +118,7 @@ export function incomeCsvParts(income, { t, isOhada, lang = 'en' }) {
     const hao = Number(income.net_result) - Number(income.ordinary_result)
     rows.push([t('fs.extraordinaryResult'), hao])
   }
-  rows.push([t('fs.netResult'), Number(income.net_result) || 0])
+  rows.push([netResultRowLabel(income, t), Number(income.net_result) || 0])
   return { headerRows, rows }
 }
 
@@ -110,7 +127,7 @@ export function incomeCsvParts(income, { t, isOhada, lang = 'en' }) {
  * line rows and section totals, then (when there is P&L activity) the period
  * result and total equity including it. Returns { headerRows, rows }.
  */
-export function positionCsvParts(position, { t, isOhada, lang = 'en', netResult = 0 }) {
+export function positionCsvParts(position, { t, isOhada, lang = 'en', netResult = 0, statementKind = 'profit_loss' }) {
   if (!position) return { headerRows: [], rows: [] }
   const headerRows = [
     [
@@ -130,7 +147,7 @@ export function positionCsvParts(position, { t, isOhada, lang = 'en', netResult 
   }
   const result = Number(netResult) || 0
   if (result !== 0) {
-    rows.push([t('fs.resultOfPeriod'), result])
+    rows.push([statementKind === 'income_expenditure' ? t('fs.resultOfPeriodNp') : t('fs.resultOfPeriod'), result])
     rows.push([t('fs.totalEquityAndResult'), Number(position.equity) + result])
   }
   return { headerRows, rows }

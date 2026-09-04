@@ -265,3 +265,92 @@ def test_position_reconciles_with_wrong_side_account_balance(client):
     # The overdrawn cash account shows as a NEGATIVE asset (signed position),
     # never a flipped positive magnitude.
     assert a == Decimal("-500.00")
+
+
+def _np_scenario(client, framework, purpose):
+    """Shared helper: create an org with the given purpose, post capital +
+    a sale + a purchase, return (org, income_payload, position_payload).
+
+    Amounts are IDENTICAL for every purpose on purpose — the terminology
+    feature must be presentation-only, never touching calculation logic.
+    """
+    _register(client, email=f"np_{purpose}_{framework}@example.com")
+    org = _create_org(client, framework=framework, name=f"NP {purpose}")
+    r = client.patch(f"/organizations/{org['id']}", json={"org_purpose": purpose})
+    assert r.status_code == 200, r.text
+    acc = _accounts_by_code(client, org["id"])
+    _post_txn(client, org["id"], acc["5711"], acc["10"], 10000, "Capital")
+    _post_txn(client, org["id"], acc["5711"], acc["7011"], 2000, "Sales")
+    _post_txn(client, org["id"], acc["6011"], acc["5711"], 500, "Purchases")
+    inc = client.get(f"/reports/income-statement?organization_id={org['id']}")
+    pos = client.get(f"/reports/financial-position?organization_id={org['id']}")
+    assert inc.status_code == 200, inc.text
+    assert pos.status_code == 200, pos.text
+    return org, inc.json(), pos.json()
+
+
+def test_non_profit_and_ngo_purpose_get_income_expenditure_terminology(client):
+    """non_profit AND ngo_association orgs: the income statement is labelled
+    "Income and Expenditure Account" (EN) / "Compte de résultat de
+    l'association" (FR) with Surplus/Excédent, Deficit/Déficit result labels —
+    in BOTH languages of the payload. The MATH is completely unchanged, and
+    the Financial Position (Bilan) name is untouched for every purpose."""
+    for purpose in ("non_profit", "ngo_association"):
+        org, ib, fb = _np_scenario(client, "OHADA", purpose)
+
+        # Statement names adapt in BOTH payload languages.
+        assert ib["statement_kind"] == "income_expenditure", purpose
+        assert ib["statement_name_en"] == "Income and Expenditure Account", purpose
+        assert ib["statement_name_fr"] == "Compte de résultat de l'association", purpose
+        # Surplus / Deficit result labels, both languages.
+        assert ib["result_positive_en"] == "Surplus", purpose
+        assert ib["result_positive_fr"] == "Excédent", purpose
+        assert ib["result_negative_en"] == "Deficit", purpose
+        assert ib["result_negative_fr"] == "Déficit", purpose
+        assert ib["net_result_row_en"] == "SURPLUS/(DEFICIT)", purpose
+        assert ib["net_result_row_fr"] == "EXCÉDENT/(DÉFICIT)", purpose
+
+        # PRESENTATION-ONLY: every amount is identical to a for-profit org's.
+        assert float(ib["revenue_total"]) == 2000.0, purpose
+        assert float(ib["expense_total"]) == 500.0, purpose
+        assert float(ib["ordinary_result"]) == 1500.0, purpose
+        assert float(ib["net_result"]) == 1500.0, purpose
+
+        # The Bilan name does NOT adapt to purpose (surplus/deficit is an
+        # income-statement concept) and its amounts are unchanged too.
+        assert fb["statement_name_en"] == "Bilan (OHADA)", purpose
+        assert fb["statement_name_fr"] == "Bilan (OHADA)", purpose
+        assert float(fb["assets"]) == 11500.0, purpose  # 10000 + 2000 - 500
+        assert float(fb["equity"]) == 10000.0, purpose
+
+
+def test_for_profit_and_government_keep_standard_terminology(client):
+    """for_profit (and unset) orgs keep the current Profit/Loss terminology;
+    government orgs also keep it (public-sector conventions are budget/cash-
+    oriented and jurisdiction-specific — a distinct label would be invented,
+    so the documented decision is to keep standard terms)."""
+    for purpose in (None, "for_profit", "government"):
+        payload = {"org_purpose": purpose} if purpose else {}
+        _register(client, email=f"std_{purpose or 'unset'}@example.com")
+        org = _create_org(client, framework="OHADA", name=f"Std {purpose}")
+        if payload:
+            r = client.patch(f"/organizations/{org['id']}", json=payload)
+            assert r.status_code == 200, r.text
+        acc = _accounts_by_code(client, org["id"])
+        _post_txn(client, org["id"], acc["5711"], acc["7011"], 2000, "Sales")
+        _post_txn(client, org["id"], acc["6011"], acc["5711"], 500, "Purchases")
+
+        inc = client.get(f"/reports/income-statement?organization_id={org['id']}")
+        assert inc.status_code == 200, inc.text
+        ib = inc.json()
+        assert ib["statement_kind"] == "profit_loss", purpose
+        assert ib["statement_name_en"] == "Compte de résultat (OHADA)", purpose
+        assert ib["statement_name_fr"] == "Compte de résultat (OHADA)", purpose
+        assert ib["result_positive_en"] == "Profit", purpose
+        assert ib["result_positive_fr"] == "Bénéfice", purpose
+        assert ib["result_negative_en"] == "Loss", purpose
+        assert ib["result_negative_fr"] == "Perte", purpose
+        assert ib["net_result_row_en"] == "NET RESULT", purpose
+        assert ib["net_result_row_fr"] == "RÉSULTAT NET", purpose
+        # Math identical to the non-profit scenario (2000 - 500 = 1500).
+        assert float(ib["net_result"]) == 1500.0, purpose

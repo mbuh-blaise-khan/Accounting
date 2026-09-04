@@ -16,6 +16,17 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
+**Last completed session:** Feature — **financial statement terminology adapts to the organization's `org_purpose`** (presentation-only; math untouched). Non-profit / NGO-association orgs now get the **"Income and Expenditure Account"** (EN) / **"Compte de résultat de l'association"** (FR) with a bottom line of **"SURPLUS/(DEFICIT)"** / **"EXCÉDENT/(DÉFICIT)"** and matching plain-language summary wording; for_profit / government / unset keep Profit-Loss terms unchanged. `accounting_basis` is deliberately untouched (its informational-only note stays as-is). All verification green: backend **111 passed** RC=0, `npm run test:financial` **17 checks** RC=0, `npm run build` **59 modules / 4.80s** RC=0.
+
+### Terminology research basis (documented, not guessed)
+- **EN**: "Income and Expenditure Account" is the standard accrual statement for non-profits (UK/Irish charity SORP), bottom line "surplus"/"deficit" of income over expenditure.
+- **FR**: the French association chart of accounts (ANC règlements 1999-01 / 2018-06) keeps the **compte de résultat** as the association's statutory statement with the bottom line **"excédent" / "déficit"**; the "compte emploi-ressources" is a DIFFERENT additional analytical statement, not the equivalent — so the French name is "Compte de résultat de l'association".
+- **Government**: no distinct convention implemented. Public-sector reporting is budget/cash-oriented and jurisdiction-specific; inventing an accrual label would misrepresent, so standard Profit/Loss terms are kept and this decision is documented.
+
+### How it works
+- **Backend** `financial_statement_service`: a purpose→terminology map derives `statement_kind` (`"profit_loss"` | `"income_expenditure"`), the statement name (`statement_name_en/_fr`), bottom-line labels (`result_positive_en/_fr` = Profit|Bénéfice vs Surplus|Excédent; `result_negative_en/_fr` = Loss|Perte vs Deficit|Déficit) and the net-result row label (`net_result_row_en/_fr` = "NET RESULT"/"RÉSULTAT NET" vs "SURPLUS/(DEFICIT)"/"EXCÉDENT/(DÉFICIT)") from `org.org_purpose`. **No amounts, sections, or calculations change** — additive schema fields on `IncomeStatementOut` only.
+- **Frontend**: `plainSummaryIncome` picks surplus/deficit summary templates (`fs.summaryNpSurplus`/`fs.summaryNpDeficit`) from `statement_kind`; `netResultRowLabel` switches the bottom-line row; the page's pre-fetch tab fallback uses `fs.tabIncomeNp`. The Bilan/Statement of Financial Position does NOT adapt (surplus/deficit is an income-statement concept) — its name and amounts are unchanged.
+
 **Last completed session:** Small fix — **OHADA statement names are the LEGAL names in BOTH UI languages** ("Bilan (OHADA)" / "Compte de résultat (OHADA)", never translated — like "SARL" is never rendered as "LLC"). Backend `_STATEMENT_NAMES` updated; frontend dedup + i18n fallbacks updated; all verification green (backend **109 passed** RC=0, frontend `npm run test:financial` **14 checks** RC=0, `npm run build` **59 modules / 6.69s** RC=0, i18n parity 365↔365 keys).
 
 ### What this fix changed

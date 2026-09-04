@@ -52,6 +52,17 @@ class IncomeStatementOut(BaseModel):
     extraordinary_total: Optional[Decimal] = Decimal("0")  # OHADA-only (class 8)
     ordinary_result: Decimal
     net_result: Decimal
+    # Presentation-only terminology adapted to the organization's purpose
+    # (non_profit / ngo_association -> "Income and Expenditure Account" with
+    # Surplus/Deficit; for_profit / government / unset -> Profit/Loss).
+    # NEVER affects any computed amount — labels only.
+    statement_kind: str = "profit_loss"  # "profit_loss" | "income_expenditure"
+    result_positive_en: str = "Profit"
+    result_positive_fr: str = "Bénéfice"
+    result_negative_en: str = "Loss"
+    result_negative_fr: str = "Perte"
+    net_result_row_en: str = "NET RESULT"
+    net_result_row_fr: str = "RÉSULTAT NET"
 
 
 class FinancialPositionOut(BaseModel):
