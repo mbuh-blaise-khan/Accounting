@@ -8,7 +8,9 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   fetchAccounts,
   fetchCashBook,
+  fetchCashBookPdf,
   fetchJournalEntries,
+  fetchJournalPdf,
   fetchTransactions,
 } from '../services/api.js'
 import { useLanguage } from '../i18n/index.jsx'
@@ -16,6 +18,8 @@ import JournalTable from '../components/JournalTable.jsx'
 import AccountFilterSelect from '../components/AccountFilterSelect.jsx'
 import TxnStatusBlock from '../components/TxnStatusBlock.jsx'
 import { downloadCsv } from '../utils/csvExport.js'
+import { downloadExcel } from '../utils/excelExport.js'
+import { downloadBlob } from '../utils/downloadBlob.js'
 import ReportHeader from '../components/ReportHeader.jsx'
 import { formatReportDate, formatReportNumber, reportCsvHeader, reportPeriodLabel } from '../utils/reportPresentation.js'
 
@@ -83,6 +87,72 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
     }
   }
 
+  // ----- Shared export data (CSV + Excel use the same arrays; PDF reuses
+  // the same filters via the backend) -----
+  function reportExportInfo() {
+    const amountColumns = cashbook && cashbookType === 'double'
+      ? [
+          { key: 'cashDebit', label: t('cashbook.cashDebit') },
+          { key: 'bankDebit', label: t('cashbook.bankDebit') },
+          { key: 'cashCredit', label: t('cashbook.cashCredit') },
+          { key: 'bankCredit', label: t('cashbook.bankCredit') },
+        ]
+      : [
+          { key: 'debit', label: t('cashbook.debit') },
+          { key: 'credit', label: t('cashbook.credit') },
+        ]
+    const amount = (r, key) => {
+      if (key === 'debit' || key === 'credit') return Number(r[key]) || 0
+      if (key === 'cashDebit') return r.cashbook_type === 'cash' ? Number(r.debit) || 0 : 0
+      if (key === 'bankDebit') return r.cashbook_type === 'bank' ? Number(r.debit) || 0 : 0
+      if (key === 'cashCredit') return r.cashbook_type === 'cash' ? Number(r.credit) || 0 : 0
+      return r.cashbook_type === 'bank' ? Number(r.credit) || 0 : 0
+    }
+    const period =
+      from || to
+        ? `${t('report.period')} ${formatReportDate(from) || '—'} – ${formatReportDate(to) || '—'}`
+        : ''
+    const reportTitle = cashbook ? t('cashbook.title') : t('journal.title')
+    const header = [
+      t('journal.date'),
+      t('journal.reference'),
+      t('journal.description'),
+      ...(isOhada ? [t('journal.accountNo')] : []),
+      t('journal.accountName'),
+      t('journal.narration'),
+      ...amountColumns.map((column) => column.label),
+      ...(!cashbook ? [t('journal.source'), t('journal.status')] : []),
+    ]
+    const data = (rows || []).map((r) => [
+      r.date ? formatReportDate(r.date) : '',
+      r.reference,
+      r.description,
+      ...(isOhada ? [r.account_code || ''] : []),
+      nameOf({ name_en: r.account_name_en, name_fr: r.account_name_fr }),
+      r.narration || '',
+      ...amountColumns.map((column) => amount(r, column.key)),
+      ...(!cashbook ? [r.source, r.status] : []),
+    ])
+    const meta = reportCsvHeader({ organization: org, title: reportTitle, framework: org.framework, period, generatedAt, t })
+    const filename = `${cashbook ? 'cash-book' : 'journal'}-${new Date().toISOString().slice(0, 10)}`
+    return { header, data, meta, filename, period, reportTitle }
+  }
+
+  async function exportPdf() {
+    try {
+      const params = { from, to, lang }
+      const name = cashbook ? 'cash-book' : 'journal'
+      const blob = cashbook
+        ? await fetchCashBookPdf(org.id, { ...params, type: cashbookType })
+        : await fetchJournalPdf(org.id, params)
+      downloadBlob(blob, `${name}-${new Date().toISOString().slice(0, 10)}.pdf`)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const exportData = reportExportInfo()
+
   const totalDebit = useMemo(
     () => (rows || []).reduce((s, r) => s + (Number(r.debit) || 0), 0),
     [rows]
@@ -121,7 +191,7 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
         />
 
         {/* Part 3: export exactly what the current filters display */}
-        <div className="no-print mt-2 flex justify-end gap-2">
+        <div className="no-print mt-2 flex flex-wrap justify-end gap-2">
           <button
             type="button"
             onClick={() => window.print()}
@@ -132,60 +202,33 @@ export default function JournalPage({ org, onBack, cashbook = false }) {
           <button
             type="button"
             disabled={!rows || rows.length === 0}
-            onClick={() => {
-              const amountColumns = cashbook && cashbookType === 'double'
-                ? [
-                    { key: 'cashDebit', label: t('cashbook.cashDebit') },
-                    { key: 'bankDebit', label: t('cashbook.bankDebit') },
-                    { key: 'cashCredit', label: t('cashbook.cashCredit') },
-                    { key: 'bankCredit', label: t('cashbook.bankCredit') },
-                  ]
-                : [
-                    { key: 'debit', label: t('cashbook.debit') },
-                    { key: 'credit', label: t('cashbook.credit') },
-                  ]
-              const amount = (r, key) => {
-                if (key === 'debit' || key === 'credit') return Number(r[key]) || 0
-                if (key === 'cashDebit') return r.cashbook_type === 'cash' ? Number(r.debit) || 0 : 0
-                if (key === 'bankDebit') return r.cashbook_type === 'bank' ? Number(r.debit) || 0 : 0
-                if (key === 'cashCredit') return r.cashbook_type === 'cash' ? Number(r.credit) || 0 : 0
-                return r.cashbook_type === 'bank' ? Number(r.credit) || 0 : 0
-              }
-              const period =
-                from || to
-                  ? `${t('report.period')} ${formatReportDate(from) || '—'} – ${formatReportDate(to) || '—'}`
-                  : ''
-              const reportTitle = cashbook ? t('cashbook.title') : t('journal.title')
-              downloadCsv(
-                `${cashbook ? 'cash-book' : 'journal'}-${new Date().toISOString().slice(0, 10)}`,
-                [
-                  t('journal.date'),
-                  t('journal.reference'),
-                  t('journal.description'),
-                  ...(isOhada ? [t('journal.accountNo')] : []),
-                  t('journal.accountName'),
-                  t('journal.narration'),
-                  ...amountColumns.map((column) => column.label),
-                  ...(!cashbook ? [t('journal.source'), t('journal.status')] : []),
-                ],
-                (rows || []).map((r) => [
-                  r.date ? formatReportDate(r.date) : '',
-                  r.reference,
-                  r.description,
-                  ...(isOhada ? [r.account_code || ''] : []),
-                  nameOf({ name_en: r.account_name_en, name_fr: r.account_name_fr }),
-                  r.narration || '',
-                  ...amountColumns.map((column) => amount(r, column.key)),
-                  ...(!cashbook ? [r.source, r.status] : []),
-                ]),
-                reportCsvHeader({ organization: org, title: reportTitle, framework: org.framework, period, generatedAt, t })
-              )
-            }}
+            onClick={() =>
+              downloadCsv(exportData.filename, exportData.header, exportData.data, exportData.meta)
+            }
             className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
           >
             ⬇ {t('common.downloadCsv')}
           </button>
+          <button
+            type="button"
+            disabled={!rows || rows.length === 0}
+            onClick={() =>
+              downloadExcel(exportData.filename, exportData.header, exportData.data, exportData.meta)
+            }
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          >
+            📊 {t('common.downloadExcel')}
+          </button>
+          <button
+            type="button"
+            disabled={!rows || rows.length === 0}
+            onClick={exportPdf}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          >
+            📄 {t('common.downloadPdf')}
+          </button>
         </div>
+        <p className="no-print mt-1 text-xs text-slate-400">{t('common.printTip')}</p>
         <p className="no-print mt-1 text-sm text-slate-500">
           {cashbook ? t('cashbook.subtitle') : t('journal.subtitle')}
         </p>

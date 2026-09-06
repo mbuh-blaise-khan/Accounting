@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-      "scripts": {
+  "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
@@ -11,11 +11,14 @@
     "test:txn": "node src/utils/txnCalculations.test.mjs",
     "test:reports": "node src/utils/report.test.mjs",
     "test:financial": "node src/utils/financial.test.mjs",
+    "test:excel": "node src/utils/excel.test.mjs",
     "test:profile": "node src/utils/profile.test.mjs"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

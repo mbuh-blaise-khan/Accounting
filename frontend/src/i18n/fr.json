@@ -355,7 +355,10 @@
 
   "common.loading": "Chargement…",
   "common.downloadCsv": "Télécharger en CSV",
+  "common.downloadExcel": "Télécharger en Excel",
+  "common.downloadPdf": "Télécharger en PDF",
   "common.print": "Imprimer",
+  "common.printTip": "Astuce : pour des pages imprimées plus propres, ouvrez les paramètres de la boîte de dialogue d'impression du navigateur et désactivez les « En-têtes et pieds de page » — l'URL, la date et les numéros de page sont ajoutés par votre navigateur et ne peuvent pas être supprimés par cette application.",
   "report.business": "Entreprise",
   "report.title": "Rapport",
   "report.period": "Période",

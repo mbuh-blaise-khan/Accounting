@@ -218,6 +218,14 @@ Verification evidence:
 - [x] Math completely unchanged: additive payload fields only (`statement_kind`, result labels); totals/sections/balance identity untouched. Backend tests assert identical `net_result` across purpose variants.
 - [x] Tests: backend `test_non_profit_and_ngo_purpose_get_income_expenditure_terminology` + `test_for_profit_and_government_keep_standard_terminology` (both languages, both frameworks via OHADA+IFRS scenarios); frontend 3 new presentation checks (surplus EN+FR, deficit, bottom-line row label) → suite totals: backend 111 passed, frontend 17 checks, build green.
 
+### Addendum — Excel + backend PDF export, print tip, report polish
+- [x] EXCEL: "Download Excel" on Journal (and Cash Book, which reuses JournalPage), General Ledger, Trial Balance, and both Financial Statements views — real .xlsx via `exceljs` (bold headers, `#,##0.00` number columns, shaded section rows), framework-aware columns identical to CSV (OHADA: N° compte; IFRS: omitted). Tests: `npm run test:excel` (4 checks — workbook structure + data) RC=0.
+- [x] PDF: backend-generated via **reportlab** (chosen over WeasyPrint: no native-library dependencies, precise table control). New endpoints `GET /reports/pdf/{journal,ledger,trial-balance,income-statement,financial-position}` render a branded, professionally laid-out document (business name, framework, period/as-of, generated-at; defined type scale; bold section rows; right-aligned amounts; app-controlled page headers/footers — no browser URL/timestamp artifacts). Tests: `test_pdf_export.py` asserts `%PDF` magic bytes + framework-correct names for BOTH OHADA and IFRS.
+- [x] Print tip (honest limitation): note near every Print button that browsers inject headers/footers page CSS cannot remove — untick "Headers and footers" in the print dialog for the cleanest page; the backend PDF is the artifact-free alternative.
+- [x] UI polish: export toolbars (CSV / Excel / PDF) unified across all five reports within the existing Tailwind system.
+- [x] Full verification: backend **114 passed** RC=0, `test:financial` 17 checks RC=0, `test:excel` 4 checks RC=0, build **65 modules** RC=0.
+
+## Session 11 — Learning Engine (basic) — MVP complete
 ## Session 11 — Learning Engine (basic) — MVP complete
 - [ ] Tables: lessons, lesson_sections, questions, answers, attempts, progress (no AI)
 - [ ] Seed 3–5 plain-language lessons (basics, accounting equation, debit/credit, journal entries, reading a trial balance) in English and French

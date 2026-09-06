@@ -27,9 +27,16 @@
 // CSV + print reuse the shared report pattern (csvExport.js, ReportHeader,
 // @media print classes) exactly like Journal/Cash Book/Ledger/Trial Balance.
 import { Fragment, useEffect, useState } from 'react'
-import { fetchFinancialPosition, fetchIncomeStatement } from '../services/api.js'
+import {
+  fetchFinancialPosition,
+  fetchFinancialPositionPdf,
+  fetchIncomeStatement,
+  fetchIncomeStatementPdf,
+} from '../services/api.js'
 import { useLanguage } from '../i18n/index.jsx'
 import { downloadCsv } from '../utils/csvExport.js'
+import { downloadExcel } from '../utils/excelExport.js'
+import { downloadBlob } from '../utils/downloadBlob.js'
 import ReportHeader from '../components/ReportHeader.jsx'
 import {
   formatReportDate,
@@ -110,8 +117,8 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
     ? lang === 'fr' ? position.statement_name_fr : position.statement_name_en
     : isOhada ? t('fs.tabPositionOhada') : t('fs.tabPosition')
   const currentTitle = view === 'income' ? incomeTitle : positionTitle
-  function exportCsv() {
-    if (!income || !position) return
+  function exportData() {
+    if (!income || !position) return null
     const period =
       view === 'income' && from
         ? `${t('report.period')}: ${formatReportDate(from) || '—'} – ${formatReportDate(asOf) || '—'}`
@@ -126,12 +133,28 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
     })
     if (view === 'income') {
       const { headerRows, rows } = incomeCsvParts(income, { t, isOhada, lang })
-      downloadCsv(`income-statement-${asOf}`, headerRows, rows, meta)
-    } else {
-      const { headerRows, rows } = positionCsvParts(position, {
-        t, isOhada, lang, netResult: income.net_result, statementKind: income.statement_kind,
-      })
-      downloadCsv(`financial-position-${asOf}`, headerRows, rows, meta)
+      return { filename: `income-statement-${asOf}`, header: headerRows, rows, meta, period }
+    }
+    const { headerRows, rows } = positionCsvParts(position, {
+      t, isOhada, lang, netResult: income.net_result, statementKind: income.statement_kind,
+    })
+    return { filename: `financial-position-${asOf}`, header: headerRows, rows, meta, period }
+  }
+
+  async function exportPdf() {
+    if (!income || !position) return
+    try {
+      const params = { as_of: asOf, lang }
+      if (view === 'income') {
+        if (from) params.from = from
+        const blob = await fetchIncomeStatementPdf(org.id, params)
+        downloadBlob(blob, `income-statement-${asOf}.pdf`)
+      } else {
+        const blob = await fetchFinancialPositionPdf(org.id, params)
+        downloadBlob(blob, `financial-position-${asOf}.pdf`)
+      }
+    } catch (err) {
+      setError(err.message)
     }
   }
 
@@ -229,14 +252,37 @@ export default function FinancialStatementsPage({ org, onBack, onOpenLedger }) {
             </button>
             <button
               type="button"
-              onClick={exportCsv}
+              onClick={() => {
+                const d = exportData()
+                if (d) downloadCsv(d.filename, d.header, d.rows, d.meta)
+              }}
               disabled={!income || !position}
               className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
             >
               ⬇ {t('common.downloadCsv')}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const d = exportData()
+                if (d) downloadExcel(d.filename, d.header, d.rows, d.meta)
+              }}
+              disabled={!income || !position}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              📊 {t('common.downloadExcel')}
+            </button>
+            <button
+              type="button"
+              onClick={exportPdf}
+              disabled={!income || !position}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              📄 {t('common.downloadPdf')}
+            </button>
           </div>
         </div>
+        <p className="no-print mt-1 text-xs text-slate-400">{t('common.printTip')}</p>
 
         {error && (
           <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">

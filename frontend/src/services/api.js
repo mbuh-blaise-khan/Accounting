@@ -228,4 +228,65 @@ export function fetchFinancialPosition(organizationId, params = {}) {
   return request(`/reports/financial-position?${qs.toString()}`)
 }
 
+/**
+ * GET a report PDF as a Blob (Session 12). Same params as the JSON fetch;
+ * returns the response body as application/pdf bytes so the UI can trigger a
+ * download. Auth/errors handled exactly like `request` (cookie + parseError).
+ */
+async function fetchPdfBlob(path) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'GET',
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw parseError(res, text)
+  }
+  return res.blob()
+}
+
+function pdfParams(organizationId, params = {}) {
+  const qs = new URLSearchParams({ organization_id: organizationId })
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, v)
+  }
+  return qs.toString()
+}
+
+/** GET /reports/pdf/journal?organization_id=&from=&to=&lang= -> Blob */
+export function fetchJournalPdf(organizationId, params = {}) {
+  return fetchPdfBlob(`/reports/pdf/journal?${pdfParams(organizationId, params)}`)
+}
+
+/** GET /reports/pdf/cashbook?organization_id=&from=&to=&type=&lang= -> Blob */
+export function fetchCashBookPdf(organizationId, params = {}) {
+  return fetchPdfBlob(`/reports/pdf/cashbook?${pdfParams(organizationId, params)}`)
+}
+
+/** GET /reports/pdf/ledger/{accountId}?organization_id=&from=&to=&lang= -> Blob */
+export function fetchLedgerPdf(organizationId, accountId, params = {}) {
+  return fetchPdfBlob(
+    `/reports/pdf/ledger/${accountId}?${pdfParams(organizationId, params)}`
+  )
+}
+
+/** GET /reports/pdf/trial-balance?organization_id=&as_of=&from=&columns=&lang= -> Blob */
+export function fetchTrialBalancePdf(organizationId, params = {}) {
+  return fetchPdfBlob(`/reports/pdf/trial-balance?${pdfParams(organizationId, params)}`)
+}
+
+/** GET /reports/pdf/income-statement?organization_id=&from=&as_of=&lang= -> Blob */
+export function fetchIncomeStatementPdf(organizationId, params = {}) {
+  return fetchPdfBlob(
+    `/reports/pdf/income-statement?${pdfParams(organizationId, params)}`
+  )
+}
+
+/** GET /reports/pdf/financial-position?organization_id=&as_of=&lang= -> Blob */
+export function fetchFinancialPositionPdf(organizationId, params = {}) {
+  return fetchPdfBlob(
+    `/reports/pdf/financial-position?${pdfParams(organizationId, params)}`
+  )
+}
+
 export default { fetchHealth }

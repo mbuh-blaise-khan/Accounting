@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import {
   fetchAccounts,
   fetchLedger,
+  fetchLedgerPdf,
   fetchSuggestedAccounts,
   fetchTransactions,
 } from '../services/api.js'
@@ -14,6 +15,8 @@ import { useLanguage } from '../i18n/index.jsx'
 import AccountFilterSelect from '../components/AccountFilterSelect.jsx'
 import TxnStatusBlock from '../components/TxnStatusBlock.jsx'
 import { downloadCsv } from '../utils/csvExport.js'
+import { downloadExcel } from '../utils/excelExport.js'
+import { downloadBlob } from '../utils/downloadBlob.js'
 import ReportHeader from '../components/ReportHeader.jsx'
 import { formatReportDate, formatReportNumber, reportCsvHeader, reportPeriodLabel } from '../utils/reportPresentation.js'
 
@@ -215,7 +218,7 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
 
         {/* Print + export (never printed themselves) */}
         {ledger && (
-          <div className="no-print mt-2 flex justify-end gap-2">
+          <div className="no-print mt-2 flex flex-wrap justify-end gap-2">
             <button
               type="button"
               onClick={() => window.print()}
@@ -269,8 +272,67 @@ export default function GeneralLedgerPage({ org, onBack, initialAccountId = '' }
             >
               ⬇ {t('common.downloadCsv')}
             </button>
+            <button
+              type="button"
+              disabled={!ledger.movements || ledger.movements.length === 0}
+              onClick={() => {
+                const period =
+                  from || to
+                    ? `${t('report.period')} ${formatReportDate(from) || '—'} – ${formatReportDate(to) || '—'}`
+                    : ''
+                const header = [
+                  t('journal.date'),
+                  t('journal.reference'),
+                  t('journal.description'),
+                  ...(isOhada ? [t('journal.accountNo')] : []),
+                  t('ledger.narrationCol'),
+                  t('journal.debit'),
+                  t('journal.credit'),
+                  t('ledger.runningBalance'),
+                ]
+                const rows = (ledger.movements || []).map((m) => [
+                  m.date ? formatReportDate(m.date) : '',
+                  m.reference,
+                  m.description || '',
+                  ...(isOhada ? [ledger.account.code || ''] : []),
+                  m.narration || '',
+                  Number(m.debit) > 0 ? Number(m.debit) : 0,
+                  Number(m.credit) > 0 ? Number(m.credit) : 0,
+                  fmtBalance(m.running_balance),
+                ])
+                downloadExcel(
+                  `ledger-${ledger.account.code || ledger.account.id}-${new Date().toISOString().slice(0, 10)}`,
+                  header,
+                  rows,
+                  reportCsvHeader({ organization: org, title: t('ledger.title'), framework: org.framework, period, generatedAt, t })
+                )
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              📊 {t('common.downloadExcel')}
+            </button>
+            <button
+              type="button"
+              disabled={!ledger.movements || ledger.movements.length === 0}
+              onClick={async () => {
+                try {
+                  const blob = await fetchLedgerPdf(org.id, ledger.account.id, {
+                    from,
+                    to,
+                    lang,
+                  })
+                  downloadBlob(blob, `ledger-${ledger.account.code || ledger.account.id}.pdf`)
+                } catch (err) {
+                  setError(err.message)
+                }
+              }}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              📄 {t('common.downloadPdf')}
+            </button>
           </div>
         )}
+        <p className="no-print mt-1 text-xs text-slate-400">{t('common.printTip')}</p>
 
         {ledger && (
           <>

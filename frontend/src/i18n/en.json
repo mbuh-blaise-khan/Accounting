@@ -355,7 +355,10 @@
 
   "common.loading": "Loading…",
   "common.downloadCsv": "Download CSV",
+  "common.downloadExcel": "Download Excel",
+  "common.downloadPdf": "Download PDF",
   "common.print": "Print",
+  "common.printTip": "Tip: for the cleanest printed pages, open the browser's print dialog settings and disable “Headers and footers” — the URL, date and page numbers are added by your browser and cannot be removed by this app.",
   "report.business": "Business",
   "report.title": "Report",
   "report.period": "Period",

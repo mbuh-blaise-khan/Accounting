@@ -10,6 +10,7 @@ from app.api.routes import (
     journal,
     ledger,
     organizations,
+    pdf_export,
     transactions,
     trial_balance,
     users,
@@ -27,3 +28,4 @@ api_router.include_router(journal.router)
 api_router.include_router(ledger.router)
 api_router.include_router(trial_balance.router)
 api_router.include_router(financial_statements.router)
+api_router.include_router(pdf_export.router)

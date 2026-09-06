@@ -15,9 +15,11 @@
 // scrolling; the 4/6-column views scroll inside the same overflow-x-auto
 // container.
 import { Fragment, useEffect, useState } from 'react'
-import { fetchTrialBalance } from '../services/api.js'
+import { fetchTrialBalance, fetchTrialBalancePdf } from '../services/api.js'
 import { useLanguage } from '../i18n/index.jsx'
 import { downloadCsv } from '../utils/csvExport.js'
+import { downloadExcel } from '../utils/excelExport.js'
+import { downloadBlob } from '../utils/downloadBlob.js'
 import ReportHeader from '../components/ReportHeader.jsx'
 import {
   formatReportDate,
@@ -77,8 +79,8 @@ export default function TrialBalancePage({ org, onBack, onOpenLedger }) {
   const accountCols = reportAccountColumns(isOhada, t)
   const totalColumnCount = accountCols.length + 1 + amountCols.length + 1 // account cols + name + amounts + ledger action
 
-  function exportCsv() {
-    if (!tb) return
+  function exportData() {
+    if (!tb) return null
     // Two header rows mirror the on-screen grouped header: group names above,
     // Debit/Credit below; OHADA carries N° compte, IFRS omits it.
     const groupHeaderRow = [
@@ -102,12 +104,28 @@ export default function TrialBalancePage({ org, onBack, onOpenLedger }) {
       ...amountCols.map((c) => Number(tb.totals[c.key]) || 0),
     ]
     const period = asOf ? `${t('report.asAt')} ${formatReportDate(asOf)}` : ''
-    downloadCsv(
-      `trial-balance-${asOf}`,
-      [groupHeaderRow, subHeaderRow],
-      [...rows, totalsRow],
-      reportCsvHeader({ organization: org, title: t('tb.title'), framework: org.framework, period, generatedAt, t })
-    )
+    return {
+      filename: `trial-balance-${asOf}`,
+      header: [groupHeaderRow, subHeaderRow],
+      rows: [...rows, totalsRow],
+      meta: reportCsvHeader({ organization: org, title: t('tb.title'), framework: org.framework, period, generatedAt, t }),
+      period,
+    }
+  }
+
+  async function exportPdf() {
+    if (!tb) return
+    try {
+      const blob = await fetchTrialBalancePdf(org.id, {
+        as_of: asOf,
+        from,
+        columns: view,
+        lang,
+      })
+      downloadBlob(blob, `trial-balance-${asOf}.pdf`)
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   const inputCls =
@@ -196,7 +214,7 @@ export default function TrialBalancePage({ org, onBack, onOpenLedger }) {
         )}
 
         {tb && (
-          <div className="no-print mt-3 flex justify-end gap-2">
+          <div className="no-print mt-3 flex flex-wrap justify-end gap-2">
             <button
               type="button"
               onClick={() => window.print()}
@@ -206,14 +224,37 @@ export default function TrialBalancePage({ org, onBack, onOpenLedger }) {
             </button>
             <button
               type="button"
-              onClick={exportCsv}
+              onClick={() => {
+                const d = exportData()
+                if (d) downloadCsv(d.filename, d.header, d.rows, d.meta)
+              }}
               disabled={tb.rows.length === 0}
               className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
             >
               ⬇ {t('common.downloadCsv')}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const d = exportData()
+                if (d) downloadExcel(d.filename, d.header, d.rows, d.meta)
+              }}
+              disabled={tb.rows.length === 0}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              📊 {t('common.downloadExcel')}
+            </button>
+            <button
+              type="button"
+              onClick={exportPdf}
+              disabled={tb.rows.length === 0}
+              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              📄 {t('common.downloadPdf')}
+            </button>
           </div>
         )}
+        <p className="no-print mt-1 text-xs text-slate-400">{t('common.printTip')}</p>
 
         {tb && (
           <div className="report-table mt-2 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
