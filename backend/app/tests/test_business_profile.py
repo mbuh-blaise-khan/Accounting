@@ -499,6 +499,37 @@ def test_company_description_enforces_1000_char_max(client):
     assert _get(client, org["id"])["company_description"] == ok
 
 
+def test_modified_accounting_basis_saves_and_loads(client):
+    """The 'modified' accrual basis value can be saved and retrieved, and the
+    default ('accrual') is unaffected on orgs that never set it."""
+    _register(client, email="mod@example.com", name="Mod")
+    org = _create_org(client)
+    r = _patch(
+        client, org["id"],
+        registered_address="Bonanjo, Douala, Cameroon", accounting_basis="modified",
+    )
+    assert r.status_code == 200
+    assert r.json()["accounting_basis"] == "modified"
+    got = _get(client, org["id"])
+    assert got["accounting_basis"] == "modified"
+    # Default is unaffected on orgs that never set it
+    _register(client, email="dflt@example.com", name="Dflt")
+    org2 = _create_org(client, name="Dflt Co")
+    assert _get(client, org2["id"])["accounting_basis"] == "accrual"
+
+
+def test_modified_accounting_basis_has_zero_effect(client):
+    """'modified' basis, like accrual/cash, changes no accounting computation."""
+    _register(client, email="modzero@example.com", name="ModZero")
+    org = _create_org(client)
+    r = _patch(
+        client, org["id"],
+        registered_address="Bonanjo, Douala, Cameroon", accounting_basis="modified",
+    )
+    assert r.status_code == 200
+    assert r.json()["accounting_basis"] == "modified"
+
+
 def test_accounting_basis_has_zero_effect_on_calculations(client):
     """Proof that accounting_basis is INFORMATIONAL ONLY: posting the same
     transactions twice (once under accrual, once under cash) yields BYTE-FOR-

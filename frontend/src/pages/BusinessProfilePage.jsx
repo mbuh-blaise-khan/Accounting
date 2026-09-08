@@ -522,6 +522,7 @@ export default function BusinessProfilePage({ org, onBack, onSaved, onDone, mand
           {[
             { value: 'accrual', label: t('bp.basisAccrual'), hint: t('bp.basisAccrualHint') },
             { value: 'cash', label: t('bp.basisCash'), hint: t('bp.basisCashHint') },
+            { value: 'modified', label: t('bp.basisModified'), hint: t('bp.basisModifiedHint') },
           ].map((opt) => (
             <label
               key={opt.value}

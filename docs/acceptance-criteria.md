@@ -225,7 +225,14 @@ Verification evidence:
 - [x] UI polish: export toolbars (CSV / Excel / PDF) unified across all five reports within the existing Tailwind system.
 - [x] Full verification: backend **114 passed** RC=0, `test:financial` 17 checks RC=0, `test:excel` 4 checks RC=0, build **65 modules** RC=0.
 
-## Session 11 — Learning Engine (basic) — MVP complete
+### Addendum — "Modified" accounting basis option
+- [x] `AccountingBasis` enum gains `modified = "modified"` with a docstring: informational metadata only, does NOT implement GASB fund accounting (out of scope), does not change any posting/ledger/statement calculation.
+- [x] No DDL migration: migration 0013 uses `sa.String(20)` (VARCHAR, not a native PG enum), so adding a Python enum member is a code-only change — Pydantic validation picks it up automatically.
+- [x] Frontend `BusinessProfilePage`: third radio option "Modified" with a plain-language hint ("A hybrid approach mixing cash and accrual rules, commonly used by governments and nonprofits"). Optional, does not block saving.
+- [x] i18n: `bp.basisModified` / `bp.basisModifiedHint` in both `en.json` and `fr.json` (French: "Modifié" / "Une approche mixte combinant les règles de trésorerie et d'engagement...").
+- [x] Selection is independent of `org_purpose` (not auto-forced) — the user may choose any basis regardless of organization type.
+- [x] Tests: `test_modified_accounting_basis_saves_and_loads` (round-trips, default unaffected) and `test_modified_accounting_basis_has_zero_effect` (no computation change).
+- [x] Hotfix (verified): both tests initially failed (`TypeError: cannot unpack non-iterable Response object` — they unpacked `_register()`'s HTTP response as a 3-tuple). Fixed to the file's standard pattern (`_register` → `_create_org` → `_patch`/`_get`). `reportlab>=4.2` confirmed present in `backend/requirements.txt`. Full suite: **116 passed, RC=0**.
 ## Session 11 — Learning Engine (basic) — MVP complete
 - [ ] Tables: lessons, lesson_sections, questions, answers, attempts, progress (no AI)
 - [ ] Seed 3–5 plain-language lessons (basics, accounting equation, debit/credit, journal entries, reading a trial balance) in English and French

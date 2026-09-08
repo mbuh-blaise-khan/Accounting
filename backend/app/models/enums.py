@@ -79,6 +79,12 @@ class OrgPurpose(str, enum.Enum):
 
 
 class AccountingBasis(str, enum.Enum):
+    # "modified" = modified accrual basis: a real, recognized hybrid method
+    # (mixing cash and accrual rules) used mainly by GOVERNMENT and NON-PROFIT
+    # entities. It is an informational label of the organization's stated
+    # practice only — selecting it does NOT implement GASB fund accounting
+    # (explicitly out of scope) and does not change any calculation.
+    modified = "modified"
     """Accounting basis. INFORMATIONAL METADATA ONLY: this value MUST NOT
     change any posting, ledger, or statement calculation. Accrual is the
     default; the title of a basis never rewrites how the engine posts a

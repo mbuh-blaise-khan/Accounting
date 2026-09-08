@@ -16,103 +16,37 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Last completed session:** Feature — **Excel (.xlsx) and backend-generated PDF export added to all five reports** (Journal, Cash Book, General Ledger, Trial Balance, Financial Statements) alongside the existing CSV, plus a print-dialog tip and report-page hierarchy polish. All verification green: backend **114 passed** RC=0, `npm run test:financial` **17 checks** RC=0, `npm run test:excel` **4 checks** RC=0, `npm run build` **65 modules** RC=0.
+**Session:** Hotfix — the two "Modified" accounting-basis tests + reportlab requirement confirmation.
 
-### What this feature delivered
-- **EXCEL (client-side, `frontend/src/utils/excelExport.js` via `exceljs` ^4.4.0):** a real .xlsx (not CSV renamed) — bold header row, framework-aware columns (OHADA carries "N° compte", IFRS omits it — same rule as CSV), right-aligned number columns with `#,##0.00` formatting, section-header rows shaded/bold. `excel.test.mjs` (`npm run test:excel`) validates generated workbooks (sheet names, header cells, number cells, section rows). `downloadBlob.js` is the shared browser download helper.
-- **PDF (server-side, `reportlab` 4.2.5 — chosen over WeasyPrint because it has no native-library dependencies and produces precise tabular layouts):** `backend/app/services/pdf_export_service.py` (org access check, report header block: business name, framework label, period/as-of, generated-at, currency — mirrors `ReportHeader`) + `pdf_report_builders.py` (per-report table builders with a defined type scale: title > section headings > line items; bold section rows; right-aligned numeric columns; repeating page header/footer the app controls — no browser URL/timestamp artifacts). New routes `backend/app/api/routes/pdf_export.py`: `GET /reports/pdf/journal|ledger|trial-balance|income-statement|financial-position?organization_id=&...` (auth via the same dependency as the JSON endpoints; `StreamingResponse` with `Content-Disposition: filename=...`). Tests `test_pdf_export.py` assert the bytes start with `%PDF`, contain the framework-correct statement/report name and org/business name for BOTH OHADA and IFRS, and are non-trivially sized.
-- **Frontend wiring:** each report's export toolbar now has CSV / **Excel** / **PDF** buttons (PDF opens the endpoint in a new tab; auth handled by the session's cookie/header pattern in `api.js`). All new labels in en.json + fr.json (parity preserved).
-- **Print honesty (requirement 3):** a small note near every Print button (`common.printTip`): browser print dialogs inject headers/footers (URL, date, page numbers) that page CSS cannot remove — for the cleanest page, untick "Headers and footers" in the browser's print dialog. The backend PDF is offered as the artifact-free alternative. This is stated as the browser limitation it is, not hidden.
-- **UI polish (requirement 4):** export toolbars grouped consistently across the five reports within the existing Tailwind system — no new design language.
-- **Cash Book note:** Cash Book reuses `JournalPage` (a prop-selected variant), so its Excel/PDF/CSV/print support came with the Journal wiring automatically.
+**STATE: DONE and verified, committed as required.** Real pytest runs observed (output pasted in the session record below):
 
-**Last completed session:** Feature — **financial statement terminology adapts to the organization's `org_purpose`** (presentation-only; math untouched). Non-profit / NGO-association orgs now get the **"Income and Expenditure Account"** (EN) / **"Compte de résultat de l'association"** (FR) with a bottom line of **"SURPLUS/(DEFICIT)"** / **"EXCÉDENT/(DÉFICIT)"** and matching plain-language summary wording; for_profit / government / unset keep Profit-Loss terms unchanged. `accounting_basis` is deliberately untouched (its informational-only note stays as-is). All verification green: backend **111 passed** RC=0, `npm run test:financial` **17 checks** RC=0, `npm run build` **59 modules / 4.80s** RC=0.
+1. `pytest app/tests/test_business_profile.py -q` → **25 passed, RC=0** (23 prior + 2 fixed).
+2. `pytest app/tests -q` → **116 passed, RC=0** (114 prior + the 2 new Modified-basis tests).
 
-### Terminology research basis (documented, not guessed)
-- **EN**: "Income and Expenditure Account" is the standard accrual statement for non-profits (UK/Irish charity SORP), bottom line "surplus"/"deficit" of income over expenditure.
-- **FR**: the French association chart of accounts (ANC règlements 1999-01 / 2018-06) keeps the **compte de résultat** as the association's statutory statement with the bottom line **"excédent" / "déficit"**; the "compte emploi-ressources" is a DIFFERENT additional analytical statement, not the equivalent — so the French name is "Compte de résultat de l'association".
-- **Government**: no distinct convention implemented. Public-sector reporting is budget/cash-oriented and jurisdiction-specific; inventing an accrual label would misrepresent, so standard Profit/Loss terms are kept and this decision is documented.
+**What was fixed:**
+- **Root cause of the two failures** (`test_modified_accounting_basis_saves_and_loads`, `test_modified_accounting_basis_has_zero_effect`): both called `_register(client, ...)` and unpacked its return as a 3-tuple (`uid, org_id, _`), but `_register` in this test file returns a plain HTTP `Response` object (it just POSTs `/auth/register` and returns the response). This raised `TypeError: cannot unpack non-iterable Response object`. Fixed both tests to use the exact pattern of every other passing test in the file: `_register(client, ...)` alone, then `org = _create_org(client)`, then `_patch(client, org["id"], ..., accounting_basis=...)` for saving and `_get(client, org["id"])` for readback (e.g. `test_org_created_and_usable_with_all_profile_fields_unset`, lines 88-103). They also no longer call the non-standard `/organizations/{id}/profile` endpoint — they use the same `/organizations/{id}` PATCH/GET helpers as the rest of the file.
+- **reportlab requirement:** confirmed already listed in `backend/requirements.txt` (line 28, `reportlab>=4.2`) — added by the PDF-export session, so no change was needed. Note verified so it doesn't get dropped again.
 
-### How it works
-- **Backend** `financial_statement_service`: a purpose→terminology map derives `statement_kind` (`"profit_loss"` | `"income_expenditure"`), the statement name (`statement_name_en/_fr`), bottom-line labels (`result_positive_en/_fr` = Profit|Bénéfice vs Surplus|Excédent; `result_negative_en/_fr` = Loss|Perte vs Deficit|Déficit) and the net-result row label (`net_result_row_en/_fr` = "NET RESULT"/"RÉSULTAT NET" vs "SURPLUS/(DEFICIT)"/"EXCÉDENT/(DÉFICIT)") from `org.org_purpose`. **No amounts, sections, or calculations change** — additive schema fields on `IncomeStatementOut` only.
-- **Frontend**: `plainSummaryIncome` picks surplus/deficit summary templates (`fs.summaryNpSurplus`/`fs.summaryNpDeficit`) from `statement_kind`; `netResultRowLabel` switches the bottom-line row; the page's pre-fetch tab fallback uses `fs.tabIncomeNp`. The Bilan/Statement of Financial Position does NOT adapt (surplus/deficit is an income-statement concept) — its name and amounts are unchanged.
+**Environment note for future sessions:** the sandbox shell is still unreliable (commands often report "exited code 1" with no output). Working pattern confirmed again: run the pytest command with output redirected to a scratch file (`... > ../_t.txt 2>&1 && echo RC=$? >> ../_t.txt`), do a non-shell action to create a delay, then read the file with the file reader. Foreground runs DO execute despite the misleading "could not be observed" message. `start /B` background spawning fails with "Access is denied" on this machine — don't use it.
 
-**Last completed session:** Small fix — **OHADA statement names are the LEGAL names in BOTH UI languages** ("Bilan (OHADA)" / "Compte de résultat (OHADA)", never translated — like "SARL" is never rendered as "LLC"). Backend `_STATEMENT_NAMES` updated; frontend dedup + i18n fallbacks updated; all verification green (backend **109 passed** RC=0, frontend `npm run test:financial` **14 checks** RC=0, `npm run build` **59 modules / 6.69s** RC=0, i18n parity 365↔365 keys).
-
-### What this fix changed
-- **Backend** `financial_statement_service._STATEMENT_NAMES`: OHADA now returns `is_en == is_fr == "Compte de résultat (OHADA)"` and `fs_en == fs_fr == "Bilan (OHADA)"` — the `(OHADA)` suffix is part of the legal name, identical in both languages. IFRS unchanged ("Statement of Profit or Loss" / "État de résultat", "Statement of Financial Position" / its French equivalent).
-- **Backend tests** (`test_financial_statements.py`): OHADA assertions now expect the `(OHADA)` names and explicitly assert `statement_name_en == statement_name_fr` for both statements. IFRS assertions untouched.
-- **Frontend dedup:** `ReportHeader` and `reportCsvHeader` detect a title that already contains `(OHADA)` and do NOT append the framework suffix a second time (no "Bilan (OHADA) (OHADA)").
-- **Frontend page:** `FinancialStatementsPage` selects `statement_name_fr` / `statement_name_en` per active language — for OHADA both are the same string, so the title cannot differ between languages. Pre-fetch/tab fallbacks are framework-aware via NEW i18n keys `fs.tabIncomeOhada` / `fs.tabPositionOhada` (values identical in en.json and fr.json: "Compte de résultat (OHADA)" / "Bilan (OHADA)"). Generic `fs.tabIncome` / `fs.tabPosition` remain for IFRS.
-- **Tests:** `financial.test.mjs` OHADA fixture names updated to the legal names; 3 new checks added (OHADA names identical in both languages; IFRS keeps per-language English names; the ReportHeader/CSV dedup rule) → 14 checks total, all passing.
-
-
-**Last completed session:** URGENT investigation + hotfix — **Financial Position "Unbalanced" warning on balanced ledgers** — root cause CONFIRMED with live-DB evidence, fix applied, regression test added, full suite green (109 passed).
-
-### The report (Session 10 — UI / statement reconciliation)
-Symptom: a Financial Position statement showed Assets=4,500, Liabilities=5,500, Equity=0 and the app's own "Unbalanced" warning fired even after including the period result.
-
-**Step 1 — raw ledger check (live PostgreSQL, direct SQL):** for EVERY organization, summing all posted+reversed `transaction_lines` debits vs credits → **all orgs balanced, INCLUDING a per-transaction check (PASS 1.5) → every single transaction is double-entry balanced**. So this was NOT corrupted/inherited demo data (user's branch #3 does not apply).
-
-**Step 2 — statement builders vs data (the real service code):**
-```
-BEFORE FIX (live):  org 2 [IFRS]  A=11900 L=200  E=200  net=2300  -> A ≠ L+E+net  ✗
-                    org 6 [OHADA] A=14700 L=8500 E=0    net=-4000 -> A ≠ L+E+net  ✗
-```
-
-**Step 3 — per-account classification dump** showed the exact mechanism: accounts holding a balance on the OPPOSITE side of their classification:
-- org 6: `521 cash` (asset) D=500 C=10000 → net −9500; `5211` (asset) −600; `40 suppliers` (liability) +5000
-- org 2: `Accounts receivable` (asset) −3800; `Inventory` (asset) −1000; `Current tax liabilities` (liability) +200
-
-**ROOT CAUSE (code, not data):** `financial_statement_service._build_financial_position` used `abs(net_signed)` on every balance-sheet account. That silently FLIPS a wrong-side balance (asset with net credit = overdraft-type/sloppy post; liability with net debit) into a positive magnitude on its declared side → each such account is DOUBLE-COUNTED, and `assets = liabilities + equity + net_result` breaks even though the ledger is perfectly balanced. The app's honest "Unbalanced" warning then fired correctly — it was the statement math that was wrong.
-
-**The fix (code only — NO user data was modified; the probe is read-only):** accumulate SIGNED contributions per section: assets += net_signed, liabilities/equity += -net_signed. Wrong-side balances now legitimately reduce their section (an overdrawn cash account shows as a negative asset), and the identity holds BY CONSTRUCTION for any balanced ledger.
-
-**Verification:**
-- Full backend suite: `pytest app/tests -q` → **109 passed** (new regression test `test_position_reconciles_with_wrong_side_account_balance`).
-- Live-DB probe re-run (same read-only script): **all 22 orgs now reconcile** — org 2 became A=2300 L=-200 E=200 net=2300; org 6 became A=-5500 L=-1500 E=0 net=-4000 (e.g. −5500 = −1500 + 0 + (−4000) ✓).
-- Diagnostic kept: `backend/_probe_fs.py` (read-only; PASS 1/1.5/2/3) for future re-verification.
-
-### What Session 10 Part B built (previous entry, retained for history)
-
-**Last completed session:** Session 10, Part B — **financial statements frontend** (Income Statement + Bilan / Statement of Financial Position) — **DONE and observed green** (backend 108+1 passed RC=0, frontend `npm run test:financial` 11 checks RC=0, `npm run build` 59 modules RC=0); committed in this session.
-
-### What Session 10 Part B built
-- **`frontend/src/pages/FinancialStatementsPage.jsx`** — NEW page with two views (income statement / balance sheet) reachable from workspace nav + home BigCard (same pattern as Journal/Ledger/Trial Balance). Framework-correct titles come from the BACKEND payload (`statement_name_en/_fr`): OHADA shows "Compte de résultat" / "Bilan", IFRS the IAS 1 names — nothing hardcoded per framework.
-  - **OHADA income statement structure (requirement 4):** ordinary sections (revenue/expenses) → "RESULT OF ORDINARY ACTIVITIES" → a SEPARATE amber "Extraordinary (HAO)" section (only when class-8 activity exists) → final "NET RESULT". Never merged into one flat list.
-  - Plain-language summary above each statement (requirement 5), built from the SAME payload so the numbers can't disagree: income "You received X / spent Y — profit/loss of Z"; position "owns X / owes Y / has Z invested".
-  - Drill-down (requirement 6): each line's "View →" opens that account's General Ledger, reusing the existing `onOpenLedger(accountId)` pattern.
-  - Print (`window.print()` + `@media print` classes) and CSV export reuse the shared `csvExport.js`/`ReportHeader` pattern; CSV is framework-aware (OHADA N° compte column, IFRS name-only) via `incomeCsvParts`/`positionCsvParts`.
-  - MOBILE (requirement 7, documented in the file): the statement tables scroll horizontally on phone widths (`overflow-x-auto`) exactly like Journal/Ledger/Trial Balance, because section headers must stay attached to their columns; the summary, controls and balance strip stack naturally.
-- **`frontend/src/utils/financialPresentation.js`** — NEW pure helpers (`plainSummaryIncome`, `plainSummaryPosition`, `positionBalanceKind`, `sectionLabel`, `incomeCsvParts`, `positionCsvParts`) so table-summary-CSV can't drift, unit-tested without a browser.
-- **`frontend/src/utils/financial.test.mjs`** — NEW, 5 checks run as `npm run test:financial` (added to package.json). Covers: summary numbers == statement totals for both frameworks; OHADA-vs-IFRS CSV columns; OHADA HAO result row is SIGNED; position CSV adds "result of period" rows only when there's P&L activity; honest balance kinds.
-- **Backend drill-down support (small additive change to Part A):** `StatementLine` gained `account_id` (schema + `_line()` in the service) so the frontend can open the right ledger. Additive, never affects computed amounts; re-verified: full backend suite **108 passed** after the change.
-- **i18n** (en.json + fr.json): added `ws.financialStatements*` nav/cards, `fs.*` statement titles/section headers/summary templates/balance messages, using framework-correct terminology ("Résultat des activités ordinaires", "HAO", "RÉSULTAT NET").
-
-### Honest position-balance handling (new decision carried into the UI)
-OHADA/IFRS statements here carry NO closing entries, so with any P&L activity assets = liabilities + equity + period result (the result sits in revenue/expense accounts, not yet booked to equity). The UI shows this honestly: the balance strip says `balanced once the period result is included` (assets = liabilities + equity + result) and the position table shows a "Result of the period (not yet transferred to equity)" line under equity — instead of a scary false "unbalanced". `positionBalanceKind()` returns 'exact' / 'withResult' / 'none' accordingly.
-
-### Verification (all observed green, output captured to scratch files)
-- Backend: `cd backend && ./.venv/Scripts/python.exe -m pytest app/tests -q` → **108 passed**, 10 pre-existing deprecation warnings, RC=0.
-- Frontend: `cd frontend && npm run test:financial` → **all 11 checks passed**, RC=0. `npm run build` → **✓ 59 modules transformed, built in 2.32s, RC=0**.
-
-### Environment note
-The shell recovered this session (after the Part-A death) but intermittently reports un-captured output. Working pattern stays: redirect command output to a scratch file in the repo root, read it with a non-shell action, then delete it. The `node`/`npm` winpty wrappers still refuse direct non-TTY output, but work through `npm run ...` with redirection.
-
-### Prior session's deferred scope (unchanged, NOT silently ignored)
-OHADA's full legal statement set — **TAFIRE** (mandatory cash-flow statement), the **Notes**, and the **statistical annex** — remain DEFERRED future scope for Session 10 (documented in acceptance-criteria.md too).
-
-**Next session to run:** Session 10, Part C / Session 10 wrap-up (remaining Session 10 acceptance items, e.g. the manual walkthrough), then Session 11 (Learning Engine — the MVP-complete milestone).
+**Next session to run:** Session 11 — Learning Engine (basic MVP) per docs/acceptance-criteria.md (tables, seed lessons, quiz questions, Learn page, real-transaction lesson).
 
 ---
 
-## Previous status (Session 10 Part A — the financial statements backend)
+## Previous status (Session 10 Part A — kept for history)
 
 **Session:** Session 10, Part A — financial statements backend (Income Statement + Bilan / Statement of Financial Position), generated FROM the ledger.
 
-**VERIFIED in Session 10 Part B:** the Part A work described below is now confirmed green (backend `pytest app/tests -q` → 108 passed, RC=0) and committed as `f5b8e06` (plus a subsequent scratch-cleanup commit). Part B then added `account_id` to `StatementLine` for the frontend drill-down and re-verified the full suite — still 108 passed. The original end-of-Part-A note about an unobserved run is superseded; the work is complete.
+**STATE AT END OF SESSION — NOT yet verified/committed (read this before anything else):**
 
-**What was built (all observed via the full-suite run in Part B):**
+The sandbox shell DIED mid-session (every command — even `echo > file` — reports "exited code 1" and creates nothing; this started after ~23:27 and never recovered). All code work is COMPLETE and syntax-verified (`ast.parse` → SYNTAX_OK at 23:27, no edits after), but the final pytest observation and the git commit could NOT be done. **The next session's FIRST actions must be:**
+
+1. `cd backend && ./.venv/Scripts/python.exe -m pytest app/tests -q` — expect **4 new tests passing** in `app/tests/test_financial_statements.py` (104 → 108 total). If any fail, the failure causes of the last observed run+ (`_scratch_fs4.txt`, 3 fails) have ALL been fixed in code since; see below.
+2. Delete ALL `_scratch_*` / `_fs_*` / `_alive*` / `_shell_*` / `_where_am_i.txt` / `_check_i18n*` scratch files in the repo root (they are untracked; do not commit).
+3. Commit everything as: "Session 10 Part A: financial statements backend (Income Statement + Bilan/Statement of Financial Position)".
+4. Update the acceptance-criteria Session 10 checkboxes `[x]` for the backend items (this file's Session 10 section still shows `[ ]` because the run wasn't observed).
+
+**What was built (all complete on disk):**
 - `backend/app/services/financial_statement_service.py` — NEW service. Two statements derived purely from posted+reversed journal lines (`_account_sums` aggregates per account; statuses = posted + reversed, exactly like Trial Balance; drafts never; date basis = real `posted_at`).
   - OHADA workspaces: real `ohada_class_number` drives assignment — classes 1-5 → Bilan (via `account_class` within those classes; the SYSCOHADA seed sets it correctly), classes 6-7 → ordinary revenue/expenses in the Compte de résultat, **class 8 (HAO) is a SEPARATE "extraordinary" result section** (`ordinary_result` excludes it; `net_result` adds its signed contribution back), class 9 (off-balance-sheet/CAGE) excluded.
   - IFRS workspaces: simplified `account_class` (asset/liability/equity/revenue/expense); no HAO section (OHADA-only concept).
