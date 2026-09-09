@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext.jsx'
 import { LanguageProvider, useLanguage } from './i18n/index.jsx'
 import LanguageToggle from './components/LanguageToggle.jsx'
@@ -26,38 +26,46 @@ function AppShell() {
   const goLogin = () => setView('login')
   const goRegister = () => setView('register')
 
-  // After authentication, check if the user has any workspaces.
-  // If not, show the 3-Tier Choice Screen.
-  const checkWorkspaces = async () => {
+  // Fetch organizations — stable via useCallback so it can be a useEffect dependency.
+  const loadOrgs = useCallback(async () => {
     setOnboardingState((s) => ({ ...s, orgs: null }))
     try {
       const orgs = await fetchOrganizations()
-      setOnboardingState((s) => ({ ...s, orgs }))
+      setOnboardingState((s) => ({ ...s, orgs: orgs || [] }))
     } catch {
       setOnboardingState((s) => ({ ...s, orgs: [] }))
     }
-  }
+  }, [])
+
+  // Trigger org check ONLY when auth status changes to 'authed', not on every render.
+  const [prevStatus, setPrevStatus] = useState(status)
+  useEffect(() => {
+    if (status === 'authed' && prevStatus !== 'authed') {
+      loadOrgs()
+    }
+    if (status !== 'authed') {
+      setOnboardingState({ orgs: null, choice: null, learnLessonId: null })
+    }
+    setPrevStatus(status)
+  }, [status, prevStatus, loadOrgs])
 
   // Handle the user's choice from the onboarding screen
-  const handleChoice = async (choiceId, meta = {}) => {
+  const handleChoice = useCallback(async (choiceId, meta = {}) => {
     if (choiceId === 'learn') {
-      // Learn mode — no workspace needed, go straight to lessons
       setOnboardingState((s) => ({ ...s, choice: choiceId }))
     } else if (choiceId === 'practice') {
-      // Practice mode — let the user create/select a workspace via DashboardPage
       setOnboardingState((s) => ({ ...s, choice: choiceId }))
     } else if (choiceId === 'both') {
-      // Both mode — auto-created a demo workspace, now show dashboard
       if (meta.workspace) {
         setOnboardingState((s) => ({ ...s, choice: choiceId, orgs: [meta.workspace] }))
       } else {
         setOnboardingState((s) => ({ ...s, choice: choiceId }))
       }
     }
-  }
+  }, [])
 
-  // "Show me around" — auto-create a demo workspace with sample data
-  const handleShowMeAround = async () => {
+  // "Show me around" — auto-create a demo workspace
+  const handleShowMeAround = useCallback(async () => {
     try {
       const org = await createOrganization({
         name: `${t('demo.workspaceName')} - ${new Date().toLocaleDateString()}`,
@@ -67,17 +75,14 @@ function AppShell() {
       })
       setOnboardingState((s) => ({ ...s, choice: 'both', orgs: [org] }))
     } catch {
-      // Fallback: just show the dashboard
       setOnboardingState((s) => ({ ...s, choice: 'both', orgs: [] }))
     }
-  }
+  }, [t])
 
   // Protected: the Dashboard only renders when authenticated.
   if (status === 'authed') {
-    // First, check if we need to show the onboarding choice screen
+    // If still loading organizations, show a spinner (no setState in render body).
     if (onboardingState.orgs === null) {
-      // Trigger workspace check on first render
-      checkWorkspaces()
       return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center">
           <p className="text-slate-500">{t('common.loading')}</p>
@@ -85,7 +90,7 @@ function AppShell() {
       )
     }
 
-    // If user has no workspaces and hasn't made a choice yet, show the choice screen
+    // If user has no workspaces and hasn't made a choice yet, show the choice screen.
     if (onboardingState.orgs.length === 0 && !onboardingState.choice) {
       return (
         <OnboardingChoicePage
@@ -95,7 +100,7 @@ function AppShell() {
       )
     }
 
-    // If user chose "learn" (no workspace), show the Learn page
+    // If user chose "learn" (no workspace), show the Learn page.
     if (onboardingState.choice === 'learn' && onboardingState.orgs.length === 0) {
       return (
         <div>
@@ -118,7 +123,7 @@ function AppShell() {
       )
     }
 
-    // Otherwise, show the Dashboard (user has workspaces or chose practice/both)
+    // Otherwise, show the Dashboard (user has workspaces or chose practice/both).
     return (
       <div>
         <Header />
@@ -221,4 +226,3 @@ function App() {
 }
 
 export default App
-

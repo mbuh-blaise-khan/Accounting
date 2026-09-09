@@ -16,22 +16,20 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Session:** 3-Tier Choice Screen (Learn / Practice / Both) with modern UI/UX.
+**Session:** Hotfix — infinite render loop on the 3-Tier Choice Screen.
 
 **STATE: DONE and verified, committed as required.** `npm run build` → 69 modules transformed, RC=0.
 
-**What was built:**
-- **New `OnboardingChoicePage.jsx`** — full-screen choice screen with three cards (📚 Learn, 💼 Practice, 🔄 Both), each with icon, description, bullet points, and CTA button. Includes a Callout hint ("Not sure? Start with 'Both'") and a "Show me around" button that auto-creates a demo workspace.
-- **New `Callout.jsx` component** — reusable info/warning/success banner with icon, title, and children.
-- **App.jsx routing** — after login, checks if the user has any workspaces. If none, shows the choice screen instead of forcing immediate workspace creation.
-  - **Learn** → goes straight to `LearnPage` (no workspace needed).
-  - **Practice** → shows `DashboardPage` with `CreateWorkspace` flow (with a contextual banner).
-  - **Both** → auto-creates an OHADA demo workspace and enters it.
-  - **Show me around** → same as "Both".
-- **DashboardPage.jsx** — accepts `forceOnboardingChoice` and `onOnboardingHandled` props to handle the onboarding flow.
-- **i18n** — full `choice.*` and `demo.*` key sets in both `en.json` and `fr.json`.
+**Root cause:** `checkWorkspaces()` was called directly in the render body of `AppShell` (not inside a `useEffect`). Each call invoked `setOnboardingState`, which triggered a re-render, which called `checkWorkspaces()` again — causing an infinite loop of `/organizations` API calls (50+ in seconds) with nothing rendering in the browser.
 
-**User flow:** Login → check workspaces → if none, show 3-Tier Choice Screen → user picks a path → routed accordingly.
+**What was fixed:**
+- **`frontend/src/App.jsx`** — complete rewrite to eliminate the render-body state update:
+  - `checkWorkspaces` replaced with `loadOrgs` wrapped in `useCallback(async () => {...}, [])` for referential stability.
+  - Added `useEffect` that triggers `loadOrgs` ONLY when auth `status` changes to `'authed'` (tracked via a `prevStatus` ref pattern), not on every render.
+  - `handleChoice` and `handleShowMeAround` both wrapped in `useCallback` with stable dependency arrays.
+  - No `setState` call in the render body — the `onboardingState.orgs === null` branch simply returns a loading spinner.
+  - Removed accumulated duplicate imports and broken callback closures from prior partial edits.
+- **`frontend/src/pages/DashboardPage.jsx`** — verified its `useEffect` dependencies are correct (guards on `!orgs` prevent premature firing).
 
 **Next session to run:** Session 11 Part B — per-lesson explanations/remediation, spaced-repetition review queue, or admin content-management UI (per docs/acceptance-criteria.md).
 
