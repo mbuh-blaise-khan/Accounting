@@ -405,5 +405,33 @@
     "practicePosted": "A practice transaction was posted to your demo workspace.",
     "viewInJournal": "Open the Journal to see it.",
     "watermarkNote": "Lesson content is for your personal study. Copying and redistribution are discouraged."
+  },
+  "choice": {
+    "title": "How do you want to get started?",
+    "subtitle": "Pick a path that fits your goal. You can always switch later.",
+    "learn": "Learn",
+    "learnDesc": "Study accounting with interactive lessons and quizzes — no business required.",
+    "learnBullet1": "7 beginner-friendly lessons",
+    "learnBullet2": "Interactive quizzes with instant feedback",
+    "learnBullet3": "No workspace setup needed",
+    "learnCta": "Start learning",
+    "practice": "Practice",
+    "practiceDesc": "Manage a real business with the full double-entry accounting cycle.",
+    "practiceBullet1": "Create your workspace",
+    "practiceBullet2": "Record real transactions",
+    "practiceBullet3": "Generate financial statements",
+    "practiceCta": "Start practicing",
+    "both": "Both",
+    "bothDesc": "Learn concepts and immediately practice them in a demo workspace.",
+    "bothBullet1": "Auto-creates a demo workspace",
+    "bothBullet2": "Lessons post real practice transactions",
+    "bothBullet3": "The full learn-and-practice loop",
+    "bothCta": "Give me everything",
+    "calloutTitle": "Not sure? Start with 'Both'.",
+    "calloutText": "It creates a sandbox workspace so you can learn and practice risk-free. You can delete it anytime.",
+    "showMeAround": "Show me around with a sample demo business"
+  },
+  "demo": {
+    "workspaceName": "Demo Workspace"
   }
 }

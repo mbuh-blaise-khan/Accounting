@@ -405,5 +405,33 @@
     "practicePosted": "Une écriture d'exercice a été enregistrée dans votre espace de démonstration.",
     "viewInJournal": "Ouvrez le Journal pour la voir.",
     "watermarkNote": "Le contenu des leçons est destiné à votre étude personnelle. La copie et la redistribution sont déconseillées."
+  },
+  "choice": {
+    "title": "Comment voulez-vous commencer ?",
+    "subtitle": "Choisissez un parcours adapté à votre objectif. Vous pourrez toujours changer plus tard.",
+    "learn": "Apprendre",
+    "learnDesc": "Étudiez la comptabilité avec des leçons interactives et des quiz — aucune entreprise requise.",
+    "learnBullet1": "7 leçons adaptées aux débutants",
+    "learnBullet2": "Quiz interactifs avec retour instantané",
+    "learnBullet3": "Aucun espace de travail à configurer",
+    "learnCta": "Commencer à apprendre",
+    "practice": "Pratiquer",
+    "practiceDesc": "Gérez une vraie entreprise avec le cycle complet de la comptabilité en partie double.",
+    "practiceBullet1": "Créez votre espace de travail",
+    "practiceBullet2": "Enregistrez de vraies transactions",
+    "practiceBullet3": "Générez des états financiers",
+    "practiceCta": "Commencer à pratiquer",
+    "both": "Les deux",
+    "bothDesc": "Apprenez les concepts et pratiquez-les immédiatement dans un espace de démonstration.",
+    "bothBullet1": "Crée automatiquement un espace de démonstration",
+    "bothBullet2": "Les leçons enregistrent de vraies transactions d'exercice",
+    "bothBullet3": "La boucle complète apprentissage-pratique",
+    "bothCta": "Donnez-moi tout",
+    "calloutTitle": "Pas sûr ? Commencez par 'Les deux'.",
+    "calloutText": "Cela crée un espace sandbox pour apprendre et pratiquer sans risque. Vous pouvez le supprimer à tout moment.",
+    "showMeAround": "Montrez-moi avec une entreprise de démonstration"
+  },
+  "demo": {
+    "workspaceName": "Espace de démonstration"
   }
 }

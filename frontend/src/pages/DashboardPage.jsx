@@ -18,7 +18,7 @@ import LearnPage from './LearnPage.jsx'
 import LessonDetailPage from './LessonDetailPage.jsx'
 import { profileGateActive, profileNeedsAttention } from '../utils/profile.js'
 
-export default function DashboardPage() {
+export default function DashboardPage({ forceOnboardingChoice = null, onOnboardingHandled = null }) {
   const { t } = useLanguage()
   const { user, logout } = useAuth()
   const [orgs, setOrgs] = useState(null) // null = loading
@@ -26,6 +26,7 @@ export default function DashboardPage() {
   const [error, setError] = useState(null)
   const [activeOrg, setActiveOrg] = useState(null) // set -> inside a workspace
   const [section, setSection] = useState('home') // home | accounts | newTransaction | journal | cashbook | ledger | trialBalance | businessProfile
+  const [pendingOnboarding, setPendingOnboarding] = useState(forceOnboardingChoice)
 
   async function load() {
     setError(null)
@@ -45,12 +46,30 @@ export default function DashboardPage() {
     load()
   }, [])
 
+  // Handle the onboarding choice from the 3-Tier Choice Screen.
+  // 'practice' -> show CreateWorkspace; 'both' -> auto-select the demo workspace.
+  useEffect(() => {
+    if (!pendingOnboarding || !orgs) return
+    if (pendingOnboarding === 'practice') {
+      // Let the user create a workspace via the existing CreateWorkspace flow
+      setPendingOnboarding(null)
+      if (onOnboardingHandled) onOnboardingHandled()
+    } else if (pendingOnboarding === 'both' && orgs.length > 0) {
+      // Auto-select the first (demo) workspace and enter it
+      setActiveOrg(orgs[0])
+      setPendingOnboarding(null)
+      if (onOnboardingHandled) onOnboardingHandled()
+    }
+  }, [pendingOnboarding, orgs, onOnboardingHandled])
+
   // NEW workspace -> straight into the MANDATORY Business Profile step (server
   // starts it at profile_completed=false, so the gate also survives reloads).
   function handleCreated(created) {
     setActiveOrg(created)
     setSection('businessProfile')
     load() // refresh the workspace list in the background
+    setPendingOnboarding(null)
+    if (onOnboardingHandled) onOnboardingHandled()
   }
 
   // Single source of org-state updates from inside WorkSpace. This is the fix
@@ -104,6 +123,16 @@ export default function DashboardPage() {
           <p className="mt-10 text-center text-slate-500">{t('common.loading')}</p>
         ) : orgs.length === 0 ? (
           <div className="mt-8">
+            {pendingOnboarding === 'practice' && (
+              <div className="mb-4 rounded-xl border-2 border-green-200 bg-green-50 p-4">
+                <p className="text-sm font-medium text-green-700">
+                  💼 {t('choice.practiceDesc')}
+                </p>
+                <p className="mt-1 text-xs text-green-600">
+                  {t('choice.practiceBullet1')} · {t('choice.practiceBullet2')} · {t('choice.practiceBullet3')}
+                </p>
+              </div>
+            )}
             <CreateWorkspace frameworks={frameworks} onCreated={handleCreated} />
           </div>
         ) : (

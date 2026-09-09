@@ -16,18 +16,22 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Session:** Hotfix — apply learning tables migration 0014 (500 error on /learning/lessons).
+**Session:** 3-Tier Choice Screen (Learn / Practice / Both) with modern UI/UX.
 
-**STATE: DONE and verified, committed as required.**
+**STATE: DONE and verified, committed as required.** `npm run build` → 69 modules transformed, RC=0.
 
-**Root cause:** migration file `0014_create_learning_tables.py` had an `IndentationError` at line 75 (the `answers`/`attempts`/`progress` table blocks lost their indentation inside `upgrade()`), so `alembic current` crashed and the migration was never applied to the PostgreSQL database. Tests passed because they use an in-memory SQLite database that builds tables directly from the models — the real DB had no `lessons` table, causing `psycopg2.errors.UndefinedTable: relation "lessons" does not exist` (500 error).
+**What was built:**
+- **New `OnboardingChoicePage.jsx`** — full-screen choice screen with three cards (📚 Learn, 💼 Practice, 🔄 Both), each with icon, description, bullet points, and CTA button. Includes a Callout hint ("Not sure? Start with 'Both'") and a "Show me around" button that auto-creates a demo workspace.
+- **New `Callout.jsx` component** — reusable info/warning/success banner with icon, title, and children.
+- **App.jsx routing** — after login, checks if the user has any workspaces. If none, shows the choice screen instead of forcing immediate workspace creation.
+  - **Learn** → goes straight to `LearnPage` (no workspace needed).
+  - **Practice** → shows `DashboardPage` with `CreateWorkspace` flow (with a contextual banner).
+  - **Both** → auto-creates an OHADA demo workspace and enters it.
+  - **Show me around** → same as "Both".
+- **DashboardPage.jsx** — accepts `forceOnboardingChoice` and `onOnboardingHandled` props to handle the onboarding flow.
+- **i18n** — full `choice.*` and `demo.*` key sets in both `en.json` and `fr.json`.
 
-**What was fixed:**
-- Fixed the indentation in `backend/alembic/versions/0014_create_learning_tables.py` (lines 75-144 re-indented to match the `upgrade()` function body).
-- Ran `alembic upgrade head` → applied 0013 → 0014 (RC=0).
-- Verified all 6 tables exist: `lessons`, `lesson_sections`, `questions`, `answers`, `attempts`, `progress`.
-- Verified 7 lessons seeded correctly.
-- Verified `GET /learning/lessons` returns **Status: 200, Lessons: 7** (via TestClient with auth).
+**User flow:** Login → check workspaces → if none, show 3-Tier Choice Screen → user picks a path → routed accordingly.
 
 **Next session to run:** Session 11 Part B — per-lesson explanations/remediation, spaced-repetition review queue, or admin content-management UI (per docs/acceptance-criteria.md).
 
