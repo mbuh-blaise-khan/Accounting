@@ -14,6 +14,8 @@ import GeneralLedgerPage from './GeneralLedgerPage.jsx'
 import TrialBalancePage from './TrialBalancePage.jsx'
 import FinancialStatementsPage from './FinancialStatementsPage.jsx'
 import BusinessProfilePage from './BusinessProfilePage.jsx'
+import LearnPage from './LearnPage.jsx'
+import LessonDetailPage from './LessonDetailPage.jsx'
 import { profileGateActive, profileNeedsAttention } from '../utils/profile.js'
 
 export default function DashboardPage() {
@@ -167,6 +169,7 @@ function NavBtn({ active, onClick, label }) {
 function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
   const { t } = useLanguage()
   const [ledgerAccount, setLedgerAccount] = useState(null) // preset by trial-balance drill-down
+  const [lessonId, setLessonId] = useState(null) // lesson opened from Learn (Session 11 Part A)
 
   // MANDATORY Business-Profile gate. Driven by the SERVER-SIDE
   // profile_completed flag (migration 0011): a brand-new workspace starts
@@ -209,6 +212,7 @@ function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
               <NavBtn active={section === 'ledger'} onClick={() => onSectionChange('ledger')} label={t('ws.ledger')} />
               <NavBtn active={section === 'trialBalance'} onClick={() => onSectionChange('trialBalance')} label={t('ws.trialBalance')} />
               <NavBtn active={section === 'financialStatements'} onClick={() => onSectionChange('financialStatements')} label={t('ws.financialStatements')} />
+              <NavBtn active={section === 'learn'} onClick={() => onSectionChange('learn')} label={t('ws.learn')} />
               <NavBtn active={section === 'accounts'} onClick={() => onSectionChange('accounts')} label={t('ws.accounts')} />
               <NavBtn active={section === 'businessProfile'} onClick={() => onSectionChange('businessProfile')} label={t('ws.businessProfile')} />
             </div>
@@ -307,6 +311,25 @@ function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
             // `setActiveOrg(...)` here threw "setActiveOrg is not defined"
             // because WorkSpace is a separate component scope.
             onSaved={onOrgUpdated}
+          />
+        )}
+        {/* Session 11 Part A — Learn Mode: lesson list, then lesson detail.
+            The detail page receives the org id so lesson 4's practice
+            connector can post a REAL transaction into this workspace
+            (Learn Mode -> Practice Mode). */}
+        {!gated && section === 'learn' && (
+          <LearnPage
+            onOpenLesson={(id) => {
+              setLessonId(id)
+              onSectionChange('lesson')
+            }}
+          />
+        )}
+        {!gated && section === 'lesson' && lessonId != null && (
+          <LessonDetailPage
+            lessonId={lessonId}
+            orgId={org.id}
+            onBack={() => onSectionChange('learn')}
           />
         )}
       </main>

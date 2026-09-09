@@ -8,6 +8,7 @@ from app.api.routes import (
     frameworks,
     health,
     journal,
+    learning,
     ledger,
     organizations,
     pdf_export,
@@ -26,6 +27,7 @@ api_router.include_router(accounts.router)
 api_router.include_router(transactions.router)
 api_router.include_router(journal.router)
 api_router.include_router(ledger.router)
+api_router.include_router(learning.router)
 api_router.include_router(trial_balance.router)
 api_router.include_router(financial_statements.router)
 api_router.include_router(pdf_export.router)

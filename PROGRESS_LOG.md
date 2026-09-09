@@ -16,20 +16,24 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Session:** Hotfix — the two "Modified" accounting-basis tests + reportlab requirement confirmation.
+**Session:** Session 11 Part A — basic learning engine core.
 
-**STATE: DONE and verified, committed as required.** Real pytest runs observed (output pasted in the session record below):
+**STATE: DONE and verified, committed as required.** Real pytest + build runs observed:
 
-1. `pytest app/tests/test_business_profile.py -q` → **25 passed, RC=0** (23 prior + 2 fixed).
-2. `pytest app/tests -q` → **116 passed, RC=0** (114 prior + the 2 new Modified-basis tests).
+1. `pytest app/tests -q` → **127 passed, RC=0** (116 prior + 11 new learning tests).
+2. `npm run build` (frontend) → **built in 29.84s, RC=0**.
 
-**What was fixed:**
-- **Root cause of the two failures** (`test_modified_accounting_basis_saves_and_loads`, `test_modified_accounting_basis_has_zero_effect`): both called `_register(client, ...)` and unpacked its return as a 3-tuple (`uid, org_id, _`), but `_register` in this test file returns a plain HTTP `Response` object (it just POSTs `/auth/register` and returns the response). This raised `TypeError: cannot unpack non-iterable Response object`. Fixed both tests to use the exact pattern of every other passing test in the file: `_register(client, ...)` alone, then `org = _create_org(client)`, then `_patch(client, org["id"], ..., accounting_basis=...)` for saving and `_get(client, org["id"])` for readback (e.g. `test_org_created_and_usable_with_all_profile_fields_unset`, lines 88-103). They also no longer call the non-standard `/organizations/{id}/profile` endpoint — they use the same `/organizations/{id}` PATCH/GET helpers as the rest of the file.
-- **reportlab requirement:** confirmed already listed in `backend/requirements.txt` (line 28, `reportlab>=4.2`) — added by the PDF-export session, so no change was needed. Note verified so it doesn't get dropped again.
+**What was built:**
+- **6 tables** (`lessons`, `lesson_sections`, `questions`, `answers`, `attempts`, `progress`) — migration `0014_create_learning_tables.py`, models in `backend/app/models/learning.py`.
+- **7 seeded lessons** in ACCA FIA-style progression (EN+FR): what is accounting → accounting equation → debits/credits → journal entries → journal to ledger → trial balance → reading financial statements. Each ends with 2-3 MCQ/short-answer questions with stored correct answers.
+- **API:** `GET /learning/lessons`, `GET /learning/lessons/{id}`, `POST /learning/attempts` — correct answers are NEVER exposed by read endpoints; scoring is straight server-side comparison.
+- **Lesson 4 practice connector:** a correct answer on the journal-entries question posts a REAL balanced transaction (Cash Dr / Sales Cr, 25,000) into the user's demo workspace — verified end-to-end for both OHADA (codes 5711/7011) and IFRS (names "Cash and cash equivalents"/"Sales revenue") including trial-balance visibility.
+- **Frontend:** `LearnPage.jsx` (lesson list + overall/per-lesson progress bars), `LessonDetailPage.jsx` (content → one question at a time → instant feedback), wired into `DashboardPage` WorkSpace nav, tied to the existing language toggle.
+- **Content-protection DETERRENTS** (honest scope — no website can block screenshots/screen recording): right-click/text-selection disabled on lesson content, subtle logged-in user watermark overlay, content served per-request from the API (never static/downloadable files).
+- **i18n:** full `learn.*` key set in both `en.json` and `fr.json`.
+- **Tests (11 new):** seed order, auth required, answers hidden, MCQ/short-answer scoring, per-user progress independence, language variants, lesson-4 posting end-to-end (correct posts, wrong doesn't, IFRS names work too).
 
-**Environment note for future sessions:** the sandbox shell is still unreliable (commands often report "exited code 1" with no output). Working pattern confirmed again: run the pytest command with output redirected to a scratch file (`... > ../_t.txt 2>&1 && echo RC=$? >> ../_t.txt`), do a non-shell action to create a delay, then read the file with the file reader. Foreground runs DO execute despite the misleading "could not be observed" message. `start /B` background spawning fails with "Access is denied" on this machine — don't use it.
-
-**Next session to run:** Session 11 — Learning Engine (basic MVP) per docs/acceptance-criteria.md (tables, seed lessons, quiz questions, Learn page, real-transaction lesson).
+**Next session to run:** Session 11 Part B — per-lesson explanations/remediation, spaced-repetition review queue, or admin content-management UI (per docs/acceptance-criteria.md).
 
 ---
 

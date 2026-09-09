@@ -1,0 +1,68 @@
+"""Lesson 3 — Debits and credits."""
+LESSON = {
+    "slug": "debits-and-credits",
+    "position": 3,
+    "title_en": "Debits and credits",
+    "title_fr": "Le débit et le crédit",
+    "summary_en": "Every transaction has two sides: a debit and a credit. Learn which is which — without memorizing boring tables.",
+    "summary_fr": "Chaque transaction a deux côtés : un débit et un crédit. Apprenez à les distinguer, sans mémoriser de tableaux ennuyeux.",
+    "sections": [
+        {
+            "position": 1,
+            "body_en": "In double-entry accounting, every transaction is recorded in at least two accounts: one side is a DEBIT (Dr) and the other is a CREDIT (Cr). The golden rule: total debits must always equal total credits — just like the accounting equation, it never breaks.",
+            "body_fr": "En comptabilité en partie double, chaque transaction est enregistrée dans au moins deux comptes : un côté est un DÉBIT (Dr) et l'autre un CRÉDIT (Cr). La règle d'or : le total des débits doit toujours être égal au total des crédits — comme l'équation comptable, cela ne se casse jamais.",
+        },
+        {
+            "position": 2,
+            "heading_en": "A simple picture",
+            "heading_fr": "Une image simple",
+            "body_en": "Think of cash: when money comes IN, cash is debited; when money goes OUT, cash is credited. When you sell on credit, the customer's account is debited (they owe you more) and Sales is credited. Every transaction is two sides of the same story.",
+            "body_fr": "Pensez à la trésorerie : quand l'argent ENTRE, la trésorerie est débitée ; quand l'argent SORT, la trésorerie est créditée. Lorsque vous vendez à crédit, le compte du client est débité (il vous doit davantage) et le compte Ventes est crédité. Chaque transaction est une histoire à deux faces.",
+        },
+        {
+            "position": 3,
+            "heading_en": "Check yourself",
+            "heading_fr": "Vérifiez-vous",
+            "body_en": "If you see a journal entry with a debit of 25,000 and a credit of 25,000, it is balanced and can be posted. If the numbers are different, something is wrong — this app refuses to post it until it balances.",
+            "body_fr": "Si vous voyez une écriture de journal avec un débit de 25 000 et un crédit de 25 000, elle est équilibrée et peut être publiée. Si les nombres sont différents, quelque chose ne va pas — cette application refuse de la publier tant qu'elle n'est pas équilibrée.",
+        },
+    ],
+    "questions": [
+        {
+            "position": 1,
+            "kind": "mcq",
+            "question_en": "A customer pays you 30,000 FCFA in cash for goods sold. Which two sides does this transaction have?",
+            "question_fr": "Un client vous paie 30 000 FCFA en espèces pour des marchandises vendues. Quels sont les deux côtés de cette transaction ?",
+            "answers": [
+                {"option_key": "A", "position": 1, "text_en": "Debit Cash 30,000 / Credit Sales 30,000", "text_fr": "Débit Trésorerie 30 000 / Crédit Ventes 30 000", "is_correct": True},
+                {"option_key": "B", "position": 2, "text_en": "Credit Cash 30,000 / Debit Sales 30,000", "text_fr": "Crédit Trésorerie 30 000 / Débit Ventes 30 000", "is_correct": False},
+                {"option_key": "C", "position": 3, "text_en": "Debit Cash 30,000 / Debit Sales 30,000", "text_fr": "Débit Trésorerie 30 000 / Débit Ventes 30 000", "is_correct": False},
+            ],
+            "explanation_en": "Cash (an asset) increases on the debit side; Sales revenue increases on the credit side. Debits equal credits: 30,000 = 30,000.",
+            "explanation_fr": "La trésorerie (un actif) augmente au débit ; les Ventes (produits) augmentent au crédit. Les débits égalent les crédits : 30 000 = 30 000.",
+        },
+        {
+            "position": 2,
+            "kind": "mcq",
+            "question_en": "Which statement about debits and credits is ALWAYS true?",
+            "question_fr": "Quelle affirmation sur le débit et le crédit est TOUJOURS vraie ?",
+            "answers": [
+                {"option_key": "A", "position": 1, "text_en": "Total debits must equal total credits in every balanced entry", "text_fr": "Le total des débits doit être égal au total des crédits dans chaque écriture équilibrée", "is_correct": True},
+                {"option_key": "B", "position": 2, "text_en": "Debits are always money coming in", "text_fr": "Les débits sont toujours de l'argent qui rentre", "is_correct": False},
+                {"option_key": "C", "position": 3, "text_en": "Credits are always bad for a business", "text_fr": "Les crédits sont toujours mauvais pour une entreprise", "is_correct": False},
+            ],
+            "explanation_en": "The only rule that never varies: a balanced double-entry transaction has equal total debits and total credits.",
+            "explanation_fr": "La seule règle qui ne varie jamais : une transaction équilibrée en partie double a des totaux de débits et de crédits égaux.",
+        },
+        {
+            "position": 3,
+            "kind": "short_answer",
+            "question_en": "Money received in cash: cash is ______(debited or credited).",
+            "question_fr": "De l'argent reçu en espèces : la trésorerie est ______(débitée ou créditée).",
+            "short_answer_en": "debited",
+            "short_answer_fr": "débitée",
+            "explanation_en": "Cash in hand is an asset, and assets increase on the debit side — so cash is debited.",
+            "explanation_fr": "La trésorerie en caisse est un actif, et les actifs augmentent au débit — la trésorerie est donc débitée.",
+        },
+    ],
+}

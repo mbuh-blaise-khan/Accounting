@@ -19,6 +19,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.database import Base, get_db  # noqa: E402
+from app.learning.service import ensure_default_lessons  # noqa: E402
 from app.main import app  # noqa: E402
 from app.services.framework_service import ensure_default_frameworks  # noqa: E402
 
@@ -37,6 +38,7 @@ def _test_schema():
     session = TestingSessionLocal()
     try:
         ensure_default_frameworks(session)
+        ensure_default_lessons(session)
     finally:
         session.close()
     yield
@@ -71,6 +73,8 @@ def _clean_users_between_tests():
     from sqlalchemy import text
 
     with engine.begin() as conn:
+        conn.execute(text("DELETE FROM attempts"))
+        conn.execute(text("DELETE FROM progress"))
         conn.execute(text("DELETE FROM transaction_lines"))
         conn.execute(text("DELETE FROM transactions"))
         conn.execute(text("DELETE FROM organization_members"))

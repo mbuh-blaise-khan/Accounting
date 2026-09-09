@@ -7,6 +7,14 @@ from app.models.enums import (  # noqa: F401
     NormalBalance,
 )
 from app.models.framework import Framework, FrameworkVersion  # noqa: F401
+from app.models.learning import (  # noqa: F401
+    Answer,
+    Attempt,
+    Lesson,
+    LessonProgress,
+    LessonSection,
+    Question,
+)
 from app.models.organization import Organization, OrganizationMember  # noqa: F401
 from app.models.transaction import Transaction, TransactionLine  # noqa: F401
 from app.models.user import LanguagePreference, User  # noqa: F401

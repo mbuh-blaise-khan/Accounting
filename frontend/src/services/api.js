@@ -290,3 +290,20 @@ export function fetchFinancialPositionPdf(organizationId, params = {}) {
 }
 
 export default { fetchHealth }
+
+
+// ---------- Learning (Session 11 Part A) ----------
+export async function fetchLessons() {
+  return request('/learning/lessons');
+}
+
+export async function fetchLesson(id) {
+  return request(`/learning/lessons/${id}`);
+}
+
+export async function submitAttempt(questionId, payload) {
+  return request('/learning/attempts', {
+    method: 'POST',
+    body: JSON.stringify({ question_id: questionId, ...payload }),
+  });
+}

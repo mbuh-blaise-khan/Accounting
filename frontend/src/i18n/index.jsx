@@ -30,10 +30,21 @@ export function LanguageProvider({ children }) {
     }
   }, [lang])
 
-  const t = (key) =>
-    (messages[lang] && messages[lang][key]) ||
-    (messages.en && messages.en[key]) ||
-    key
+  const lookup = (table, key) => {
+    if (!table) return undefined;
+    // Flat keys first ("common.print", "report.business", ...).
+    if (Object.prototype.hasOwnProperty.call(table, key)) return table[key];
+    // Then nested objects ("learn": { "title": ... } accessed as "learn.title").
+    const parts = key.split('.');
+    let node = table;
+    for (const part of parts) {
+      if (node == null || typeof node !== 'object') return undefined;
+      node = node[part];
+    }
+    return typeof node === 'string' ? node : undefined;
+  };
+
+  const t = (key) => lookup(messages[lang], key) || lookup(messages.en, key) || key;
 
   return (
     <LanguageContext.Provider value={{ lang, setLang, t }}>
