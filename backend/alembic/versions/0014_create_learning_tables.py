@@ -72,7 +72,7 @@ def upgrade() -> None:
         sa.Column("practice_amount", sa.Numeric(16, 2), nullable=True),
     )
     op.create_index("ix_questions_lesson_id", "questions", ["lesson_id"])
-op.create_table(
+    op.create_table(
         "answers",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column(

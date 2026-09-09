@@ -16,6 +16,25 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
+**Session:** Hotfix — apply learning tables migration 0014 (500 error on /learning/lessons).
+
+**STATE: DONE and verified, committed as required.**
+
+**Root cause:** migration file `0014_create_learning_tables.py` had an `IndentationError` at line 75 (the `answers`/`attempts`/`progress` table blocks lost their indentation inside `upgrade()`), so `alembic current` crashed and the migration was never applied to the PostgreSQL database. Tests passed because they use an in-memory SQLite database that builds tables directly from the models — the real DB had no `lessons` table, causing `psycopg2.errors.UndefinedTable: relation "lessons" does not exist` (500 error).
+
+**What was fixed:**
+- Fixed the indentation in `backend/alembic/versions/0014_create_learning_tables.py` (lines 75-144 re-indented to match the `upgrade()` function body).
+- Ran `alembic upgrade head` → applied 0013 → 0014 (RC=0).
+- Verified all 6 tables exist: `lessons`, `lesson_sections`, `questions`, `answers`, `attempts`, `progress`.
+- Verified 7 lessons seeded correctly.
+- Verified `GET /learning/lessons` returns **Status: 200, Lessons: 7** (via TestClient with auth).
+
+**Next session to run:** Session 11 Part B — per-lesson explanations/remediation, spaced-repetition review queue, or admin content-management UI (per docs/acceptance-criteria.md).
+
+---
+
+## Previous status (Session 11 Part A — kept for history)
+
 **Session:** Session 11 Part A — basic learning engine core.
 
 **STATE: DONE and verified, committed as required.** Real pytest + build runs observed:
