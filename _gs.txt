@@ -1,0 +1,5 @@
+?? _gs.txt
+EXIT=0
+2ad60ef Fix: infinite render loop on 3-Tier Choice Screen (useCallback + useEffect fix)
+84e9de2 Add 3-Tier Choice Screen (Learn/Practice/Both) with modern UI/UX
+0f6750c Fix: apply learning tables migration 0014

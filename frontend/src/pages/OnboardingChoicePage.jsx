@@ -1,12 +1,23 @@
-import { useState } from 'react';
-import { useLanguage } from '../i18n';
-import Callout from '../components/Callout';
-import { createOrganization } from '../services/api';
+// Choice hub — "How do you want to get started?" (Session 13 redesign).
+//
+// EVERY user, new or existing, lands here immediately after logging in (it is
+// NOT gated on whether they already have workspaces). Two paths only — the old
+// "Both" option was removed — plus "Show me around", which now opens a short
+// WelcomeTour (orientation) whose final step creates the sample demo business
+// and enters the practice space.
+//
+// A back arrow is intentionally NOT needed here: the hub is the top of the
+// authenticated flow (the persistent way back is the "← Back to start"
+// header action available inside Learn and Practice).
+import { useState } from 'react'
+import { useLanguage } from '../i18n/index.jsx'
+import Callout from '../components/Callout.jsx'
+import WelcomeTour from '../components/WelcomeTour.jsx'
 
-export default function OnboardingChoicePage({ onChoice, onShowMeAround }) {
-  const { t } = useLanguage();
-  const [selected, setSelected] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+export default function OnboardingChoicePage({ onChoice, onShowMeAround, practiceReady = true }) {
+  const { t } = useLanguage()
+  const [selected, setSelected] = useState(null)
+  const [showTour, setShowTour] = useState(false)
 
   const choices = [
     {
@@ -17,12 +28,13 @@ export default function OnboardingChoicePage({ onChoice, onShowMeAround }) {
       bullets: [
         t('choice.learnBullet1'),
         t('choice.learnBullet2'),
-        t('choice.learnBullet3')
+        t('choice.learnBullet3'),
       ],
       cta: t('choice.learnCta'),
+      ready: true,
       color: 'border-blue-200 bg-blue-50 hover:border-blue-400 hover:shadow-blue-100',
       accent: 'text-blue-600',
-      bg: 'bg-blue-50'
+      bg: 'bg-blue-50',
     },
     {
       id: 'practice',
@@ -32,106 +44,62 @@ export default function OnboardingChoicePage({ onChoice, onShowMeAround }) {
       bullets: [
         t('choice.practiceBullet1'),
         t('choice.practiceBullet2'),
-        t('choice.practiceBullet3')
+        t('choice.practiceBullet3'),
       ],
       cta: t('choice.practiceCta'),
+      ready: practiceReady,
       color: 'border-green-200 bg-green-50 hover:border-green-400 hover:shadow-green-100',
       accent: 'text-green-600',
-      bg: 'bg-green-50'
+      bg: 'bg-green-50',
     },
-    {
-      id: 'both',
-      icon: '🔄',
-      title: t('choice.both'),
-      description: t('choice.bothDesc'),
-      bullets: [
-        t('choice.bothBullet1'),
-        t('choice.bothBullet2'),
-        t('choice.bothBullet3')
-      ],
-      cta: t('choice.bothCta'),
-      color: 'border-purple-200 bg-purple-50 hover:border-purple-400 hover:shadow-purple-100',
-      accent: 'text-purple-600',
-      bg: 'bg-purple-50'
-    }
-  ];
+  ]
 
-  const handleChoice = async (choiceId) => {
-    setSelected(choiceId);
-    setIsLoading(true);
-    
-    if (choiceId === 'both') {
-      try {
-        // Auto-create demo workspace
-        const org = await createOrganization({
-          name: `${t('demo.workspaceName')} - ${new Date().toLocaleDateString()}`,
-          framework: 'OHADA',
-          currency: 'XAF',
-          is_demo: true
-        });
-        onChoice(choiceId, { workspace: org, demo: true });
-      } catch (error) {
-        console.error('Failed to create demo workspace:', error);
-        onChoice(choiceId, { demo: false });
-      }
-    } else {
-      onChoice(choiceId);
-    }
-    setIsLoading(false);
-  };
-
-  const handleShowMeAround = () => {
-    // Auto-create demo workspace with sample data
-    onShowMeAround();
-  };
+  const handleChoice = (choiceId) => {
+    setSelected(choiceId)
+    onChoice(choiceId)
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white px-4 py-16 md:py-24">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-slate-800 mb-4">
+      <div className="mx-auto max-w-4xl">
+        <div className="mb-12 text-center">
+          <h1 className="mb-4 text-4xl font-bold text-slate-800 md:text-5xl">
             {t('choice.title')}
           </h1>
-          <p className="text-lg text-slate-500 max-w-2xl mx-auto">
+          <p className="mx-auto max-w-2xl text-lg text-slate-500">
             {t('choice.subtitle')}
           </p>
         </div>
 
-        {/* Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2">
           {choices.map((choice) => (
             <div
               key={choice.id}
-              className={`relative rounded-2xl border-2 p-6 transition-all duration-300 cursor-pointer ${choice.color} ${
+              className={`relative cursor-pointer rounded-2xl border-2 p-6 transition-all duration-300 ${choice.color} ${
                 selected === choice.id ? 'ring-2 ring-offset-2 ' + choice.accent : ''
-              } hover:shadow-xl hover:-translate-y-1`}
-              onClick={() => !isLoading && handleChoice(choice.id)}
+              } hover:-translate-y-1 hover:shadow-xl`}
+              onClick={() => handleChoice(choice.id)}
             >
-              {isLoading && selected === choice.id && (
-                <div className="absolute top-4 right-4">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-slate-600"></div>
+              {!choice.ready && (
+                <div className="absolute right-4 top-4">
+                  <div className="h-5 w-5 animate-spin rounded-full border-b-2 border-slate-600"></div>
                 </div>
               )}
-              <div className="text-5xl mb-4">{choice.icon}</div>
-              <h3 className={`text-xl font-bold ${choice.accent} mb-2`}>
-                {choice.title}
-              </h3>
-              <p className="text-slate-600 text-sm mb-4">
-                {choice.description}
-              </p>
-              <ul className="space-y-2 mb-6">
+              <div className="mb-4 text-5xl">{choice.icon}</div>
+              <h3 className={`mb-2 text-xl font-bold ${choice.accent}`}>{choice.title}</h3>
+              <p className="mb-4 text-sm text-slate-600">{choice.description}</p>
+              <ul className="mb-6 space-y-2">
                 {choice.bullets.map((bullet, idx) => (
                   <li key={idx} className="flex items-start gap-2 text-sm text-slate-600">
-                    <span className="text-slate-300 mt-1">•</span>
+                    <span className="mt-1 text-slate-300">•</span>
                     <span>{bullet}</span>
                   </li>
                 ))}
               </ul>
               <button
-                className={`w-full py-2.5 rounded-lg font-medium transition-all ${choice.bg} ${choice.accent} hover:opacity-80`}
-                onClick={() => !isLoading && handleChoice(choice.id)}
-                disabled={isLoading}
+                type="button"
+                className={`w-full rounded-lg py-2.5 font-medium transition-all ${choice.bg} ${choice.accent} hover:opacity-80`}
+                onClick={() => handleChoice(choice.id)}
               >
                 {choice.cta} →
               </button>
@@ -139,23 +107,31 @@ export default function OnboardingChoicePage({ onChoice, onShowMeAround }) {
           ))}
         </div>
 
-        {/* Callout Section */}
-        <div className="max-w-2xl mx-auto">
+        <div className="mx-auto max-w-2xl">
           <Callout variant="info" title={t('choice.calloutTitle')}>
             {t('choice.calloutText')}
           </Callout>
         </div>
 
-        {/* Show Me Around Button */}
-        <div className="text-center mt-6">
+        <div className="mt-6 text-center">
           <button
-            onClick={handleShowMeAround}
-            className="text-sm text-slate-500 hover:text-slate-700 underline-offset-2 hover:underline transition-colors"
+            type="button"
+            onClick={() => setShowTour(true)}
+            className="text-sm text-slate-500 underline-offset-2 transition-colors hover:text-slate-700 hover:underline"
           >
             {t('choice.showMeAround')} 🚀
           </button>
         </div>
       </div>
+
+      {showTour && (
+        <WelcomeTour
+          onFinish={async (action) => {
+            setShowTour(false)
+            if (action === 'demo') await onShowMeAround()
+          }}
+        />
+      )}
     </div>
-  );
+  )
 }

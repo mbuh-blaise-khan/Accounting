@@ -14,6 +14,8 @@ from decimal import Decimal
 
 
 def _register(client, email="learner@example.com", name="Learner", lang="en"):
+    # register-no-auto-login: register no longer sets the auth cookie, so the
+    # test session is established by an explicit login right after.
     r = client.post(
         "/auth/register",
         json={
@@ -24,6 +26,10 @@ def _register(client, email="learner@example.com", name="Learner", lang="en"):
         },
     )
     assert r.status_code == 200, r.text
+    login = client.post(
+        "/auth/login", json={"email": email, "password": "supersecret123"}
+    )
+    assert login.status_code == 200, login.text
     return r.json()
 
 

@@ -1,11 +1,13 @@
 // Login page: mobile-responsive Tailwind form that authenticates via the
 // backend and stores the JWT in an httpOnly cookie (no token in JS).
+// `notice` renders an informational banner above the form (e.g. after
+// registration: "Account created — please log in").
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useLanguage } from '../i18n/index.jsx'
 import Logo from '../components/Logo.jsx'
 
-export default function LoginPage({ onSwitchToRegister }) {
+export default function LoginPage({ onSwitchToRegister, notice = null }) {
   const { t } = useLanguage()
   const { login } = useAuth()
   const [email, setEmail] = useState('')
@@ -19,7 +21,7 @@ export default function LoginPage({ onSwitchToRegister }) {
     setSubmitting(true)
     try {
       await login(email, password)
-      // On success the auth state flips to 'authed' and App shows the Dashboard.
+      // On success the auth state flips to 'authed' and App shows the hub.
     } catch {
       setLocalError(t('login.error'))
     } finally {
@@ -34,6 +36,12 @@ export default function LoginPage({ onSwitchToRegister }) {
           <Logo wordmark={t('app.title')} />
         </div>
         <h2 className="text-xl font-bold text-slate-900 mb-6">{t('login.title')}</h2>
+
+        {notice && (
+          <p className="mb-4 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm text-emerald-700">
+            ✅ {t('login.createdNotice')}
+          </p>
+        )}
 
         {localError && (
           <p className="mb-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">

@@ -16,6 +16,48 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
+**Session:** Session 13 — Learn/Practice choice screen fixes: persistent hub, navigation bugs, register-no-auto-login, correct new-vs-returning workspace flow.
+
+**STATE: DONE and verified, committed as required.** Real runs observed:
+1. `pytest app/tests -q` → **128 passed, RC=0** (30.53s; 127 prior + 1 new auth test, register test rewritten).
+2. `npm run build` (frontend) → **70 modules transformed, built in 26.99s, RC=0**.
+
+**Confirmed root causes (code-traced, not guessed):**
+1. **Learn lesson cards dead:** App.jsx stored `learnLessonId` on card click but NO branch ever consumed it — `LessonDetailPage` was never rendered in the standalone Learn flow (it only worked inside a workspace's own Learn section).
+2. **Back arrow on the "get started" flow dead:** the arrow reset `orgs: null`, but `loadOrgs()` only fired on the auth-status *transition* to 'authed' — nothing ever refetched, so the UI hung on a permanent spinner.
+3. **Practice card dead:** App.jsx set `choice: 'practice'` → DashboardPage's onboarding effect immediately called `onOnboardingHandled()` → App set `choice: null` → the hub's gate (`orgs.length === 0 && !choice`) instantly re-showed the hub. Practice bounced straight back.
+4. **Register auto-login:** `backend/app/api/routes/auth.py` called `_set_auth_cookie()` inside `register()` — creating an account silently started a session.
+
+**Part 1 — Registration no longer auto-logs-in (backend fix chosen and why):**
+- `register()` no longer sets the auth cookie (the `response` param was removed). Chosen over frontend-logout-after-register because the endpoint's contract should be "create an account", not "establish a session"; an httpOnly cookie can only be cleared server-side, so the frontend workaround would leave the misleading contract in place and still open a brief real session on every signup.
+- Frontend: `AuthContext.register` no longer flips auth state; `RegisterPage` redirects to the Login page via `onAccountCreated`, which renders a green "Account created — please log in" notice (`login.createdNotice`, EN+FR) on `LoginPage` via its new `notice` prop.
+- Tests: `test_auth.py` rewritten — `test_register_success_creates_account_without_session` asserts NO cookie and `GET /me → 401` right after register; `test_login_after_register_establishes_session` pins that login is the only way to start a session. All 10 other test files' `_register` helpers now explicitly log in after registering (same per-user cookie-replacement semantics as before, so cross-user isolation tests are unaffected).
+
+**Part 2 — The choice screen is now a persistent hub (every login, no workspace gate):**
+- `App.jsx` (complete rewrite, one file, no incremental patches): every login lands on the hub; it is NOT gated on `orgs.length`. The old "Both" card is REMOVED from `OnboardingChoicePage` (2 paths only: 📚 Learn / 💼 Practice, plus "Show me around"). `choice.both*` i18n keys deleted; callout reworded in EN+FR.
+- Persistent hub access from anywhere: authed `Header` shows logo-click + "← Back to start" (goes to hub); the same logo action exists in the `WorkSpace` nav (deep in Practice) and in the Learn flow's own bar.
+- **Resume, not reset:** both authenticated flows stay MOUNTED but hidden (`hidden` CSS class) once entered — switching Learn ↔ Practice ↔ hub never unmounts them, so local state (open lesson, active workspace) survives; Learn progress is additionally server-side (attempts/progress tables).
+
+**Part 3 — Learn navigation fixed:** `LearnFlow` (in App.jsx) now renders `LessonDetailPage` when `learnLessonId` is set (orgId=null → lesson 4's practice connector simply doesn't post outside a workspace); the back arrow only flips the mode (no refetch → instant, no spinner).
+
+**Part 4 — Practice fixed + correct new-vs-returning flow:**
+- Entering Practice no longer bounces back to the hub (App drives the intent; DashboardPage's obsolete `forceOnboardingChoice`/`pendingOnboarding` machinery removed).
+- ZERO workspaces → "Create your first workspace" (existing Session 4 form) → MANDATORY Business Profile step (server-side `profile_completed` gate, unchanged) → full practice space.
+- 1+ workspaces → "Your Workspaces" list (name, framework badge, Demo badge, currency) + a clearly visible "+ Create a new business" button (enters the create flow, with "← Your workspaces" to go back). Opening a workspace with a completed profile goes straight into its practice space; the profile form is re-demanded ONLY when `profile_completed` is genuinely false (server-side gate).
+
+**Part 5 — AI help-bot de-scoped (deliberately deferred to a possible future session; no code built); "Show me around" now opens `WelcomeTour.jsx`:** a lightweight 3-step modal/stepper (welcome → Learn mode → Practice mode, EN+FR) with Back/Next/Skip and a final CTA "Create my sample demo business" that creates the demo workspace and enters its practice space (the mandatory Business Profile step applies to it like every new workspace — honest server-side enforcement, not bypassed).
+
+**What Session 14 / next session needs to know:**
+- The hub is mode-based (`mode: null | 'learn' | 'practice'` in App.jsx); orgs are fetched once per login for intent decisions only.
+- Register contract changed: NEVER set a session cookie on register; tests pin this.
+- Terminal quirk encountered: this environment kills foreground/background child processes when the next shell command runs — long pytest/npm runs must be launched and polled via file reads only (no intermediate shell commands).
+
+**Next session to run:** Session 11 Part B — per-lesson explanations/remediation, spaced-repetition review queue, or admin content-management UI (per docs/acceptance-criteria.md).
+
+---
+
+## Previous status (Hotfix — infinite render loop on the 3-Tier Choice Screen)
+
 **Session:** Hotfix — infinite render loop on the 3-Tier Choice Screen.
 
 **STATE: DONE and verified, committed as required.** `npm run build` → 69 modules transformed, RC=0.

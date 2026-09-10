@@ -2,6 +2,10 @@
 // The JWT lives in an httpOnly cookie set by the backend; there is no token
 // stored in JavaScript. On mount we call GET /me to learn whether we are
 // authenticated, then keep the user in memory.
+//
+// register-no-auto-login (Session 13): `register` ONLY creates the account.
+// It does NOT flip the auth state — the user must actively log in (the
+// Register page redirects to Login with an "account created" notice).
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import {
   fetchMe,
@@ -50,9 +54,10 @@ export function AuthProvider({ children }) {
   const register = useCallback(async (data) => {
     setAuthError(null)
     try {
-      const me = await registerUser(data)
-      setUser(me)
-      setStatus('authed')
+      // Deliberately does NOT set user/status: registration creates the
+      // account, the session starts at login (register-no-auto-login).
+      const created = await registerUser(data)
+      return created
     } catch (err) {
       setAuthError(err.message)
       throw err

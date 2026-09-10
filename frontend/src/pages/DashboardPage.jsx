@@ -1,11 +1,24 @@
-// Protected Dashboard. Only rendered when the app is authenticated (see App.jsx).
-// Loads the user's workspaces; shows the "create your first workspace" flow when
-// there are none, otherwise lists their workspaces.
+// Protected practice space. Entered when the user picks Practice on the choice
+// hub (App.jsx passes the intent decided from the user's workspaces).
+//
+// NEW-vs-RETURNING flow (Session 13, Part 4):
+// - ZERO workspaces (intent 'create'): the CreateWorkspace flow (name /
+//   framework / currency), then straight into the MANDATORY Business Profile
+//   step (server-side profile_completed gate), then the full practice space.
+// - ONE OR MORE workspaces (intent 'list'): a "Your Workspaces" list with
+//   framework badges PLUS a clearly visible "+ Create a new business" option.
+//   Opening a workspace with an already-completed profile goes straight into
+//   the practice space — the mandatory profile form is NOT re-demanded (the
+//   server-side gate only renders it when profile_completed is false).
+//
+// The hub itself lives in App.jsx (persistent, not gated on workspaces);
+// `onBackToHub` returns there from anywhere without losing any state.
 import { useEffect, useState } from 'react'
 import { fetchFrameworks, fetchOrganizations } from '../services/api.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useLanguage } from '../i18n/index.jsx'
 import CreateWorkspace from '../components/CreateWorkspace.jsx'
+import Logo from '../components/Logo.jsx'
 import ChartOfAccountsPage from './ChartOfAccountsPage.jsx'
 import NewTransactionPage from './NewTransactionPage.jsx'
 import JournalPage from './JournalPage.jsx'
@@ -18,15 +31,22 @@ import LearnPage from './LearnPage.jsx'
 import LessonDetailPage from './LessonDetailPage.jsx'
 import { profileGateActive, profileNeedsAttention } from '../utils/profile.js'
 
-export default function DashboardPage({ forceOnboardingChoice = null, onOnboardingHandled = null }) {
+export default function DashboardPage({
+  practiceIntent = null, // 'create' | 'list' | null (decided by App.jsx at entry)
+  autoSelectOrgId = null, // e.g. the demo business from "Show me around"
+  onAutoSelectHandled = null,
+  onBackToHub = null,
+}) {
   const { t } = useLanguage()
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const [orgs, setOrgs] = useState(null) // null = loading
   const [frameworks, setFrameworks] = useState([])
   const [error, setError] = useState(null)
   const [activeOrg, setActiveOrg] = useState(null) // set -> inside a workspace
-  const [section, setSection] = useState('home') // home | accounts | newTransaction | journal | cashbook | ledger | trialBalance | businessProfile
-  const [pendingOnboarding, setPendingOnboarding] = useState(forceOnboardingChoice)
+  const [section, setSection] = useState('home')
+  // 'create' = the new-business flow; 'list' = the workspace list.
+  const [createMode, setCreateMode] = useState(practiceIntent === 'create')
+  const [intentApplied, setIntentApplied] = useState(practiceIntent != null)
 
   async function load() {
     setError(null)
@@ -46,40 +66,60 @@ export default function DashboardPage({ forceOnboardingChoice = null, onOnboardi
     load()
   }, [])
 
-  // Handle the onboarding choice from the 3-Tier Choice Screen.
-  // 'practice' -> show CreateWorkspace; 'both' -> auto-select the demo workspace.
+  // Apply the hub's practice intent once this page's own org data arrives
+  // (e.g. intent arrived before the list was known).
   useEffect(() => {
-    if (!pendingOnboarding || !orgs) return
-    if (pendingOnboarding === 'practice') {
-      // Let the user create a workspace via the existing CreateWorkspace flow
-      setPendingOnboarding(null)
-      if (onOnboardingHandled) onOnboardingHandled()
-    } else if (pendingOnboarding === 'both' && orgs.length > 0) {
-      // Auto-select the first (demo) workspace and enter it
-      setActiveOrg(orgs[0])
-      setPendingOnboarding(null)
-      if (onOnboardingHandled) onOnboardingHandled()
+    if (intentApplied || orgs === null) return
+    setCreateMode(orgs.length === 0)
+    setIntentApplied(true)
+  }, [orgs, intentApplied])
+
+  // "Show me around": auto-open the freshly created demo workspace. The
+  // server-side profile gate inside WorkSpace shows the mandatory Business
+  // Profile form first (a brand-new workspace starts profile_completed=false)
+  // — never skipped, exactly like any other new workspace.
+  useEffect(() => {
+    if (autoSelectOrgId == null || orgs === null || activeOrg) return
+    const match = orgs.find((o) => o.id === autoSelectOrgId)
+    if (match) {
+      setCreateMode(false)
+      setActiveOrg(match)
+      setSection('home')
+      if (onAutoSelectHandled) onAutoSelectHandled()
     }
-  }, [pendingOnboarding, orgs, onOnboardingHandled])
+  }, [autoSelectOrgId, orgs, activeOrg, onAutoSelectHandled])
 
-  // NEW workspace -> straight into the MANDATORY Business Profile step (server
-  // starts it at profile_completed=false, so the gate also survives reloads).
-  function handleCreated(created) {
-    setActiveOrg(created)
-    setSection('businessProfile')
-    load() // refresh the workspace list in the background
-    setPendingOnboarding(null)
-    if (onOnboardingHandled) onOnboardingHandled()
-  }
-
-  // Single source of org-state updates from inside WorkSpace. This is the fix
-  // for the reported "setActiveOrg is not defined" ReferenceError: WorkSpace is
-  // a SEPARATE module-level component and can never see DashboardPage's
+  // Single source of org-state updates from inside WorkSpace. WorkSpace is a
+  // SEPARATE module-level component and can never see DashboardPage's
   // setActiveOrg directly, so the updater is passed down as a prop instead.
   function handleOrgUpdated(updated) {
     setActiveOrg((current) =>
       current && current.id === updated.id ? { ...current, ...updated } : current
     )
+  }
+
+  // NEW workspace -> straight into the MANDATORY Business Profile step (server
+  // starts it at profile_completed=false, so the gate also survives reloads).
+  function handleCreated(created) {
+    setCreateMode(false)
+    setActiveOrg(created)
+    setSection('businessProfile')
+    load() // refresh the workspace list in the background
+  }
+
+  // Open an EXISTING workspace from the list. No profile form is re-demanded
+  // here: the server-side gate inside WorkSpace renders the mandatory step
+  // ONLY when profile_completed is genuinely false.
+  function openOrg(org) {
+    setCreateMode(false)
+    setActiveOrg(org)
+    setSection('home')
+  }
+
+  function exitWorkspace() {
+    setActiveOrg(null)
+    setSection('home')
+    setCreateMode(false) // with 1+ orgs the workspace list is Practice's home
   }
 
   if (activeOrg) {
@@ -88,11 +128,9 @@ export default function DashboardPage({ forceOnboardingChoice = null, onOnboardi
         org={activeOrg}
         section={section}
         onSectionChange={setSection}
-        onExit={() => {
-          setActiveOrg(null)
-          setSection('home')
-        }}
+        onExit={exitWorkspace}
         onOrgUpdated={handleOrgUpdated}
+        onBackToHub={onBackToHub}
       />
     )
   }
@@ -100,18 +138,9 @@ export default function DashboardPage({ forceOnboardingChoice = null, onOnboardi
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-8">
       <div className="mx-auto w-full max-w-2xl">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900">
-            {t('dashboard.welcome')}, {user?.display_name}
-          </h2>
-          <button
-            type="button"
-            onClick={logout}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
-            {t('nav.logout')}
-          </button>
-        </div>
+        <h2 className="text-xl font-bold text-slate-900">
+          {t('dashboard.welcome')}, {user?.display_name}
+        </h2>
 
         {error && (
           <p className="mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
@@ -121,44 +150,59 @@ export default function DashboardPage({ forceOnboardingChoice = null, onOnboardi
 
         {orgs === null ? (
           <p className="mt-10 text-center text-slate-500">{t('common.loading')}</p>
+        ) : createMode ? (
+          <div className="mt-8">
+            {orgs.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setCreateMode(false)}
+                className="mb-4 text-sm text-slate-500 hover:text-slate-700"
+              >
+                {t('dashboard.backToWorkspaces')}
+              </button>
+            )}
+            <CreateWorkspace frameworks={frameworks} onCreated={handleCreated} />
+          </div>
         ) : orgs.length === 0 ? (
           <div className="mt-8">
-            {pendingOnboarding === 'practice' && (
-              <div className="mb-4 rounded-xl border-2 border-green-200 bg-green-50 p-4">
-                <p className="text-sm font-medium text-green-700">
-                  💼 {t('choice.practiceDesc')}
-                </p>
-                <p className="mt-1 text-xs text-green-600">
-                  {t('choice.practiceBullet1')} · {t('choice.practiceBullet2')} · {t('choice.practiceBullet3')}
-                </p>
-              </div>
-            )}
             <CreateWorkspace frameworks={frameworks} onCreated={handleCreated} />
           </div>
         ) : (
           <div className="mt-8">
-            <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-              {t('dashboard.workspaces')}
-            </h3>
-            <ul className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                {t('dashboard.workspaces')}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setCreateMode(true)}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                {t('dashboard.createNewBusiness')}
+              </button>
+            </div>
+            <ul className="mt-3 space-y-3">
               {orgs.map((org) => (
                 <li
                   key={org.id}
                   className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <span className="font-semibold text-slate-900">{org.name}</span>
-                    {org.is_demo && (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                        Demo
+                    <div className="flex items-center gap-2">
+                      {org.is_demo && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          Demo
+                        </span>
+                      )}
+                      {/* Framework badge — required by the returning-user
+                          list spec (name + framework badge). */}
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                        {org.framework}
                       </span>
-                    )}
+                    </div>
                   </div>
                   <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <dt className="text-slate-500">{t('dashboard.framework')}</dt>
-                      <dd className="font-medium text-slate-800">{org.framework}</dd>
-                    </div>
                     <div>
                       <dt className="text-slate-500">{t('dashboard.currency')}</dt>
                       <dd className="font-medium text-slate-800">{org.currency}</dd>
@@ -166,10 +210,10 @@ export default function DashboardPage({ forceOnboardingChoice = null, onOnboardi
                   </dl>
                   <button
                     type="button"
-                    onClick={() => setActiveOrg(org)}
-                    className="mt-3 w-full rounded-lg border border-blue-600 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50"
+                    onClick={() => openOrg(org)}
+                    className="mt-3 w-full rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
                   >
-                    {t('dashboard.openChart')}
+                    {t('dashboard.open')}
                   </button>
                 </li>
               ))}
@@ -195,7 +239,7 @@ function NavBtn({ active, onClick, label }) {
   )
 }
 
-function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
+function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated, onBackToHub }) {
   const { t } = useLanguage()
   const [ledgerAccount, setLedgerAccount] = useState(null) // preset by trial-balance drill-down
   const [lessonId, setLessonId] = useState(null) // lesson opened from Learn (Session 11 Part A)
@@ -206,6 +250,7 @@ function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
   // skipped. While gated, ONLY the BusinessProfilePage renders — no other
   // section is reachable through nav or home cards (real enforcement, not
   // cosmetic). Pre-mandate orgs are backfilled True and never hard-blocked.
+  // A workspace with a COMPLETED profile never sees the form again.
   const gated = profileGateActive(org)
 
   // Pre-mandate / incomplete orgs: a DISMISSIBLE completion banner, never a
@@ -220,13 +265,26 @@ function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
     <div className="min-h-screen bg-slate-50">
       <nav className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 px-4 py-2 backdrop-blur">
         <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={onExit}
-            className="text-sm font-medium text-slate-600 hover:text-slate-900"
-          >
-            {org.name} — {t('dashboard.workspaces')}
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Persistent hub access from DEEP inside Practice (Part 2). */}
+            {onBackToHub && (
+              <button
+                type="button"
+                onClick={onBackToHub}
+                title={t('choice.backToStart')}
+                className="text-slate-400 transition-colors hover:text-slate-700"
+              >
+                <Logo wordmark={t('app.title')} showWordmark={false} iconSize="h-6 w-6" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onExit}
+              className="text-sm font-medium text-slate-600 hover:text-slate-900"
+            >
+              {org.name} — {t('dashboard.workspaces')}
+            </button>
+          </div>
           {gated ? (
             // Gated: the other destinations are unreachable by design.
             <span className="text-sm font-medium text-slate-500">
@@ -305,7 +363,7 @@ function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
         {!gated && section === 'journal' && (
           <JournalPage org={org} onBack={() => onSectionChange('home')} />
         )}
-         {!gated && section === 'cashbook' && (
+        {!gated && section === 'cashbook' && (
           <CashBookPage org={org} onBack={() => onSectionChange('home')} />
         )}
         {!gated && section === 'ledger' && (
@@ -335,10 +393,6 @@ function WorkSpace({ org, section, onSectionChange, onExit, onOrgUpdated }) {
           <BusinessProfilePage
             org={org}
             onBack={() => onSectionChange('home')}
-            // PART 1 FIX: use the prop passed down from DashboardPage (where
-            // setActiveOrg actually lives) — the previous inline
-            // `setActiveOrg(...)` here threw "setActiveOrg is not defined"
-            // because WorkSpace is a separate component scope.
             onSaved={onOrgUpdated}
           />
         )}
@@ -393,7 +447,7 @@ function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onL
           action={t('ws.cashbook')}
           onClick={onCashBook}
         />
-                        <BigCard
+        <BigCard
           title={t('ws.ledgerTitle')}
           desc={t('ws.ledgerDesc')}
           action={t('ws.ledger')}

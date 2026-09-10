@@ -14,7 +14,9 @@ first, then accounts with the most recent posted activity.
 
 
 def _register(client, email="rev@example.com"):
-    return client.post(
+    # register-no-auto-login: register no longer sets the auth cookie, so the
+    # test session is established by an explicit login right after.
+    resp = client.post(
         "/auth/register",
         json={
             "email": email,
@@ -23,6 +25,12 @@ def _register(client, email="rev@example.com"):
             "language_preference": "en",
         },
     )
+    assert resp.status_code == 200, resp.text
+    login = client.post(
+        "/auth/login", json={"email": email, "password": "supersecret123"}
+    )
+    assert login.status_code == 200, login.text
+    return resp
 
 
 def _create_ohada_org(client, name="RevCo"):

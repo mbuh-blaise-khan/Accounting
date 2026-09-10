@@ -37,7 +37,7 @@ def _get_user_by_email(db: Session, email: str) -> User | None:
 
 
 @router.post("/register", response_model=UserOut)
-def register(payload: UserCreate, response: Response, db: Session = Depends(get_db)):
+def register(payload: UserCreate, db: Session = Depends(get_db)):
     email = payload.email.strip().lower()
     if not email:
         raise HTTPException(
@@ -60,7 +60,11 @@ def register(payload: UserCreate, response: Response, db: Session = Depends(get_
     db.commit()
     db.refresh(user)
 
-    _set_auth_cookie(response, create_access_token(str(user.id)))
+    # register-no-auto-login decision: register CREATES an account but does
+    # NOT establish a session — the user must actively log in to start one.
+    # (The previous behavior set the auth cookie here, silently logging the
+    # new user in; that was removed. The frontend redirects to the Login page
+    # with an "Account created — please log in" notice instead.)
     return user
 
 

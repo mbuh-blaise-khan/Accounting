@@ -1,0 +1,181 @@
+=== APP 126-228 ===
+    // Otherwise, show the Dashboard (user has workspaces or chose practice/both).
+    return (
+      <div>
+        <Header />
+        <DashboardPage
+          forceOnboardingChoice={onboardingState.choice}
+          onOnboardingHandled={() =>
+            setOnboardingState((s) => ({ ...s, choice: null }))
+          }
+        />
+      </div>
+    )
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-slate-500">{t('common.loading')}</p>
+      </div>
+    )
+  }
+
+  // Guest
+  return (
+    <div>
+      <Header onHome={goHome} onLogin={goLogin} onRegister={goRegister} />
+      {view === 'login' && <LoginPage onSwitchToRegister={goRegister} />}
+      {view === 'register' && <RegisterPage onSwitchToLogin={goLogin} />}
+      {view === 'home' && (
+        <HomePage onCreateAccount={goRegister} onLogin={goLogin} />
+      )}
+    </div>
+  )
+}
+
+function Header({ onHome, onLogin, onRegister }) {
+  const { t } = useLanguage()
+  const { status, logout } = useAuth()
+  const authed = status === 'authed'
+
+  return (
+    <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
+      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
+        <button
+          type="button"
+          onClick={onHome}
+          className="flex items-center gap-2"
+        >
+          <Logo wordmark={t('app.title')} />
+        </button>
+
+        <div className="flex items-center gap-2">
+          {authed ? (
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            >
+              {t('nav.logout')}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onHome}
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                {t('nav.home')}
+              </button>
+              <button
+                type="button"
+                onClick={onLogin}
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                {t('nav.login')}
+              </button>
+              <button
+                type="button"
+                onClick={onRegister}
+                className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                {t('nav.register')}
+              </button>
+            </>
+          )}
+          <LanguageToggle />
+        </div>
+      </div>
+    </header>
+  )
+}
+
+function App() {
+  return (
+    <LanguageProvider>
+      <AuthProvider>
+        <AppShell />
+      </AuthProvider>
+    </LanguageProvider>
+  )
+}
+
+export default App
+=== DASH 1-75 ===
+// Protected Dashboard. Only rendered when the app is authenticated (see App.jsx).
+// Loads the user's workspaces; shows the "create your first workspace" flow when
+// there are none, otherwise lists their workspaces.
+import { useEffect, useState } from 'react'
+import { fetchFrameworks, fetchOrganizations } from '../services/api.js'
+import { useAuth } from '../context/AuthContext.jsx'
+import { useLanguage } from '../i18n/index.jsx'
+import CreateWorkspace from '../components/CreateWorkspace.jsx'
+import ChartOfAccountsPage from './ChartOfAccountsPage.jsx'
+import NewTransactionPage from './NewTransactionPage.jsx'
+import JournalPage from './JournalPage.jsx'
+import CashBookPage from './CashBookPage.jsx'
+import GeneralLedgerPage from './GeneralLedgerPage.jsx'
+import TrialBalancePage from './TrialBalancePage.jsx'
+import FinancialStatementsPage from './FinancialStatementsPage.jsx'
+import BusinessProfilePage from './BusinessProfilePage.jsx'
+import LearnPage from './LearnPage.jsx'
+import LessonDetailPage from './LessonDetailPage.jsx'
+import { profileGateActive, profileNeedsAttention } from '../utils/profile.js'
+
+export default function DashboardPage({ forceOnboardingChoice = null, onOnboardingHandled = null }) {
+  const { t } = useLanguage()
+  const { user, logout } = useAuth()
+  const [orgs, setOrgs] = useState(null) // null = loading
+  const [frameworks, setFrameworks] = useState([])
+  const [error, setError] = useState(null)
+  const [activeOrg, setActiveOrg] = useState(null) // set -> inside a workspace
+  const [section, setSection] = useState('home') // home | accounts | newTransaction | journal | cashbook | ledger | trialBalance | businessProfile
+  const [pendingOnboarding, setPendingOnboarding] = useState(forceOnboardingChoice)
+
+  async function load() {
+    setError(null)
+    try {
+      const [orgList, fwList] = await Promise.all([
+        fetchOrganizations(),
+        fetchFrameworks(),
+      ])
+      setOrgs(orgList)
+      setFrameworks(fwList)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  // Handle the onboarding choice from the 3-Tier Choice Screen.
+  // 'practice' -> show CreateWorkspace; 'both' -> auto-select the demo workspace.
+  useEffect(() => {
+    if (!pendingOnboarding || !orgs) return
+    if (pendingOnboarding === 'practice') {
+      // Let the user create a workspace via the existing CreateWorkspace flow
+      setPendingOnboarding(null)
+      if (onOnboardingHandled) onOnboardingHandled()
+    } else if (pendingOnboarding === 'both' && orgs.length > 0) {
+      // Auto-select the first (demo) workspace and enter it
+      setActiveOrg(orgs[0])
+      setPendingOnboarding(null)
+      if (onOnboardingHandled) onOnboardingHandled()
+    }
+  }, [pendingOnboarding, orgs, onOnboardingHandled])
+
+  // NEW workspace -> straight into the MANDATORY Business Profile step (server
+  // starts it at profile_completed=false, so the gate also survives reloads).
+  function handleCreated(created) {
+    setActiveOrg(created)
+    setSection('businessProfile')
+    load() // refresh the workspace list in the background
+    setPendingOnboarding(null)
+    if (onOnboardingHandled) onOnboardingHandled()
+  }
+
+  // Single source of org-state updates from inside WorkSpace. This is the fix
+EXIT=0

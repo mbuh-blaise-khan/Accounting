@@ -1,0 +1,110 @@
+=== DASH 340-443 ===
+            // `setActiveOrg(...)` here threw "setActiveOrg is not defined"
+            // because WorkSpace is a separate component scope.
+            onSaved={onOrgUpdated}
+          />
+        )}
+        {/* Session 11 Part A — Learn Mode: lesson list, then lesson detail.
+            The detail page receives the org id so lesson 4's practice
+            connector can post a REAL transaction into this workspace
+            (Learn Mode -> Practice Mode). */}
+        {!gated && section === 'learn' && (
+          <LearnPage
+            onOpenLesson={(id) => {
+              setLessonId(id)
+              onSectionChange('lesson')
+            }}
+          />
+        )}
+        {!gated && section === 'lesson' && lessonId != null && (
+          <LessonDetailPage
+            lessonId={lessonId}
+            orgId={org.id}
+            onBack={() => onSectionChange('learn')}
+          />
+        )}
+      </main>
+    </div>
+  )
+}
+
+function OrgHome({ org, onAccounts, onNewTransaction, onJournal, onCashBook, onLedger, onTrialBalance, onFinancialStatements, onBusinessProfile }) {
+  const { t } = useLanguage()
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-8">
+      <h2 className="text-2xl font-bold text-slate-900">{org.name}</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        {t('dashboard.framework')} {org.framework} · {t('dashboard.currency')} {org.currency}
+      </p>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        <BigCard
+          title={t('ws.newTransactionTitle')}
+          desc={t('ws.newTransactionDesc')}
+          action={t('ws.newTransaction')}
+          onClick={onNewTransaction}
+        />
+        <BigCard
+          title={t('ws.journalTitle')}
+          desc={t('ws.journalDesc')}
+          action={t('ws.journal')}
+          onClick={onJournal}
+        />
+        <BigCard
+          title={t('ws.cashbookTitle')}
+          desc={t('ws.cashbookDesc')}
+          action={t('ws.cashbook')}
+          onClick={onCashBook}
+        />
+                        <BigCard
+          title={t('ws.ledgerTitle')}
+          desc={t('ws.ledgerDesc')}
+          action={t('ws.ledger')}
+          onClick={onLedger}
+        />
+        <BigCard
+          title={t('ws.trialBalanceTitle')}
+          desc={t('ws.trialBalanceDesc')}
+          action={t('ws.trialBalanceAction')}
+          onClick={onTrialBalance}
+        />
+        <BigCard
+          title={t('ws.financialStatementsTitle')}
+          desc={t('ws.financialStatementsDesc')}
+          action={t('ws.financialStatementsAction')}
+          onClick={onFinancialStatements}
+        />
+        <BigCard
+          title={t('ws.accountsTitle')}
+          desc={t('ws.accountsDesc')}
+          action={t('ws.accounts')}
+          onClick={onAccounts}
+        />
+        <BigCard
+          title={t('bp.title')}
+          desc={t('bp.subtitle')}
+          action={t('ws.businessProfile')}
+          onClick={onBusinessProfile}
+        />
+      </div>
+    </div>
+  )
+}
+
+function BigCard({ title, desc, action, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-blue-300"
+    >
+      <h3 className="font-semibold text-slate-900">{title}</h3>
+      <p className="mt-1 text-sm text-slate-600">{desc}</p>
+      <span className="mt-3 inline-block text-sm font-medium text-blue-600">{action} →</span>
+    </button>
+  )
+}
+=== LS docs ===
+acceptance-criteria.md
+blueprint-summary.md
+ohada-ifrs-source-reference.md
+EXIT=0

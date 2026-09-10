@@ -421,17 +421,28 @@
     "practiceBullet2": "Record real transactions",
     "practiceBullet3": "Generate financial statements",
     "practiceCta": "Start practicing",
-    "both": "Both",
-    "bothDesc": "Learn concepts and immediately practice them in a demo workspace.",
-    "bothBullet1": "Auto-creates a demo workspace",
-    "bothBullet2": "Lessons post real practice transactions",
-    "bothBullet3": "The full learn-and-practice loop",
-    "bothCta": "Give me everything",
-    "calloutTitle": "Not sure? Start with 'Both'.",
-    "calloutText": "It creates a sandbox workspace so you can learn and practice risk-free. You can delete it anytime.",
-    "showMeAround": "Show me around with a sample demo business"
+    "calloutTitle": "Not sure where to begin?",
+    "calloutText": "Choose 'Show me around' for a quick guided tour — including a sample demo business you can explore with no setup and no risk. You can delete it anytime.",
+    "backToStart": "Back to start",
+    "showMeAround": "Show me around"
   },
   "demo": {
     "workspaceName": "Demo Workspace"
-  }
+  },
+  "dashboard.open": "Open",
+  "dashboard.createNewBusiness": "+ Create a new business",
+  "dashboard.backToWorkspaces": "← Your workspaces",
+  "login.createdNotice": "Account created — please log in to start your session.",
+  "tour": {
+    "skip": "Skip tour",
+    "back": "Back",
+    "next": "Next",
+    "welcomeTitle": "Welcome to Kinxta Docu 👋",
+    "welcomeText": "This is your home base. From here you can switch between learning and practicing accounting at any time — your progress and workspaces are always saved.",
+    "learnTitle": "📚 Learn mode",
+    "learnText": "Seven beginner-friendly lessons with short quizzes. Progress is saved automatically, so you can stop and resume anytime.",
+    "practiceTitle": "💼 Practice mode",
+    "practiceText": "Create a business, post real double-entry transactions, and read the trial balance and financial statements. Ready to try? Create a sample demo business below."
+  },
+  "tour.ctaDemo": "Create my sample demo business 🚀"
 }

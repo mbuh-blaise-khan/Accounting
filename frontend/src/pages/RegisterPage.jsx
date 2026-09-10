@@ -1,11 +1,13 @@
-// Register page: creates an account, sets the httpOnly cookie, and lands on
-// the (protected) Dashboard.
+// Register page: creates an account ONLY (register-no-auto-login, Session 13).
+// The backend no longer sets a session cookie on register, so after success we
+// redirect to the Login page with a clear "Account created — please log in"
+// notice. The user must actively log in to start a session.
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useLanguage } from '../i18n/index.jsx'
 import Logo from '../components/Logo.jsx'
 
-export default function RegisterPage({ onSwitchToLogin }) {
+export default function RegisterPage({ onSwitchToLogin, onAccountCreated }) {
   const { t } = useLanguage()
   const { register, authError } = useAuth()
   const [email, setEmail] = useState('')
@@ -31,13 +33,20 @@ export default function RegisterPage({ onSwitchToLogin }) {
 
     setSubmitting(true)
     try {
+      // Success does NOT authenticate (no session is created by register).
+      // Redirect to the Login page with the "Account created" notice.
       await register({
         email,
         display_name: displayName,
         password,
         language_preference: languagePreference,
       })
-      // Success -> auth state flips to 'authed' and App shows the Dashboard.
+      if (onAccountCreated) {
+        onAccountCreated()
+        return
+      }
+      // Fallback when no redirect handler was provided.
+      if (onSwitchToLogin) onSwitchToLogin()
     } catch {
       setLocalError(t('register.error'))
     } finally {
@@ -56,9 +65,9 @@ export default function RegisterPage({ onSwitchToLogin }) {
         </div>
         <h2 className="text-xl font-bold text-slate-900 mb-6">{t('register.title')}</h2>
 
-        {localError && (
+        {(localError || authError) && (
           <p className="mb-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-600">
-            {localError}
+            {localError || authError}
           </p>
         )}
 

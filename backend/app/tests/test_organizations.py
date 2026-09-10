@@ -4,7 +4,9 @@ from app.models.organization import OrganizationMember
 
 
 def _register(client, email="alice@example.com"):
-    return client.post(
+    # register-no-auto-login: register no longer sets the auth cookie, so the
+    # test session is established by an explicit login right after.
+    resp = client.post(
         "/auth/register",
         json={
             "email": email,
@@ -13,6 +15,12 @@ def _register(client, email="alice@example.com"):
             "language_preference": "en",
         },
     )
+    assert resp.status_code == 200, resp.text
+    login = client.post(
+        "/auth/login", json={"email": email, "password": "supersecret123"}
+    )
+    assert login.status_code == 200, login.text
+    return resp
 
 
 def _create_org(client, **overrides):

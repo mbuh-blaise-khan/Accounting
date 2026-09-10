@@ -421,17 +421,28 @@
     "practiceBullet2": "Enregistrez de vraies transactions",
     "practiceBullet3": "Générez des états financiers",
     "practiceCta": "Commencer à pratiquer",
-    "both": "Les deux",
-    "bothDesc": "Apprenez les concepts et pratiquez-les immédiatement dans un espace de démonstration.",
-    "bothBullet1": "Crée automatiquement un espace de démonstration",
-    "bothBullet2": "Les leçons enregistrent de vraies transactions d'exercice",
-    "bothBullet3": "La boucle complète apprentissage-pratique",
-    "bothCta": "Donnez-moi tout",
-    "calloutTitle": "Pas sûr ? Commencez par 'Les deux'.",
-    "calloutText": "Cela crée un espace sandbox pour apprendre et pratiquer sans risque. Vous pouvez le supprimer à tout moment.",
-    "showMeAround": "Montrez-moi avec une entreprise de démonstration"
+    "calloutTitle": "Vous hésitez par où commencer ?",
+    "calloutText": "Choisissez « Visite guidée » pour un rapide tour — y compris une entreprise démo à explorer sans configuration et sans risque. Vous pouvez la supprimer à tout moment.",
+    "backToStart": "Retour au départ",
+    "showMeAround": "Visite guidée"
   },
   "demo": {
     "workspaceName": "Espace de démonstration"
-  }
+  },
+  "dashboard.open": "Ouvrir",
+  "dashboard.createNewBusiness": "+ Créer une nouvelle entreprise",
+  "dashboard.backToWorkspaces": "← Vos espaces de travail",
+  "login.createdNotice": "Compte créé — connectez-vous pour démarrer votre session.",
+  "tour": {
+    "skip": "Passer la visite",
+    "back": "Précédent",
+    "next": "Suivant",
+    "welcomeTitle": "Bienvenue sur Kinxta Docu 👋",
+    "welcomeText": "C'est votre base. Vous pouvez basculer entre l'apprentissage et la pratique de la comptabilité à tout moment — votre progression et vos espaces de travail sont toujours enregistrés.",
+    "learnTitle": "📚 Mode Apprendre",
+    "learnText": "Sept leçons adaptées aux débutants avec de courts quiz. La progression est enregistrée automatiquement : arrêtez et reprenez quand vous voulez.",
+    "practiceTitle": "💼 Mode Pratiquer",
+    "practiceText": "Créez une entreprise, postez de vraies écritures en partie double et consultez la balance et les états financiers. Prêt à essayer ? Créez une entreprise démo ci-dessous."
+  },
+  "tour.ctaDemo": "Créer mon entreprise démo 🚀"
 }
