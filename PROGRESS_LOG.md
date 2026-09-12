@@ -16,12 +16,14 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
-**Session:** Session 11 Part B2 - frontend learning completion state and certificate presentation foundation.
+**Session:** Session 11 Part B3 — public certificate verification and certificate export.
 
 **STATE: DONE and verified, committed as required.** Real runs observed:
-1. `pytest app/tests -q` (backend) → **133 passed, 12 warnings in 49.82s, RC=0** (132 prior + 1 new B2 regression test in test_certificate.py).
-2. `npm run build` (frontend) → **72 modules transformed, built in 36.54s, RC=0** (2 new modules: CertificateCard + certificatePresentation).
-3. `npm run test:certificate` (frontend) → **all 6 certificate presentation checks passed, RC=0**.
+1. `pytest app/tests -q` (backend) → **142 passed, 12 warnings in 94.69s, RC=0** (133 B2 baseline + 9 new B3 public-verification tests in `test_certificate.py`).
+2. `npm run build` (frontend) → **74 modules transformed, built in 1m 27s, RC=0** (CertificateVerificationPage + QrCode + presentation helpers added).
+3. `npm run test:certificate` (frontend) → **all 11 certificate presentation checks passed, RC=0** (was 6 in B2; +5 new checks for `verificationState`, `isCredentialIdShape`).
+
+**Why a small backend migration was necessary:** the B1 certificate table had no credential identifier and no status column. Public verification REQUIRES (a) an unguessable, non-sequential credential id (so the integer PK can never be a credential) and (b) a `valid`/`revoked` lifecycle. Migration `0016` adds `credential_id` (unique), `status` (server_default `valid`), and `recipient_name` (display-name snapshot so public verification never touches the users table → no email/user-id leakage). Existing rows backfilled with `credential_id='LEGACY-<id>'`, `status='valid'`. New issuance writes `secrets.token_urlsafe(...)` prefixed `kinxta-`.
 
 **Why a tiny backend change was necessary:** the B1 `/learning/completion` response was `{completed, certificate}` — too minimal for any progress UI. The SMALLEST compatible enhancement: `CourseCompletionOut` gained `total_lessons`, `completed_lessons`, `completion_percentage` (0-100 rounded) and a server-computed `certificate_status` (`locked` | `available` | `issued`). The B1 completion RULE is untouched and remains authoritative (see below); the UI never decides completion.
 

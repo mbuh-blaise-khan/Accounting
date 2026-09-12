@@ -1,12 +1,14 @@
 @import "tailwindcss";
 
-/* Print support (report pages).
+/* Print support (report pages + Session 11 Part B3 certificates).
    ALL print rules are inside @media print so they can never leak into the
    normal on-screen view (verified by frontend/src/utils/report.test.mjs).
-   Printing a report shows ONLY the report header block + the report table:
-   the app header, workspace nav, back button, filters, buttons and drill-down
-   panels all carry the .no-print class and/or are the header/nav elements
-   hidden below. */
+   Report printing shows ONLY the report header block + the report table;
+   certificate printing shows ONLY the certificate sheet: the app header,
+   workspace nav, back button, filters, buttons and drill-down panels all
+   carry the .no-print class and/or are the header/nav elements hidden below.
+   The verification + certificate actions (QR/copy/print buttons, links) live
+   inside .no-print containers so they never appear on paper. */
 @media print {
   header, nav { display: none !important; }
   .no-print { display: none !important; }
@@ -14,6 +16,17 @@
   .report-page { min-height: auto !important; background: white !important; padding: 0 !important; }
   .report-content { max-width: none !important; width: 100% !important; }
   .report-header { break-after: avoid; }
+  .cert-print-area { padding: 0 !important; background: white !important; }
+  .cert-sheet {
+    box-shadow: none !important;
+    margin: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    break-inside: avoid;
+    border-color: #475569 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
   table { page-break-inside: auto; }
   tr { break-inside: avoid; page-break-inside: avoid; }
   thead { display: table-header-group; }

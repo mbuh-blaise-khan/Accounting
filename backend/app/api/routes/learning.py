@@ -23,7 +23,7 @@ from app.learning.schemas import (
     LessonSummaryOut,
 )
 from app.learning import service as learning_service
-from app.schemas.certificate import CertificateOut
+from app.schemas.certificate import CertificateOut, PublicCertificateOut
 from app.services import certificate_service
 from app.models.user import User
 
@@ -112,3 +112,27 @@ def issue_certificate(
         )
     db.commit()
     return cert
+
+
+# --- Part B3: public certificate verification ---------------------------------
+@router.get("/certificates/verify/{credential_id}", response_model=PublicCertificateOut)
+def verify_certificate(
+    credential_id: str,
+    db: Session = Depends(get_db),
+):
+    """Public read-only certificate verification (Session 11 Part B3).
+
+    No authentication required. Accepts ONLY the public credential id —
+    never the sequential integer PK. Returns a privacy-safe payload (no
+    internal id, no user_id, no email, no workspace/transaction/answer data).
+    Unknown ids return the standard 404 without revealing whether any
+    related private user or workspace exists. Read-only: this is a GET that
+    never mutates anything (no POST/PUT/DELETE/PATCH exists on this path).
+    """
+    cert = certificate_service.get_certificate_by_credential_id(db, credential_id)
+    if cert is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Certificate not found",
+        )
+    return certificate_service.public_verification_payload(cert)

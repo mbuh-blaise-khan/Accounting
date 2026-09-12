@@ -10,6 +10,8 @@ import {
   CERTIFICATE_STATUS,
   certificateState,
   formatCertificateDate,
+  isCredentialIdShape,
+  verificationState,
 } from './certificatePresentation.js'
 
 let passed = 0
@@ -83,6 +85,39 @@ check('formatCertificateDate never renders Invalid Date', () => {
   assert.equal(formatCertificateDate('', 'en'), '')
   assert.equal(formatCertificateDate(null, 'en'), '')
   assert.equal(formatCertificateDate('not-a-date', 'en'), '')
+})
+
+check('verificationState never reports a revoked certificate as valid', () => {
+  assert.equal(verificationState({ status: 'revoked' }), 'revoked')
+  assert.equal(verificationState({ status: 'suspended' }), 'revoked')
+  assert.equal(verificationState({ status: '' }), 'revoked')
+  assert.equal(verificationState({}), 'revoked')
+})
+
+check('verificationState maps a valid backend status', () => {
+  assert.equal(verificationState({ status: 'valid' }), 'valid')
+})
+
+check('verificationState handles a missing payload safely', () => {
+  assert.equal(verificationState(null), 'missing')
+  assert.equal(verificationState(undefined), 'missing')
+})
+
+// --- Session 11 Part B3: public verification helpers ------------------------
+check('isCredentialIdShape accepts real credential ids', () => {
+  assert.equal(isCredentialIdShape('kinxta-Ab3dEf9Gh0JkLmNoPqRsTuVwX'), true)
+  assert.equal(isCredentialIdShape('kinxta-LEGACY-42'), true)
+})
+
+check('isCredentialIdShape rejects sequential ids and unsafe values', () => {
+  assert.equal(isCredentialIdShape('42'), false) // sequential PK != credential
+  assert.equal(isCredentialIdShape('123'), false)
+  assert.equal(isCredentialIdShape(''), false)
+  assert.equal(isCredentialIdShape(null), false)
+  assert.equal(isCredentialIdShape(undefined), false)
+  assert.equal(isCredentialIdShape('other-abc123'), false)
+  assert.equal(isCredentialIdShape('kinxta-a b'), false)
+  assert.equal(isCredentialIdShape('kinxta-a/b'), false)
 })
 
 if (!process.exitCode) {

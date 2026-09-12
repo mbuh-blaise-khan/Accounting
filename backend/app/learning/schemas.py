@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas.certificate import CertificateOut
+from app.schemas.certificate import CertificateOut, PublicCertificateOut
 
 
 class LessonProgressOut(BaseModel):

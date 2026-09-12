@@ -25,13 +25,39 @@ import DashboardPage from './pages/DashboardPage.jsx'
 import OnboardingChoicePage from './pages/OnboardingChoicePage.jsx'
 import LearnPage from './pages/LearnPage.jsx'
 import LessonDetailPage from './pages/LessonDetailPage.jsx'
+import CertificateVerificationPage from './pages/CertificateVerificationPage.jsx'
 import { fetchOrganizations, createOrganization } from './services/api.js'
+
+// Session 11 Part B3 — public certificate verification deep link.
+// The SPA uses a view-switch (no router dep): a #/verify/<credential_id> hash
+// renders the public verification page for unauthenticated visitors. The
+// credential id is read safely from the path; a malformed id yields a safe
+// not-found state inside the page (no network call, no data leakage).
+function parseVerifyHash(hash) {
+  if (!hash) return null
+  const match = hash.match(/^#\/verify\/([A-Za-z0-9_-]+)$/)
+  return match ? match[1] : null
+}
 
 function AppShell() {
   const { t } = useLanguage()
   const { status, logout } = useAuth()
   const [view, setView] = useState('home') // guest views: 'home' | 'login' | 'register'
   const [loginNotice, setLoginNotice] = useState(false)
+  // Session 11 Part B3 — public verification deep link (#/verify/<credential_id>).
+  // null = not a verification URL; string = the credential id to verify.
+  const [verifyCredentialId, setVerifyCredentialId] = useState(() =>
+    parseVerifyHash(typeof window !== 'undefined' ? window.location.hash : '')
+  )
+
+  // Keep the verify state in sync with hash changes (back/forward, manual edit).
+  useEffect(() => {
+    function onHashChange() {
+      setVerifyCredentialId(parseVerifyHash(window.location.hash))
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   // mode: null = at the choice hub; 'learn' | 'practice' = inside a mode.
   // `entered*` flags keep flows mounted (hidden) once visited, so nothing
@@ -163,6 +189,28 @@ function AppShell() {
       enterPractice(orgs && orgs.length > 0 ? 'list' : 'create')
     }
   }, [t, orgs, enterPractice])
+
+  // Session 11 Part B3 — public certificate verification page.
+  // Renders for BOTH authenticated and unauthenticated visitors: a public
+  // verification URL must never redirect to login. It takes precedence over
+  // the normal view because the hash deep link is the user's explicit intent.
+  // `onHome` clears the hash (returning to the normal home/hub) so the verify
+  // page unmounts cleanly.
+  const handleVerifyHome = useCallback(() => {
+    window.location.hash = ''
+    setVerifyCredentialId(null)
+  }, [])
+
+  if (verifyCredentialId) {
+    return (
+      <LanguageProvider>
+        <CertificateVerificationPage
+          credentialId={verifyCredentialId}
+          onHome={handleVerifyHome}
+        />
+      </LanguageProvider>
+    )
+  }
 
   // Protected: the hub + the two authenticated flows render only when authed.
   if (status === 'authed') {

@@ -45,3 +45,28 @@ export function formatCertificateDate(iso, lang) {
     return String(date.getFullYear());
   }
 }
+
+/**
+ * Credential-ID validation for the public verification page (Session 11
+ * Part B3). Malformed ids must render a safe not-found state WITHOUT a
+ * network call: ours always start with 'kinxta-' and contain only URL-safe
+ * characters (we never accept the sequential integer PK).
+ */
+export function isCredentialIdShape(id) {
+  if (!id || typeof id !== 'string') return false;
+  const trimmed = id.trim();
+  if (trimmed.length < 10 || trimmed.length > 120) return false;
+  return /^kinxta-[A-Za-z0-9_-]+$/.test(trimmed);
+}
+
+/**
+ * Backend-status normalization for the public verification page: any stored
+ * status other than 'valid' renders as 'revoked' (fail closed — a revoked
+ * certificate must never look valid because its credential still exists).
+ */
+export function verificationState(result) {
+  if (!result) return 'missing';
+  if (result.status === 'revoked') return 'revoked';
+  if (result.status === 'valid') return 'valid';
+  return 'revoked';
+}

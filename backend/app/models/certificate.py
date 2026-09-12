@@ -22,6 +22,22 @@ class Certificate(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     course_slug: Mapped[str] = mapped_column(String(50), nullable=False)
+    # Public, unguessable credential identifier (Session 11 Part B3). This is
+    # the ONLY identifier ever exposed to public verification — the sequential
+    # integer PK (id) is never accepted as a credential and never returned
+    # publicly. Unique across all certificates.
+    credential_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    # Lifecycle status (Session 11 Part B3): 'valid' | 'revoked'. Revoked
+    # certificates are NEVER deleted; they still resolve publicly but render
+    # with a "no longer valid" treatment. Any unknown value renders as
+    # revoked-safe on the public side (fail closed, never valid).
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="valid")
+    # Recipient display-name snapshot taken at issuance (Session 11 Part B3).
+    # Denormalized on purpose: the public verification response must work
+    # without ever touching the users table (no email/user-id leakage).
+    recipient_name: Mapped[str] = mapped_column(String(120), nullable=False, default="")
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

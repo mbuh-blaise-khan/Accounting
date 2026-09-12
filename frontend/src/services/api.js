@@ -323,3 +323,39 @@ export async function fetchCourseCompletion() {
 export async function issueCertificate() {
   return request('/learning/certificate', { method: 'POST' });
 }
+
+// ---------- Public certificate verification (Session 11 Part B3) ----------
+// Public by design: NO auth, NO credentials:include, NO private data sent.
+// The response (PublicCertificateOut) carries only credential metadata + the
+// recipient display-name snapshot — never internal ids, emails, or
+// workspace/transaction/answer data.
+
+/** Build a shareable verification URL (frontend origin + hash deep link). */
+export function certificateVerificationUrl(credentialId) {
+  const origin = typeof window !== 'undefined' && window.location && window.location.origin
+    ? window.location.origin
+    : '';
+  return `${origin}/#/verify/${encodeURIComponent(credentialId)}`;
+}
+
+/**
+ * GET /learning/certificates/verify/{credential_id} -> PublicCertificateOut.
+ * Throws on 404 ("Certificate not found") and other failures; callers map
+ * those to the not-found / error states.
+ */
+export async function fetchPublicCertificate(credentialId) {
+  if (!credentialId || typeof credentialId !== 'string') {
+    throw new Error('Invalid credential ID');
+  }
+  const id = credentialId.trim();
+  if (!id) throw new Error('Invalid credential ID');
+  const res = await fetch(`${API_BASE}/learning/certificates/verify/${encodeURIComponent(id)}`, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw parseError(res, text);
+  }
+  return res.json();
+}
