@@ -16,6 +16,32 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
+**Session:** Session 11 Part B1 - authoritative course completion + certificate backend foundation.
+
+**STATE: DONE and verified.** `pytest app/tests -q` -> **132 passed, RC=0** (45.94s; 128 prior + 4 new certificate tests).
+
+**What was built:**
+- **`certificates` table** (migration `0015_add_certificates_table.py`, down_revision 0014): id, user_id (FK users.id, indexed), course_slug, issued_at (server default now()), wording (server default "Kinxta Docu Certificate of Completion"), UNIQUE (user_id, course_slug) - idempotency is enforced at the DATABASE level, not just in code.
+- **`backend/app/models/certificate.py`** - `Certificate` model, registered in `app/models/__init__.py` so Alembic autogenerate sees it.
+- **`backend/app/services/certificate_service.py`** - authoritative SERVER-SIDE completion, deterministic, no AI:
+  - A lesson counts as passed ONLY when its progress row has status == 'completed' AND best_score == 100 (every question attempted AND every attempt correct; "attempted everything" alone is not enough).
+  - The course is complete only when EVERY lesson in the curriculum passes.
+  - `issue_certificate_if_eligible` is idempotent: returns the existing row instead of duplicating; a concurrent insert is absorbed by the unique constraint (rollback + re-read).
+- **API (all auth-protected, `backend/app/api/routes/learning.py`):**
+  - `GET /learning/completion` -> `{completed, certificate}` - completion status + certificate if issued.
+  - `POST /learning/certificate` -> 200 with the certificate (SAME id on repeat calls) or **403** when not complete.
+- **Schemas:** `CertificateOut` (pydantic v2, from_attributes) in `app/schemas/certificate.py`; `CourseCompletionOut` in `app/learning/schemas.py`.
+- **Tests (`app/tests/test_certificate.py`, 4 new):** auth required on both endpoints; not-eligible -> completed=False / certificate=None / POST 403; full completion -> wording is EXACTLY "Kinxta Docu Certificate of Completion", course_slug "accounting-basics", idempotent (2nd POST returns same id, exactly 1 row in DB); one wrong answer in an otherwise-complete course -> still 403 (100% is required).
+- **conftest.py** cleanup now wipes `certificates` between tests too.
+
+**Deliberately NOT in this part:** PDF export, QR codes, public verification UI, badges, blockchain, workspace deletion, advanced curriculum authoring (per Part B1 scope).
+
+**Next session to run:** Session 11 Part B2 (per-lesson explanations/remediation or spaced-repetition review queue, per docs/acceptance-criteria.md) - or surface this backend with the completion/certificate UI first if preferred.
+
+---
+
+## Previous status (Session 13 - Learn/Practice choice screen fixes)
+
 **Session:** Session 13 — Learn/Practice choice screen fixes: persistent hub, navigation bugs, register-no-auto-login, correct new-vs-returning workspace flow.
 
 **STATE: DONE and verified, committed as required.** Real runs observed:

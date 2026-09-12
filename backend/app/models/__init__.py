@@ -1,5 +1,6 @@
 """Import models here so Alembic autogenerate sees every table's metadata."""
 from app.models.account import Account  # noqa: F401
+from app.models.certificate import Certificate  # noqa: F401
 from app.models.enums import (  # noqa: F401
     AccountClass,
     FrameworkCode,

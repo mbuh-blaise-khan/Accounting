@@ -10,13 +10,21 @@ All routes require authentication. Content lives in the DATABASE and is
 served per-request — never bundled as static/downloadable files (content
 deterrent requirement).
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.learning.schemas import AttemptCreate, AttemptOut, LessonDetailOut, LessonSummaryOut
+from app.learning.schemas import (
+    AttemptCreate,
+    AttemptOut,
+    CourseCompletionOut,
+    LessonDetailOut,
+    LessonSummaryOut,
+)
 from app.learning import service as learning_service
+from app.schemas.certificate import CertificateOut
+from app.services import certificate_service
 from app.models.user import User
 
 router = APIRouter(prefix="/learning", tags=["learning"])
@@ -61,3 +69,34 @@ def submit_attempt(
         text=payload.text,
         organization_id=payload.organization_id,
     )
+
+# --- Part B1: authoritative completion + certificate -------------------------
+@router.get("/completion", response_model=CourseCompletionOut)
+def get_completion(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Server-side completion status + the user's certificate, if issued."""
+    learning_service.ensure_default_lessons(db)
+    completed = certificate_service._all_lessons_passed(db, current_user)
+    cert = certificate_service.get_certificate(db, current_user)
+    return CourseCompletionOut(completed=completed, certificate=cert)
+
+
+@router.post("/certificate", response_model=CertificateOut)
+def issue_certificate(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Issue the certificate if (and only if) the course is complete.
+
+    Idempotent: calling it again returns the SAME certificate row.
+    """
+    cert = certificate_service.issue_certificate_if_eligible(db, current_user)
+    if cert is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Course not complete; certificate not eligible",
+        )
+    db.commit()
+    return cert

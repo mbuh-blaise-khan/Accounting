@@ -1,8 +1,10 @@
-"""Pydantic schemas for the learning engine (Session 11 Part A)."""
+"""Pydantic schemas for the learning engine (Session 11 Part A + Part B1)."""
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+from app.schemas.certificate import CertificateOut
 
 
 class LessonProgressOut(BaseModel):
@@ -38,12 +40,7 @@ class LessonSectionOut(BaseModel):
 
 
 class QuestionAnswerOut(BaseModel):
-    """MCQ option — the is_correct flag is NEITHER stored nor sent here.
-
-    Correct answers are learned only via the scoring endpoint (server-side
-    straight comparison), so the client cannot just read them out of the
-    lesson detail payload.
-    """
+    """MCQ option - the is_correct flag is NEITHER stored nor sent here."""
 
     option_key: str
     text_en: str
@@ -78,8 +75,6 @@ class AttemptCreate(BaseModel):
     question_id: int
     option_key: Optional[str] = Field(default=None, max_length=4)
     text: Optional[str] = Field(default=None, max_length=500)
-    # The demo workspace to post into for the Lesson 4 practice connector
-    # (only honored when the answer is correct AND the question posts).
     organization_id: Optional[int] = None
 
 
@@ -87,14 +82,19 @@ class AttemptOut(BaseModel):
     question_id: int
     lesson_id: int
     is_correct: bool
-    # After grading (never revealed before): which option was right.
     correct_option_key: Optional[str] = None
-    correct_text: Optional[str] = None  # short-answer accepted form
+    correct_text: Optional[str] = None
     explanation_en: Optional[str] = None
     explanation_fr: Optional[str] = None
     progress: LessonProgressOut
-    # Lesson 4 practice connector:
     practice_posted: bool = False
     practice_transaction_id: Optional[int] = None
     practice_error: Optional[str] = None
     created_at: datetime
+
+
+class CourseCompletionOut(BaseModel):
+    """Server-side authoritative course completion status (Part B1)."""
+
+    completed: bool
+    certificate: Optional[CertificateOut] = None
