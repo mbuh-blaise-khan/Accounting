@@ -307,3 +307,19 @@ export async function submitAttempt(questionId, payload) {
     body: JSON.stringify({ question_id: questionId, ...payload }),
   });
 }
+
+// ---------- Course completion + certificate (Session 11 Part B2) ----------
+// The backend owns the course identity — exactly one curriculum today, fixed
+// server-side as COURSE_SLUG = "accounting-basics" in certificate_service.py.
+// These endpoints take no slug parameter; never invent a second course
+// identifier here.
+
+/** GET /learning/completion -> authoritative completion summary + certificate. */
+export async function fetchCourseCompletion() {
+  return request('/learning/completion');
+}
+
+/** POST /learning/certificate -> CertificateOut (idempotent; 403 when not eligible). */
+export async function issueCertificate() {
+  return request('/learning/certificate', { method: 'POST' });
+}

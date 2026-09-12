@@ -94,7 +94,16 @@ class AttemptOut(BaseModel):
 
 
 class CourseCompletionOut(BaseModel):
-    """Server-side authoritative course completion status (Part B1)."""
+    """Server-side authoritative course completion status (Part B1 + B2).
+
+    `certificate_status` is server-computed so the UI never has to guess:
+    'locked' (course not complete) | 'available' (complete, not yet issued)
+    | 'issued' (certificate exists).
+    """
 
     completed: bool
     certificate: Optional[CertificateOut] = None
+    total_lessons: int = 0
+    completed_lessons: int = 0
+    completion_percentage: int = 0  # 0-100, rounded
+    certificate_status: str = "locked"  # 'locked' | 'available' | 'issued'

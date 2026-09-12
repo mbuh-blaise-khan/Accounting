@@ -16,6 +16,35 @@ HOW TO USE THIS FILE:
 
 ## Current Status
 
+**Session:** Session 11 Part B2 - frontend learning completion state and certificate presentation foundation.
+
+**STATE: DONE and verified, committed as required.** Real runs observed:
+1. `pytest app/tests -q` (backend) → **133 passed, 12 warnings in 49.82s, RC=0** (132 prior + 1 new B2 regression test in test_certificate.py).
+2. `npm run build` (frontend) → **72 modules transformed, built in 36.54s, RC=0** (2 new modules: CertificateCard + certificatePresentation).
+3. `npm run test:certificate` (frontend) → **all 6 certificate presentation checks passed, RC=0**.
+
+**Why a tiny backend change was necessary:** the B1 `/learning/completion` response was `{completed, certificate}` — too minimal for any progress UI. The SMALLEST compatible enhancement: `CourseCompletionOut` gained `total_lessons`, `completed_lessons`, `completion_percentage` (0-100 rounded) and a server-computed `certificate_status` (`locked` | `available` | `issued`). The B1 completion RULE is untouched and remains authoritative (see below); the UI never decides completion.
+
+**What was built:**
+- **Backend API (`routes/learning.py`):** `GET /learning/completion` now derives counts + status through the new `certificate_service.course_completion_metrics()` (keeps the authoritative rule: every lesson needs a `LessonProgress` row with `status == "completed"` AND `best_score == 100`). `POST /learning/certificate` unchanged — still idempotent (DB unique `(user_id, course_slug)`) and 403 when not eligible.
+- **Course identity:** unchanged and singular — `COURSE_SLUG = "accounting-basics"` lives only in `certificate_service.py`; the endpoints take no slug param and the frontend never invents a second identifier (documented in `api.js`).
+- **Frontend API helpers (`services/api.js`):** `fetchCourseCompletion()` (GET /learning/completion) and `issueCertificate()` (POST /learning/certificate) — existing `request()` helper, httpOnly-cookie auth, `parseError` convention (401/403/5xx/network errors are NOT swallowed).
+- **Pure presentation util (`utils/certificatePresentation.js`) + node tests:** `certificateState()` normalizes the backend `certificate_status` (fail-safe to 'locked' for unknown/missing → the UI never shows an issue button the backend would 403) and `formatCertificateDate()` (localized en-GB/fr-FR; '' instead of "Invalid Date"). Test payloads mirror the REAL `CourseCompletionOut` schema → doubles as a frontend/backend compatibility pin (`npm run test:certificate`, 6 checks).
+- **CertificateCard (`components/CertificateCard.jsx`):** polished on-screen certificate — decorative double frame, Kinxta Docu wordmark, the EXACT backend wording rendered from `certificate.wording` (`Kinxta Docu Certificate of Completion` is never hard-coded in the UI), learner display name, course name + `course_slug` code, localized issue date, certificate id, and a preview note. Note: this is an on-screen presentation FOUNDATION only.
+- **LearnPage integration:** the overall-progress card now shows SERVER-side numbers (completed/total, %, status pill) and a certificate section with all three states — locked 🔒 (perfect-score hint: every question correct), available 🎉 ("Get my certificate" → POST with issuing / error / retry), issued (renders CertificateCard). Loading, empty, error, and retry states included (retry re-fetches server state).
+- **i18n (EN + FR):** new `certificate.*` keys — 24 per language, PARITY VERIFIED (EN/FR key sets identical, both files parse as valid JSON): progress title, status pills (Locked/Ready/Issued), locked hint, issue/issuing/issueError/retry, issuedTo/courseLabel/courseName/issuedOn/certId/course, previewNote.
+- **Security/non-exposure:** correct answers are never exposed. The completion payload carries only per-lesson `best_score` + counts + certificate fields; a grep of the new/changed frontend files for correct-answer/answer-key markers returns nothing. Certificate responses still contain no transactions, workspaces, or internal app data (only the learner's own certificate row).
+
+**Deliberately NOT in this part (later bounded sessions):** PDF export, QR codes, public certificate verification, Open Badges, blockchain, milestone certificates — plus (unchanged from B1) no advanced curriculum authoring and no AI tutoring.
+
+**Acceptance criteria:** no change needed — the Session 11 block in docs/acceptance-criteria.md contains no certificate-specific criterion (checked for "certificate"/"credential"/"badge"); the B2 UI builds on the B1 backend foundation without altering any listed requirement.
+
+**Next session to run:** Session 11 Part B2 continuation — per-lesson explanations/remediation and the spaced-repetition review queue (per docs/acceptance-criteria.md), OR certificate PDF export + QR/public verification (the natural next step for this UI foundation) — whichever is prioritised.
+
+---
+
+## Previous status (Session 11 Part B1 - authoritative course completion + certificate backend foundation)
+
 **Session:** Session 11 Part B1 - authoritative course completion + certificate backend foundation.
 
 **STATE: DONE and verified.** `pytest app/tests -q` -> **132 passed, RC=0** (45.94s; 128 prior + 4 new certificate tests).

@@ -444,5 +444,31 @@
     "practiceTitle": "💼 Mode Pratiquer",
     "practiceText": "Créez une entreprise, postez de vraies écritures en partie double et consultez la balance et les états financiers. Prêt à essayer ? Créez une entreprise démo ci-dessous."
   },
-  "tour.ctaDemo": "Créer mon entreprise démo 🚀"
+  "tour.ctaDemo": "Créer mon entreprise démo 🚀",
+  "certificate": {
+    "loadError": "Impossible de charger votre progression ou votre certificat. Veuillez réessayer.",
+    "retry": "Réessayer",
+    "statusLocked": "Verrouillé",
+    "statusAvailable": "Prêt",
+    "statusIssued": "Délivré",
+    "progressTitle": "Progression du cours",
+    "of": "sur",
+    "lesson": "leçon",
+    "lessons": "leçons",
+    "lockedTitle": "Certificat verrouillé",
+    "lockedHint": "Terminez chaque leçon avec un score parfait pour débloquer votre certificat.",
+    "perfectScoreHint": "Une leçon compte lorsque vous répondez correctement à toutes les questions.",
+    "availableTitle": "Bravo — le cours est terminé !",
+    "availableHint": "Votre certificat est prêt. Obtenez-le ci-dessous.",
+    "issue": "Obtenir mon certificat",
+    "issuing": "Émission…",
+    "issueError": "Impossible d'émettre le certificat pour le moment. Veuillez réessayer.",
+    "issuedTo": "Ce certificat est décerné à",
+    "courseLabel": "pour avoir réussi avec succès",
+    "courseName": "Comptabilité de base",
+    "issuedOn": "Délivré le",
+    "certId": "N° de certificat",
+    "course": "Cours",
+    "previewNote": "Aperçu du certificat à l'écran. L'export PDF et la vérification publique arriveront dans une session ultérieure."
+  }
 }

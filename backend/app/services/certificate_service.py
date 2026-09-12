@@ -23,6 +23,11 @@ COURSE_SLUG = "accounting-basics"
 CERTIFICATE_WORDING = "Kinxta Docu Certificate of Completion"
 
 
+def _lesson_passed(row: LessonProgress | None) -> bool:
+    """Authoritative B1 rule: the lesson is completed AND fully correct."""
+    return row is not None and row.status == "completed" and row.best_score == 100
+
+
 def _all_lessons_passed(db: Session, user: User) -> bool:
     """True only when every lesson is completed AND fully correct (100%)."""
     lessons = db.query(Lesson).all()
@@ -34,11 +39,23 @@ def _all_lessons_passed(db: Session, user: User) -> bool:
         .filter(LessonProgress.user_id == user.id)
         .all()
     }
-    for lesson in lessons:
-        row = progress_rows.get(lesson.id)
-        if row is None or row.status != "completed" or row.best_score != 100:
-            return False
-    return True
+    return all(_lesson_passed(progress_rows.get(lesson.id)) for lesson in lessons)
+
+
+def course_completion_metrics(db: Session, user: User) -> tuple[int, int]:
+    """(total_lessons, completed_lessons) under the authoritative B1 rule."""
+    lessons = db.query(Lesson).all()
+    progress_rows = {
+        p.lesson_id: p
+        for p in db.query(LessonProgress)
+        .filter(LessonProgress.user_id == user.id)
+        .all()
+    }
+    total = len(lessons)
+    completed = sum(
+        1 for lesson in lessons if _lesson_passed(progress_rows.get(lesson.id))
+    )
+    return total, completed
 
 
 def get_certificate(db: Session, user: User) -> Certificate | None:

@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../i18n/index.jsx';
-import { fetchLessons } from '../services/api';
+import {
+  fetchLessons,
+  fetchCourseCompletion,
+  issueCertificate,
+} from '../services/api';
+import CertificateCard from '../components/CertificateCard';
+import { certificateState } from '../utils/certificatePresentation';
 
 /**
  * Learn Mode — lesson list with per-lesson and overall progress.
@@ -8,44 +14,106 @@ import { fetchLessons } from '../services/api';
  * Lesson titles/summaries come from the backend in both languages; the active
  * UI language decides which variant is shown, so the existing language toggle
  * is respected without extra state here.
+ *
+ * Session 11 Part B2 — the completion summary and certificate states are read
+ * from the AUTHORITATIVE server endpoint (GET /learning/completion), never
+ * guessed from local progress: locked -> available (issue) -> issued.
  */
 export default function LearnPage({ onOpenLesson }) {
   const { t, lang } = useLanguage();
   const [lessons, setLessons] = useState(null);
-  const [error, setError] = useState('');
+  const [completion, setCompletion] = useState(null); // CourseCompletionOut
+  const [lessonsError, setLessonsError] = useState('');
+  const [completionError, setCompletionError] = useState('');
+  const [issueError, setIssueError] = useState('');
+  const [issuing, setIssuing] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let alive = true;
-    setError('');
+    setLessonsError('');
+    setCompletionError('');
     setLessons(null);
+    setCompletion(null);
     fetchLessons()
       .then((data) => {
         if (alive) setLessons(data);
       })
       .catch(() => {
-        if (alive) setError(t('learn.loadError'));
+        if (alive) setLessonsError(t('learn.loadError'));
+      });
+    fetchCourseCompletion()
+      .then((data) => {
+        if (alive) setCompletion(data);
+      })
+      .catch(() => {
+        if (alive) setCompletionError(t('certificate.loadError'));
       });
     return () => {
       alive = false;
     };
     // lang re-fetches so freshly toggled UI language re-renders server
-    // content; `t` changes with lang and is intentionally excluded.
+    // content; reloadKey drives the retry buttons. `t` changes with lang and
+    // is intentionally excluded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang]);
+  }, [lang, reloadKey]);
 
-  if (error) {
-    return <p className="p-4 text-sm text-red-600">{error}</p>;
+  const retry = () => setReloadKey((k) => k + 1);
+
+  async function handleIssue() {
+    if (issuing) return;
+    setIssuing(true);
+    setIssueError('');
+    try {
+      const cert = await issueCertificate();
+      setCompletion((prev) => ({
+        ...(prev || {}),
+        completed: true,
+        certificate: cert,
+        certificate_status: 'issued',
+      }));
+    } catch {
+      setIssueError(t('certificate.issueError'));
+    } finally {
+      setIssuing(false);
+    }
+  }
+
+  if (lessonsError && !lessons) {
+    return (
+      <section className="mx-auto w-full max-w-3xl px-4 py-6">
+        <p className="text-sm text-red-600">{lessonsError}</p>
+        <button
+          type="button"
+          onClick={retry}
+          className="mt-3 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+        >
+          {t('certificate.retry')}
+        </button>
+      </section>
+    );
   }
   if (!lessons) {
     return <p className="p-4 text-sm text-slate-500">{t('learn.loading')}</p>;
   }
 
-  const completed = lessons.filter(
-    (l) => l.progress && l.progress.status === 'completed'
-  ).length;
-  const overallPct = lessons.length
-    ? Math.round((completed / lessons.length) * 100)
-    : 0;
+  // Authoritative server-side numbers first; fall back to local progress only
+  // while the completion call is in flight or failed (safe read-only display
+  // values — the completion DECISION always stays server-side).
+  const server = completion || {};
+  const completed =
+    server.completed_lessons != null
+      ? server.completed_lessons
+      : lessons.filter((l) => l.progress && l.progress.status === 'completed')
+          .length;
+  const total = server.total_lessons != null ? server.total_lessons : lessons.length;
+  const overallPct =
+    server.completion_percentage != null
+      ? server.completion_percentage
+      : total
+        ? Math.round((completed / total) * 100)
+        : 0;
+  const certStatus = certificateState(completion);
   const lessonTitle = (l) => (lang === 'fr' ? l.title_fr : l.title_en);
   const actionLabel = (p) => {
     const answered = p.questions_answered || 0;
@@ -61,10 +129,13 @@ export default function LearnPage({ onOpenLesson }) {
       </header>
 
       <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between text-sm font-medium text-slate-700">
-          <span>{t('learn.progressOverall')}</span>
-          <span>
-            {completed}/{lessons.length} · {overallPct}%
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm font-medium text-slate-700">
+          <span>{t('certificate.progressTitle')}</span>
+          <span className="flex items-center gap-2">
+            <CertificateStatusChip status={certStatus} t={t} />
+            <span>
+              {completed}/{total} · {overallPct}%
+            </span>
           </span>
         </div>
         <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
@@ -74,6 +145,88 @@ export default function LearnPage({ onOpenLesson }) {
           />
         </div>
       </div>
+
+      {completionError ? (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="text-sm text-amber-700">{completionError}</p>
+          <button
+            type="button"
+            onClick={retry}
+            className="shrink-0 text-sm font-semibold text-amber-700 hover:underline"
+          >
+            {t('certificate.retry')}
+          </button>
+        </div>
+      ) : null}
+
+      {completion ? (
+        <div className="mb-6">
+          {certStatus === 'locked' ? (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl" aria-hidden="true">
+                  🔒
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {t('certificate.lockedTitle')}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {t('certificate.lockedHint')}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {t('certificate.perfectScoreHint')}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {certStatus === 'available' ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl" aria-hidden="true">
+                    🎉
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-800">
+                      {t('certificate.availableTitle')}
+                    </p>
+                    <p className="mt-1 text-sm text-emerald-700">
+                      {t('certificate.availableHint')}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleIssue}
+                  disabled={issuing}
+                  className="shrink-0 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {issuing ? t('certificate.issuing') : t('certificate.issue')}
+                </button>
+              </div>
+              {issueError ? (
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-white/70 p-3">
+                  <p className="text-sm text-red-600">{issueError}</p>
+                  <button
+                    type="button"
+                    onClick={handleIssue}
+                    className="shrink-0 whitespace-nowrap text-sm font-semibold text-red-600 hover:underline"
+                  >
+                    {t('certificate.retry')}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {certStatus === 'issued' ? (
+            <CertificateCard certificate={completion.certificate} />
+          ) : null}
+        </div>
+      ) : null}
 
       <ol className="space-y-3">
         {lessons.map((lesson, idx) => {
@@ -127,6 +280,31 @@ function statusLabel(t, status) {
   if (status === 'completed') return t('learn.completed');
   if (status === 'in_progress') return t('learn.inProgress');
   return t('learn.notStarted');
+}
+
+/** Small status pill for the server-side completion summary. */
+function CertificateStatusChip({ status, t }) {
+  const base =
+    'shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap';
+  if (status === 'issued') {
+    return (
+      <span className={`${base} bg-emerald-100 text-emerald-700`}>
+        {t('certificate.statusIssued')}
+      </span>
+    );
+  }
+  if (status === 'available') {
+    return (
+      <span className={`${base} bg-emerald-50 text-emerald-600`}>
+        {t('certificate.statusAvailable')}
+      </span>
+    );
+  }
+  return (
+    <span className={`${base} bg-slate-100 text-slate-500`}>
+      {t('certificate.statusLocked')}
+    </span>
+  );
 }
 
 function statusChipClass(status) {

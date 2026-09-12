@@ -156,3 +156,37 @@ def test_one_wrong_answer_blocks_certificate(client, test_db_session):
 
     # The whole course is otherwise done, but 100% is required.
     assert client.post("/learning/certificate").status_code == 403
+
+
+# --- 5) B2 summary fields drive the certificate UI --------------------------
+def test_completion_summary_fields_drive_the_certificate_ui(client, test_db_session):
+    _register(client)
+    total = len(_lessons(client))
+
+    # Not started: 0/N, locked, no certificate.
+    r = client.get("/learning/completion")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total_lessons"] == total
+    assert body["completed_lessons"] == 0
+    assert body["completion_percentage"] == 0
+    assert body["completed"] is False
+    assert body["certificate"] is None
+    assert body["certificate_status"] == "locked"
+
+    # Fully correct everywhere: 100%, available but not yet issued.
+    _complete_all_lessons(client, test_db_session)
+    r = client.get("/learning/completion")
+    body = r.json()
+    assert body["completed_lessons"] == total
+    assert body["completion_percentage"] == 100
+    assert body["completed"] is True
+    assert body["certificate"] is None
+    assert body["certificate_status"] == "available"
+
+    # After issuing: status flips to issued, certificate present.
+    cert = client.post("/learning/certificate")
+    assert cert.status_code == 200, cert.text
+    body = client.get("/learning/completion").json()
+    assert body["certificate_status"] == "issued"
+    assert body["certificate"]["id"] == cert.json()["id"]

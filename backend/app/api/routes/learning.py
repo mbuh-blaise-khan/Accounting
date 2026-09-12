@@ -78,9 +78,21 @@ def get_completion(
 ):
     """Server-side completion status + the user's certificate, if issued."""
     learning_service.ensure_default_lessons(db)
-    completed = certificate_service._all_lessons_passed(db, current_user)
+    total, completed = certificate_service.course_completion_metrics(
+        db, current_user
+    )
     cert = certificate_service.get_certificate(db, current_user)
-    return CourseCompletionOut(completed=completed, certificate=cert)
+    is_completed = total > 0 and completed == total
+    pct = round((completed / total) * 100) if total else 0
+    status = "issued" if cert is not None else ("available" if is_completed else "locked")
+    return CourseCompletionOut(
+        completed=is_completed,
+        certificate=cert,
+        total_lessons=total,
+        completed_lessons=completed,
+        completion_percentage=pct,
+        certificate_status=status,
+    )
 
 
 @router.post("/certificate", response_model=CertificateOut)

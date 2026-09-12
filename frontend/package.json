@@ -12,7 +12,8 @@
     "test:reports": "node src/utils/report.test.mjs",
     "test:financial": "node src/utils/financial.test.mjs",
     "test:excel": "node src/utils/excel.test.mjs",
-    "test:profile": "node src/utils/profile.test.mjs"
+    "test:profile": "node src/utils/profile.test.mjs",
+    "test:certificate": "node src/utils/certificatePresentation.test.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

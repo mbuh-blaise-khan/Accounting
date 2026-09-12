@@ -444,5 +444,31 @@
     "practiceTitle": "💼 Practice mode",
     "practiceText": "Create a business, post real double-entry transactions, and read the trial balance and financial statements. Ready to try? Create a sample demo business below."
   },
-  "tour.ctaDemo": "Create my sample demo business 🚀"
+  "tour.ctaDemo": "Create my sample demo business 🚀",
+  "certificate": {
+    "loadError": "Could not load your progress or certificate. Please try again.",
+    "retry": "Try again",
+    "statusLocked": "Locked",
+    "statusAvailable": "Ready",
+    "statusIssued": "Issued",
+    "progressTitle": "Course progress",
+    "of": "of",
+    "lesson": "lesson",
+    "lessons": "lessons",
+    "lockedTitle": "Certificate locked",
+    "lockedHint": "Complete every lesson with a perfect score to unlock your certificate.",
+    "perfectScoreHint": "A lesson counts when you answer every question correctly.",
+    "availableTitle": "You did it — the course is complete!",
+    "availableHint": "Your certificate is ready. Get it below.",
+    "issue": "Get my certificate",
+    "issuing": "Issuing…",
+    "issueError": "Could not issue the certificate right now. Please try again.",
+    "issuedTo": "This certificate is awarded to",
+    "courseLabel": "for successfully completing",
+    "courseName": "Accounting Basics",
+    "issuedOn": "Issued on",
+    "certId": "Certificate ID",
+    "course": "Course",
+    "previewNote": "On-screen certificate preview. PDF export and public verification arrive in a later session."
+  }
 }
