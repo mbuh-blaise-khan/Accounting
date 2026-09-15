@@ -14,6 +14,48 @@ HOW TO USE THIS FILE:
 
 ---
 
+## Session 11 Part C1 — remediation links and post-answer feedback UX
+
+**Date:** 2026-09-15 — learning-engine feedback layer (no accounting, certificate, workspace, or public-verification code touched).
+
+**Scope:** after the learner submits an answer, the server now returns a learner-safe `feedback` object in the chosen language: an explanation of the concept, a plain-language correction + optional "Review this concept" remediation target on a wrong answer, and an encouragement on a right answer. Confidence tracking, spaced repetition, review queues, AI tutoring: **deferred to C2**.
+
+**Data model / migration:**
+- `explanation_en` / `explanation_fr` **already existed** on `questions` (from Part A) and were reused — nothing duplicate was added.
+- Migration **`0017_question_feedback_fields.py`** (down_revision `0016`) adds three nullable columns to `questions` only: `correction_en`, `correction_fr` (authored, learner-safe correction text) and `remediation_section_id` (optional FK → `lesson_sections.id`, `ON DELETE SET NULL`, indexed). All nullable → no backfill. `downgrade()` removes only these three things. **Applied forward on the local DB: `alembic current` = `0017 (head)`.**
+- The lesson is NOT duplicated on the question: `questions.lesson_id` stays authoritative; the service verifies a remediation pointer belongs to the question's own lesson before serving it.
+
+**Answer-feedback response (`POST /learning/attempts`, additive + backward compatible):**
+- Existing top-level grading fields are unchanged (`is_correct`, `correct_option_key` / `correct_text`, `explanation_en/fr`, `progress`, practice fields) so the pre-C1 frontend and tests keep working.
+- NEW: `feedback` object — `{ correct, explanation, correction|null, encouragement|null, remediation|null }`; `remediation` = `{ lesson_id, section_id, section_position, section_title, action_label }`. Built by the new `backend/app/learning/feedback.py` (authored encouragement / action-label copy) and `service._answer_feedback()` / `_remediation_target()`.
+
+**Remediation behavior:**
+- Every seeded question carries a curated section pointer (`remediation_section_position` in seed data → resolved to a section id at seed/sync time). Equation questions → equation section, debit/credit → debits-and-credits section, journal → journal analysis, trial balance → trial-balance section.
+- `_remediation_target()` drops (never guesses) a pointer that is missing, stale, or cross-lesson: the section must be verifiably in `lesson.sections`. Remediation is offered only for INCORRECT answers. A question without a pointer returns `remediation: null`.
+- Seed idempotency preserved: the content fingerprint now includes the C1 fields (compared via section position, not id) so a pre-C1 database re-syncs once; `_sync_question_feedback()` backfills corrections/pointers onto existing question rows without changing question ids.
+
+**Answer protection (unchanged guarantees, now tested):**
+- Read endpoints (`GET /learning/lessons`, `GET /learning/lessons/{id}`) still expose NO explanation, correction, remediation, `is_correct`, correct-option key/text, or accepted short-answer text — enforced by exact response key-set assertions. Feedback material exists only on the submission endpoint's response. Option texts are legitimately visible pre-submission (learners must see the choices); only WHICH option is correct stays server-side. Sections now carry a stable `id` in the detail payload (needed as the remediation anchor) — content and shape otherwise unchanged.
+
+**EN/FR behavior:** `?lang=en|fr` on the attempts endpoint selects the feedback language; when omitted, the signed-in user's stored `language_preference` decides. Scoring stays language-blind (both accepted short answers compared, as before). Section titles and action labels localize with the same selector.
+
+**Frontend (minimum viable, no review queue):**
+- `services/api.js`: `submitAttempt(questionId, payload, lang?)` — optional lang query param, additive.
+- `utils/lessonFeedback.js` (pure, no DOM): `feedbackStatus()` (named `correct|incorrect` status, null before grading), `feedbackProjection()` (whitelisted view — never exposes the answer key), `remediationTarget()` (rejects incomplete targets), `sectionAnchorId()` (stable `lesson-section-<id>` anchors).
+- `LessonDetailPage.jsx`: post-answer feedback block — verdict with icon + color (not color-only), explanation, correction, "Review this concept" button only when the API provides a valid target; clicking scrolls to the anchored section of the SAME lesson and highlights it briefly. Standalone Learn flow and back behavior untouched. No explanations/answers hard-coded in the frontend.
+- i18n: 4 generic keys added to BOTH `en.json`/`fr.json` (`learn.feedbackWhyCorrect`, `learn.feedbackConcept`, `learn.feedbackCorrection`, `learn.reviewConcept`) — the explanation text itself stays server-side, never in i18n files.
+
+**Tests / actual results (all observed via captured output files):**
+1. Backend focused: `pytest app/tests/test_learning.py -q` → **16 passed** (12 Part-A tests + 4 new C1: read-endpoint protection, correct/incorrect feedback in the requested language, remediation scoping incl. same-lesson DB verification, `_remediation_target` unit test for missing/foreign pointers, stored-preference language fallback). Two earlier C1 test drafts were fixed: (a) an over-strict "correct option text not in payload" assertion was wrong by design (option texts must be visible; only the flag is protected), (b) manually re-pointing a remediation pointer in a test fought the fingerprint re-seed (stale question ids → 404), replaced by resolving the seed-nominated section.
+2. Backend certificate focused: `pytest app/tests/test_certificate.py -q` → **14 passed** (B2/B3 behavior intact).
+3. Backend full: `pytest app/tests -q` → **147 passed, 12 warnings in 38.10s, RC=0** (142 B3 baseline + 5 net-new C1).
+4. Frontend: `npm run test:feedback` → **10 checks passed, RC=0** (nothing before submission; named verdict status; projection shapes; remediation only when usable; invalid targets rejected; deterministic anchors; language fallback; no answer key embedded (sentinel-trap test); EN/FR i18n parity + parse).
+5. Frontend build: `npm run build` → **75 modules transformed, built in 16.14s, RC=0** (pre-existing chunk-size warning only).
+
+**Operational note:** after pulling this change, run `alembic upgrade head` (0017) before restarting the backend — same rule as the certificate hotfix.
+
+**Deferred to C2:** confidence tracking, spaced repetition scheduling, review queues (backend + frontend), wrong-answer history surfacing.
+
 ## Hotfix — certificate database migrations applied for completion endpoint
 
 **Date:** 2026-09-15 — documentation-only hotfix record (no application code changed).

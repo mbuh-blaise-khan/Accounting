@@ -33,6 +33,9 @@ LESSON = {
             ],
             "explanation_en": "Same transactions, two views: the journal tells you WHEN things happened; the ledger tells you the balance of each account.",
             "explanation_fr": "Mêmes transactions, deux vues : le journal dit QUAND les choses sont arrivées ; le grand livre dit le solde de chaque compte.",
+            "correction_en": "Both hold the same transactions, just organised differently: the journal is in date order, while the ledger groups the movements account by account.",
+            "correction_fr": "Les deux contiennent les mêmes opérations, simplement organisées autrement : le journal suit l'ordre des dates, le grand livre regroupe les mouvements compte par compte.",
+            "remediation_section_position": 1,
         },
         {
             "position": 2,
@@ -43,6 +46,9 @@ LESSON = {
             "short_answer_fr": "compte",
             "explanation_en": "The ledger keeps one account per page, and each journal line is posted to its matching account.",
             "explanation_fr": "Le grand livre conserve un compte par page, et chaque ligne de journal est reportée dans le compte correspondant.",
+            "correction_en": "Posting means carrying each journal line into its matching individual ledger account, where the account's balance builds up.",
+            "correction_fr": "Le report consiste à porter chaque ligne du journal dans le compte individuel correspondant du grand livre, où le solde du compte se construit.",
+            "remediation_section_position": 2,
         },
     ],
 }

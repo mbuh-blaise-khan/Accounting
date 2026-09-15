@@ -40,6 +40,9 @@ LESSON = {
             ],
             "explanation_en": "Revenue 500,000 - Expenses 350,000 = Profit 150,000 FCFA.",
             "explanation_fr": "Produits 500 000 - Charges 350 000 = Bénéfice 150 000 FCFA.",
+            "correction_en": "Net result = Revenue - Expenses, so 500,000 - 350,000. Expenses are deducted from revenue, and a positive result is a profit.",
+            "correction_fr": "Résultat net = Produits - Charges, soit 500 000 - 350 000. Les charges se déduisent des produits, et un résultat positif est un bénéfice.",
+            "remediation_section_position": 2,
         },
         {
             "position": 2,
@@ -53,6 +56,9 @@ LESSON = {
             ],
             "explanation_en": "The balance sheet is the accounting equation in real life: Assets = Liabilities + Equity.",
             "explanation_fr": "Le bilan est l'équation comptable en vrai : Actif = Passif + Capitaux propres.",
+            "correction_en": "A balance sheet is consistent when it satisfies the accounting equation: assets equal liabilities plus equity.",
+            "correction_fr": "Un bilan est cohérent lorsqu'il respecte l'équation comptable : l'actif égale le passif plus les capitaux propres.",
+            "remediation_section_position": 2,
         },
     ],
 }

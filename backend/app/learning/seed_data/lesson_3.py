@@ -40,6 +40,9 @@ LESSON = {
             ],
             "explanation_en": "Cash (an asset) increases on the debit side; Sales revenue increases on the credit side. Debits equal credits: 30,000 = 30,000.",
             "explanation_fr": "La trésorerie (un actif) augmente au débit ; les Ventes (produits) augmentent au crédit. Les débits égalent les crédits : 30 000 = 30 000.",
+            "correction_en": "The side follows the movement: the cash received is debited (the asset grows) and the sales revenue is credited (the income grows) for the same amount.",
+            "correction_fr": "Le côté suit le mouvement : la trésorerie reçue est débitée (l'actif augmente) et le produit des ventes est crédité (le produit augmente) du même montant.",
+            "remediation_section_position": 2,
         },
         {
             "position": 2,
@@ -53,6 +56,9 @@ LESSON = {
             ],
             "explanation_en": "The only rule that never varies: a balanced double-entry transaction has equal total debits and total credits.",
             "explanation_fr": "La seule règle qui ne varie jamais : une transaction équilibrée en partie double a des totaux de débits et de crédits égaux.",
+            "correction_en": "The only rule that never varies is the balance rule: total debits must equal total credits. Debit and credit are not 'good' or 'bad' sides, they are the two sides of one balanced entry.",
+            "correction_fr": "La seule règle qui ne varie jamais est celle de l'équilibre : le total des débits égale le total des crédits. Débit et crédit ne sont pas des côtés « bons » ou « mauvais », mais les deux faces d'une même écriture équilibrée.",
+            "remediation_section_position": 1,
         },
         {
             "position": 3,
@@ -63,6 +69,9 @@ LESSON = {
             "short_answer_fr": "débitée",
             "explanation_en": "Cash in hand is an asset, and assets increase on the debit side — so cash is debited.",
             "explanation_fr": "La trésorerie en caisse est un actif, et les actifs augmentent au débit — la trésorerie est donc débitée.",
+            "correction_en": "Money received increases cash, and cash is an asset: assets grow on the debit side, so the movement is recorded on the debit side.",
+            "correction_fr": "L'argent reçu augmente la trésorerie, qui est un actif : les actifs augmentent au débit, donc le mouvement s'enregistre au débit.",
+            "remediation_section_position": 2,
         },
     ],
 }

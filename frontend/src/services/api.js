@@ -301,8 +301,13 @@ export async function fetchLesson(id) {
   return request(`/learning/lessons/${id}`);
 }
 
-export async function submitAttempt(questionId, payload) {
-  return request('/learning/attempts', {
+// Session 11 Part C1: `lang` selects the language of the post-answer feedback
+// the server returns. It is optional and additive — existing callers that omit
+// it keep working, and the server then falls back to the user's stored
+// language preference.
+export async function submitAttempt(questionId, payload, lang) {
+  const query = lang ? `?lang=${encodeURIComponent(lang)}` : '';
+  return request(`/learning/attempts${query}`, {
     method: 'POST',
     body: JSON.stringify({ question_id: questionId, ...payload }),
   });

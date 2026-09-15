@@ -52,6 +52,7 @@ def get_lesson(
 @router.post("/attempts", response_model=AttemptOut)
 def submit_attempt(
     payload: AttemptCreate,
+    lang: str | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -59,6 +60,12 @@ def submit_attempt(
 
     A correct answer on the Lesson 4 practice question with an
     organization_id posts a real, balanced transaction into that workspace.
+
+    Session 11 Part C1: the response also carries a learner-safe `feedback`
+    object (explanation, optional correction/encouragement and an optional
+    remediation target). `lang` ('en' | 'fr') chooses the feedback language;
+    when it is omitted the signed-in user's stored language preference decides.
+    Nothing about the answer key is served before submission.
     """
     return learning_service.submit_attempt(
         db,
@@ -68,6 +75,7 @@ def submit_attempt(
         option_key=payload.option_key,
         text=payload.text,
         organization_id=payload.organization_id,
+        lang=lang,
     )
 
 # --- Part B1: authoritative completion + certificate -------------------------

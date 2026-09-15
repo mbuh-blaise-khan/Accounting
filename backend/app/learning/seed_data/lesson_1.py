@@ -40,6 +40,12 @@ LESSON = {
             ],
             "explanation_en": "Accounting records what the business owns, owes, and earns so its owners see the real picture and make good decisions.",
             "explanation_fr": "La comptabilité enregistre ce que l'entreprise possède, doit et gagne, afin que ses dirigeants voient la réalité et prennent de bonnes décisions.",
+            # Session 11 Part C1 — learner-safe correction (returned ONLY after a
+            # submitted answer) + the section of THIS lesson to review. It states
+            # what is right without echoing the correct option or its text.
+            "correction_en": "Accounting exists to record what the business owns, owes and earns, so it can be measured and managed.",
+            "correction_fr": "La comptabilité sert à enregistrer ce que l'entreprise possède, doit et gagne, afin de pouvoir le mesurer et le piloter.",
+            "remediation_section_position": 2,
         },
         {
             "position": 2,
@@ -53,6 +59,9 @@ LESSON = {
             ],
             "explanation_en": "A transaction is a real business event — a sale, a purchase, a payment — that gets recorded in the accounting books.",
             "explanation_fr": "Une transaction est un événement réel de l'entreprise — une vente, un achat, un paiement — qui est enregistré dans les livres comptables.",
+            "correction_en": "A transaction is a real business event — a sale, a purchase, a payment — written into the books.",
+            "correction_fr": "Une transaction est un événement réel de l'entreprise — une vente, un achat, un paiement — inscrit dans les livres.",
+            "remediation_section_position": 3,
         },
     ],
 }

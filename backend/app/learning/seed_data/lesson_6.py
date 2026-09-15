@@ -33,6 +33,9 @@ LESSON = {
             ],
             "explanation_en": "The trial balance totals only match when every posted entry was balanced, so an inequality points to an error.",
             "explanation_fr": "Les totaux de la balance ne correspondent que si chaque écriture publiée était équilibrée ; une inégalité pointe donc vers une erreur.",
+            "correction_en": "The two totals only match when every posted entry was balanced, so an inequality is a signal that something was recorded incorrectly — it says nothing about the business's solvency.",
+            "correction_fr": "Les deux totaux ne correspondent que si chaque écriture publiée était équilibrée : une inégalité signale donc une erreur d'enregistrement — elle ne dit rien sur la solvabilité de l'entreprise.",
+            "remediation_section_position": 2,
         },
         {
             "position": 2,
@@ -43,6 +46,9 @@ LESSON = {
             "short_answer_fr": "débits",
             "explanation_en": "Total debits must equal total credits in a balanced trial balance.",
             "explanation_fr": "Le total des débits doit être égal au total des crédits dans une balance équilibrée.",
+            "correction_en": "In a balanced trial balance the debit column total equals the credit column total — the same balance rule that runs through every double-entry transaction.",
+            "correction_fr": "Dans une balance équilibrée, le total de la colonne débit égale le total de la colonne crédit — la même règle d'équilibre qui traverse toute écriture en partie double.",
+            "remediation_section_position": 1,
         },
     ],
 }

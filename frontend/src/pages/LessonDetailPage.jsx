@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { useLanguage } from '../i18n/index.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { fetchLesson, submitAttempt } from '../services/api';
+import {
+  feedbackProjection,
+  feedbackStatus,
+  FEEDBACK_STATUS,
+  sectionAnchorId,
+} from '../utils/lessonFeedback.js';
 
 /**
  * Lesson detail — content sections, then one question at a time with instant
@@ -29,6 +35,9 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
   const [result, setResult] = useState(null); // last AttemptOut
   const [progress, setProgress] = useState(null); // latest progress
   const [checking, setChecking] = useState(false);
+  // Part C1: DOM anchor of the section the learner was sent back to via
+  // "Review this concept" (null = no remediation focus active).
+  const [focusAnchor, setFocusAnchor] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -39,6 +48,7 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
     setTextAnswer('');
     setResult(null);
     setProgress(null);
+    setFocusAnchor(null);
     fetchLesson(lessonId)
       .then((data) => {
         if (alive) {
@@ -87,7 +97,7 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
       if (orgId != null) payload.organization_id = orgId;
       if (q.kind === 'short_answer') payload.text = textAnswer.trim();
       else payload.option_key = selected;
-      const attempt = await submitAttempt(q.id, payload);
+      const attempt = await submitAttempt(q.id, payload, lang);
       setResult(attempt);
       setProgress(attempt.progress);
     } catch {
@@ -101,8 +111,37 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
     setResult(null);
     setSelected(null);
     setTextAnswer('');
+    setFocusAnchor(null);
     setQIndex((i) => i + 1);
   }
+
+  /**
+   * Part C1 remediation action: bring the section the server pointed at into
+   * view and highlight it. The target only ever comes from the API (it is
+   * omitted when the question has no clearly-relevant section), and it is
+   * always a section of THIS lesson — the anchor is resolved against the
+   * detail payload already loaded here, so a foreign/missing id simply does
+   * nothing.
+   */
+  function reviewConcept(remediation) {
+    const anchor = sectionAnchorId(remediation);
+    if (!anchor) return;
+    setFocusAnchor(anchor);
+    if (typeof document !== 'undefined') {
+      const target = document.getElementById(anchor);
+      if (target && typeof target.scrollIntoView === 'function') {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  }
+
+  const focusPosition = (() => {
+    if (!focusAnchor) return null;
+    const match = (lesson.sections || []).find(
+      (s) => sectionAnchorId(s) === focusAnchor
+    );
+    return match ? match.position : null;
+  })();
 
   const watermarkLabel = user
     ? [user.display_name, user.email].filter(Boolean).join(' · ')
@@ -142,7 +181,15 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
       {/* Content sections — served per-request from the API, never static files */}
       <div className="space-y-4">
         {(lesson.sections || []).map((s) => (
-          <div key={s.position}>
+          <div
+            key={s.position}
+            id={sectionAnchorId(s)}
+            className={
+              s.position === focusPosition
+                ? 'rounded-lg ring-2 ring-amber-300 bg-amber-50/40 px-3 py-2 scroll-mt-20'
+                : 'scroll-mt-20'
+            }
+          >
             {(fr ? s.heading_fr : s.heading_en) ? (
               <h2 className="text-base font-semibold text-slate-900">
                 {fr ? s.heading_fr : s.heading_en}
@@ -229,6 +276,7 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
                 fr={fr}
                 t={t}
                 onNext={next}
+                onReview={reviewConcept}
               />
             )}
           </>
@@ -304,11 +352,20 @@ function LessonComplete({ p, t }) {
  * Instant server-side feedback for the just-graded attempt. The correct
  * option/text and explanation are revealed ONLY here (they are absent from
  * the pre-grading payload — straight stored-answer comparison, no AI).
+ *
+ * Session 11 Part C1: the server also returns a learner-safe `feedback`
+ * object. Its content (explanation, correction, encouragement, remediation
+ * target) is rendered verbatim in the selected language — nothing about it is
+ * authored here, and no answer key is embedded in this file. The correct/incorrect
+ * state is always shown with an icon AND text, never colour alone.
  */
-function Feedback({ result, question, fr, t, onNext }) {
-  const explanation = fr ? result.explanation_fr : result.explanation_en;
+function Feedback({ result, question, fr, t, onNext, onReview }) {
+  const status = feedbackStatus(result);
+  const isCorrect = status === FEEDBACK_STATUS.correct;
+  const { explanation, correction, encouragement, remediation } =
+    feedbackProjection(result, fr);
   let correctAnswer = null;
-  if (!result.is_correct) {
+  if (!isCorrect) {
     if (question.kind === 'short_answer') {
       correctAnswer = result.correct_text;
     } else if (result.correct_option_key) {
@@ -321,11 +378,14 @@ function Feedback({ result, question, fr, t, onNext }) {
   return (
     <div className="mt-4 space-y-3">
       <p
-        className={`text-sm font-semibold ${
-          result.is_correct ? 'text-emerald-700' : 'text-amber-700'
+        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1 text-sm font-semibold ${
+          isCorrect
+            ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+            : 'border-amber-300 bg-amber-50 text-amber-800'
         }`}
       >
-        {result.is_correct ? t('learn.correct') : t('learn.incorrect')}
+        <span aria-hidden="true">{isCorrect ? '✓' : '!'}</span>
+        {isCorrect ? t('learn.correct') : t('learn.incorrect')}
       </p>
       {correctAnswer ? (
         <p className="text-sm text-slate-700">
@@ -335,11 +395,37 @@ function Feedback({ result, question, fr, t, onNext }) {
       ) : null}
       {explanation ? (
         <div className="rounded-lg bg-slate-50 p-3 text-sm leading-relaxed text-slate-700">
-          <span className="font-semibold">{t('learn.explanation')}: </span>
+          <span className="font-semibold">
+            {isCorrect
+              ? t('learn.feedbackWhyCorrect')
+              : t('learn.feedbackConcept')}
+            :{' '}
+          </span>
           {explanation}
         </div>
       ) : null}
-      {result.is_correct && result.practice_error ? (
+      {correction ? (
+        <div className="rounded-lg border border-slate-200 p-3 text-sm leading-relaxed text-slate-700">
+          <span className="font-semibold">{t('learn.feedbackCorrection')}: </span>
+          {correction}
+        </div>
+      ) : null}
+      {encouragement ? (
+        <p className="text-xs text-slate-500">{encouragement}</p>
+      ) : null}
+      {remediation ? (
+        <button
+          type="button"
+          onClick={() => onReview(remediation)}
+          className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+        >
+          {/* Part C1: the label comes from the server when it sends one (it is
+              localized with the same language code as this page); the generic
+              i18n key is only a fallback so the action is never unlabelled. */}
+           {remediation.actionLabel || t('learn.reviewConcept')}
+        </button>
+      ) : null}
+      {isCorrect && result.practice_error ? (
         <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-700">
           {result.practice_error}
         </p>

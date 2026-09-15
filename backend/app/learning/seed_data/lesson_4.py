@@ -43,6 +43,9 @@ LESSON = {
             ],
             "explanation_en": "Cash increases (an asset, debited) and Sales revenue increases (credited). The entry is balanced: 25,000 debited = 25,000 credited.",
             "explanation_fr": "La trésorerie augmente (un actif, débitée) et les Ventes augmentent (un produit, créditées). L'écriture est équilibrée : 25 000 de débit = 25 000 de crédit.",
+            "correction_en": "Write the entry from the movement: the cash received is debited and the sales revenue is credited, for the same 25,000 — debits equal credits.",
+            "correction_fr": "Écrivez l'écriture à partir du mouvement : la trésorerie reçue est débitée et le produit des ventes est crédité, pour le même montant de 25 000 — débits égaux aux crédits.",
+            "remediation_section_position": 2,
             # PRACTICE CONNECTOR: a correct answer posts this exact cash sale
             # into the user's demo workspace (Learn -> Practice).
             "posts_demo_transaction": True,
@@ -60,6 +63,9 @@ LESSON = {
             ],
             "explanation_en": "The journal is the chronological first record of every transaction, before the amounts are posted to ledger accounts.",
             "explanation_fr": "Le journal est la première trace chronologique de chaque transaction, avant que les montants ne soient reportés dans les comptes du grand livre.",
+            "correction_en": "The journal is the first, chronological record of every transaction, in date order.",
+            "correction_fr": "Le journal est la première trace de chaque opération, dans l'ordre chronologique des dates.",
+            "remediation_section_position": 1,
         },
     ],
 }

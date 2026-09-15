@@ -1,12 +1,15 @@
-"""Learning engine service (Session 11 Part A).
+"""Learning engine service (Session 11 Part A + Part C1).
 
 - `ensure_default_lessons` seeds the 7-curriculum lessons idempotently.
 - `list_lessons` / `get_lesson` serve content per-request with the user's
-  progress rolled up. Correct answers are NEVER exposed by these reads.
+  progress rolled up. Correct answers and the Part C1 explanations/corrections
+  are NEVER exposed by these reads.
 - `submit_attempt` scores by STRAIGHT COMPARISON (no AI), records the
-  attempt, rolls up `progress`, and — for the Lesson 4 practice connector —
+  attempt, rolls up `progress`, — for the Lesson 4 practice connector —
   posts a REAL balanced transaction into the user's demo workspace when the
-  answer is correct and an organization_id was supplied.
+  answer is correct and an organization_id was supplied, and returns the
+  Part C1 learner-safe `feedback` object (explanation / correction /
+  encouragement / optional remediation target) in the learner's language.
 
 Deterministic engine rule (see .clinerules): nothing here decides a
 debit/credit outcome with AI. The practice posting uses fixed, balanced
@@ -18,7 +21,9 @@ from decimal import Decimal
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.learning import feedback as feedback_copy
 from app.learning.schemas import (
+    AnswerFeedbackOut,
     AttemptOut,
     LessonDetailOut,
     LessonProgressOut,
@@ -26,6 +31,7 @@ from app.learning.schemas import (
     LessonSummaryOut,
     QuestionAnswerOut,
     QuestionOut,
+    RemediationOut,
 )
 from app.learning.seed_data import LESSONS
 from app.models.account import Account
@@ -119,6 +125,7 @@ def ensure_default_lessons(db: Session) -> None:
                     )
                 )
 
+            created_questions: list[tuple[Question, dict]] = []
             for q in data["questions"]:
                 question = Question(
                     position=q["position"],
@@ -127,6 +134,10 @@ def ensure_default_lessons(db: Session) -> None:
                     kind=q["kind"],
                     explanation_en=q.get("explanation_en"),
                     explanation_fr=q.get("explanation_fr"),
+                    # Part C1 — post-submission feedback content (returned only
+                    # by the scoring endpoint, never by the read endpoints).
+                    correction_en=q.get("correction_en"),
+                    correction_fr=q.get("correction_fr"),
                     short_answer_en=q.get("short_answer_en"),
                     short_answer_fr=q.get("short_answer_fr"),
                     posts_demo_transaction=q.get("posts_demo_transaction", False),
@@ -143,8 +154,63 @@ def ensure_default_lessons(db: Session) -> None:
                         )
                     )
                 lesson.questions.append(question)
+                created_questions.append((question, q))
 
+            # Part C1 — resolve each question's optional remediation pointer to
+            # a section of THIS lesson. The sections above are still pending
+            # (no primary key yet), so flush first, then map the seed's section
+            # position to the stored section id. Looking the section up inside
+            # `lesson.sections` is what guarantees a remediation target can
+            # never point at another lesson.
+            db.flush()
+            sections_by_position = {s.position: s for s in lesson.sections}
+            for question, seed_question in created_questions:
+                position = seed_question.get("remediation_section_position")
+                if position is None:
+                    continue  # optional by design: omitted, never guessed
+                section = sections_by_position.get(position)
+                if section is not None:
+                    question.remediation_section_id = section.id
+
+    # Part C1 — copy the authored feedback content onto questions that already
+    # exist from an earlier seed (no-op once everything is in sync).
+    _sync_question_feedback(db)
     db.commit()
+
+
+def _sync_question_feedback(db: Session) -> None:
+    """Re-apply Part C1 feedback content to already-stored questions.
+
+    A database seeded before Part C1 (or only partially seeded) has no
+    corrections and no remediation pointers. This pass copies the authored seed
+    content onto the existing question rows, matching by lesson slug + question
+    position so primary keys — and therefore the question ids the client just
+    received from the detail endpoint — stay untouched. Every assignment is
+    guarded by an equality check, so a fully-synced database performs no writes.
+
+    Remediation pointers are resolved from the lesson's OWN sections, so a
+    target can never end up pointing at another lesson.
+    """
+    for data in LESSONS:
+        lesson = db.query(Lesson).filter(Lesson.slug == data["slug"]).first()
+        if lesson is None:
+            continue
+        sections_by_position = {s.position: s for s in lesson.sections}
+        questions_by_position = {q.position: q for q in lesson.questions}
+        for seed_question in data["questions"]:
+            question = questions_by_position.get(seed_question["position"])
+            if question is None:
+                continue
+            correction_en = seed_question.get("correction_en")
+            if correction_en and question.correction_en != correction_en:
+                question.correction_en = correction_en
+                question.correction_fr = seed_question.get("correction_fr")
+            section = sections_by_position.get(
+                seed_question.get("remediation_section_position")
+            )
+            target_id = section.id if section is not None else None
+            if question.remediation_section_id != target_id:
+                question.remediation_section_id = target_id
 
 
 def _data_fingerprint(data: dict) -> str:
@@ -163,6 +229,11 @@ def _data_fingerprint(data: dict) -> str:
             f'{q["position"]}::{q["kind"]}::{q["question_en"]}'
             f'::{q.get("short_answer_en") or ""}'
             f'::{bool(q.get("posts_demo_transaction", False))}::{answers}'
+            # Part C1: feedback content participates in the fingerprint, so a
+            # database seeded before C1 (no corrections / no remediation
+            # pointers) is re-synced once on the next request.
+            f'::{q.get("correction_en") or ""}'
+            f'::{q.get("remediation_section_position") or ""}'
         )
     return secs + "###" + "||".join(qparts)
 
@@ -174,6 +245,10 @@ def _lesson_fingerprint(lesson: Lesson) -> str:
         for s in sorted(lesson.sections, key=lambda x: x.position)
     )
     qparts = []
+    # Part C1: remediation pointers are compared by the section's position
+    # inside this lesson (ids are assigned at flush time, so positions are the
+    # stable equivalent across a re-seed).
+    section_positions = {s.id: s.position for s in lesson.sections}
     for q in sorted(lesson.questions, key=lambda x: x.position):
         answers = ",".join(
             f"{a.option_key}={int(bool(a.is_correct))}"
@@ -183,6 +258,8 @@ def _lesson_fingerprint(lesson: Lesson) -> str:
             f"{q.position}::{q.kind}::{q.question_en}"
             f"::{q.short_answer_en or ''}"
             f"::{bool(q.posts_demo_transaction)}::{answers}"
+            f"::{q.correction_en or ''}"
+            f"::{section_positions.get(q.remediation_section_id) or ''}"
         )
     return secs + "###" + "||".join(qparts)
 
@@ -246,6 +323,7 @@ def get_lesson(db: Session, user: User, lesson_id: int) -> LessonDetailOut:
         summary_fr=lesson.summary_fr,
         sections=[
             LessonSectionOut(
+                id=s.id,
                 position=s.position,
                 heading_en=s.heading_en,
                 heading_fr=s.heading_fr,
@@ -383,6 +461,72 @@ def _refresh_progress(db: Session, user: User, lesson: Lesson) -> LessonProgress
     return row
 
 
+def _localized(language: str, en: str | None, fr: str | None) -> str | None:
+    """Pick the field for `language`, falling back to the other one if empty.
+
+    The fallback exists only so a missing translation never leaves the learner
+    with no feedback at all; it never mixes languages inside one message.
+    """
+    primary = fr if language == "fr" else en
+    return primary or en or fr
+
+
+def _remediation_target(
+    question: Question, lesson: Lesson, language: str
+) -> RemediationOut | None:
+    """Optional "Review this concept" target for an INCORRECT answer (Part C1).
+
+    Returns None (target omitted) unless the question points at a section that
+    is verifiably part of THIS lesson — a stale, missing or cross-lesson pointer
+    is dropped rather than guessed, so the UI never sends the learner to review
+    something unrelated.
+    """
+    section_id = question.remediation_section_id
+    if section_id is None:
+        return None
+    section = next((s for s in lesson.sections if s.id == section_id), None)
+    if section is None:
+        return None
+    return RemediationOut(
+        lesson_id=lesson.id,
+        section_id=section.id,
+        section_position=section.position,
+        section_title=_localized(language, section.heading_en, section.heading_fr),
+        action_label=feedback_copy.action_label(language),
+    )
+
+
+def _answer_feedback(
+    question: Question, lesson: Lesson, is_correct: bool, lang: str | None
+) -> AnswerFeedbackOut:
+    """Build the learner-safe feedback object for one graded attempt (Part C1).
+
+    - Correct: why the answer/reasoning is right + next-step encouragement.
+    - Incorrect: the accounting concept behind the question + a plain-language
+      correction of the reasoning + the optional remediation target.
+
+    Never includes the correct option key, the correct option's stored text, the
+    accepted short-answer text, or any grading detail — those stay in the
+    pre-existing Part A fields that only exist after grading.
+    """
+    language = feedback_copy.resolve_language(lang)
+    explanation = _localized(
+        language, question.explanation_en, question.explanation_fr
+    )
+    if is_correct:
+        return AnswerFeedbackOut(
+            correct=True,
+            explanation=explanation,
+            encouragement=feedback_copy.encouragement(language),
+        )
+    return AnswerFeedbackOut(
+        correct=False,
+        explanation=explanation,
+        correction=_localized(language, question.correction_en, question.correction_fr),
+        remediation=_remediation_target(question, lesson, language),
+    )
+
+
 def submit_attempt(
     db: Session,
     user: User,
@@ -391,11 +535,17 @@ def submit_attempt(
     option_key: str | None = None,
     text: str | None = None,
     organization_id: int | None = None,
+    lang: str | None = None,
 ) -> AttemptOut:
     """Score one submitted answer (straight comparison) and record progress.
 
     Also triggers the Lesson 4 practice-connector posting when the answer is
     correct, the question opts in, and a demo workspace was provided.
+
+    `lang` is the requested feedback language ('en' | 'fr'); when omitted the
+    user's stored `language_preference` decides (see feedback.resolve_language).
+    Scoring is unaffected by language: accepted short answers are always
+    compared in BOTH languages, as before.
     """
     ensure_default_lessons(db)
     lesson = db.get(Lesson, lesson_id)
@@ -481,6 +631,9 @@ def submit_attempt(
         ),
         explanation_en=question.explanation_en,
         explanation_fr=question.explanation_fr,
+        # Part C1: learner-safe feedback in the requested language. Only ever
+        # returned here — the read endpoints do not carry it.
+        feedback=_answer_feedback(question, lesson, is_correct, lang or user.language_preference),
         progress=LessonProgressOut(**_progress_dict(user, lesson, progress)),
         practice_posted=attempt.practice_posted,
         practice_transaction_id=attempt.practice_transaction_id,

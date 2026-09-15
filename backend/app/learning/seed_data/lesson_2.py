@@ -40,6 +40,9 @@ LESSON = {
             ],
             "explanation_en": "Assets = Liabilities + Equity, so Equity = 200,000 - 50,000 = 150,000 FCFA.",
             "explanation_fr": "Actif = Passif + Capitaux propres, donc Capitaux propres = 200 000 - 50 000 = 150 000 FCFA.",
+            "correction_en": "Rearrange the equation: Equity = Assets - Liabilities, so 200,000 - 50,000.",
+            "correction_fr": "Réorganisez l'équation : Capitaux propres = Actif - Passif, soit 200 000 - 50 000.",
+            "remediation_section_position": 2,
         },
         {
             "position": 2,
@@ -50,6 +53,9 @@ LESSON = {
             "short_answer_fr": "capitaux propres",
             "explanation_en": "The full equation is Assets = Liabilities + Equity.",
             "explanation_fr": "L'équation complète est : Actif = Passif + Capitaux propres.",
+            "correction_en": "The missing term is the owners' share — what is left once the liabilities are deducted from the assets.",
+            "correction_fr": "Le terme manquant est la part des propriétaires — ce qui reste une fois le passif déduit de l'actif.",
+            "remediation_section_position": 2,
         },
         {
             "position": 3,
@@ -63,6 +69,9 @@ LESSON = {
             ],
             "explanation_en": "Both sides of the equation grow by the same amount: assets (cash) +10,000 and liabilities (loan) +10,000 — still balanced.",
             "explanation_fr": "Les deux côtés de l'équation augmentent du même montant : actif (trésorerie) +10 000 et passif (emprunt) +10 000 — toujours équilibré.",
+            "correction_en": "Borrowing adds to an asset (cash) and to a liability (the loan) by the same amount, so both sides move together and the equation stays balanced.",
+            "correction_fr": "Un emprunt augmente un actif (la trésorerie) et un passif (l'emprunt) du même montant : les deux côtés bougent ensemble et l'équation reste équilibrée.",
+            "remediation_section_position": 3,
         },
     ],
 }

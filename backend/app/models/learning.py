@@ -88,6 +88,25 @@ class Question(Base):
     kind: Mapped[str] = mapped_column(String(20), nullable=False)  # 'mcq' | 'short_answer'
     explanation_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     explanation_fr: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Session 11 Part C1 — post-submission learner feedback. Like the
+    # explanations above, these are NEVER served by the read endpoints; they are
+    # returned only by the scoring endpoint (POST /learning/attempts).
+    # - correction_en/fr: authored, plain-language correction of the reasoning.
+    #   It states WHAT is right WITHOUT ever echoing the correct option key, the
+    #   option's stored text, or the short-answer accepted text (that would leak
+    #   the answer key).
+    # - remediation_section_id: OPTIONAL pointer to the single most relevant
+    #   section of THIS question's own lesson ("Review this concept"). Nullable
+    #   by design — omitted rather than guessed when no clearly-relevant section
+    #   exists. ON DELETE SET NULL so section content edits can never cascade
+    #   into question loss.
+    #   The lesson is NOT duplicated here: `lesson_id` above is authoritative,
+    #   and the service verifies the section belongs to that same lesson.
+    correction_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correction_fr: Mapped[str | None] = mapped_column(Text, nullable=True)
+    remediation_section_id: Mapped[int | None] = mapped_column(
+        ForeignKey("lesson_sections.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     # Short-answer questions store accepted answers (straight comparison).
     short_answer_en: Mapped[str | None] = mapped_column(String(200), nullable=True)
     short_answer_fr: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -104,6 +123,13 @@ class Question(Base):
         back_populates="question",
         cascade="all, delete-orphan",
         order_by="Answer.position",
+    )
+    # Session 11 Part C1 — the optional "Review this concept" target. Read-only
+    # from the scoring endpoint, which additionally verifies the section belongs
+    # to the same lesson (lesson_id + lesson_sections.lesson_id) before exposing
+    # anything to the client.
+    remediation_section: Mapped["LessonSection | None"] = relationship(
+        foreign_keys=[remediation_section_id]
     )
 
 
