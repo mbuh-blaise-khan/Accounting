@@ -14,6 +14,32 @@ HOW TO USE THIS FILE:
 
 ---
 
+## Hotfix — certificate database migrations applied for completion endpoint
+
+**Date:** 2026-09-15 — documentation-only hotfix record (no application code changed).
+
+**Symptom:**
+- Learn page showed "Could not load your progress or certificate. Please try again."
+- `GET /learning/completion` returned HTTP 500.
+- Browser also displayed a missing CORS-header message.
+
+**Root cause:**
+- Backend traceback: `psycopg2.errors.UndefinedTable: relation "certificates" does not exist`.
+- The committed certificate code expected the `certificates` table, but the local PostgreSQL database had not yet applied the Alembic certificate migrations.
+- This was not a lesson-completion, certificate UI, or primary CORS defect. The CORS message was secondary to the backend 500.
+
+**Resolution (already completed manually and verified by the user before this log entry):**
+- Forward Alembic migrations applied through head, including `0015_add_certificates_table.py` and `0016_certificate_verification_fields.py` (applied forward via `alembic upgrade head`).
+- The backend was restarted after migration.
+- No database reset, downgrade, or learner-data deletion occurred; existing learning attempts and progress were preserved.
+- Completion/certificate issuance now works; the user verified the live certificate claim/print/download flow after migration.
+
+**Operational note:**
+- After pulling database migration changes, run `alembic upgrade head` before starting or restarting the backend.
+
+**Scope note:**
+- No application code was changed by this hotfix.
+
 ## Current Status
 
 **Session:** Session 11 Part B3 — public certificate verification and certificate export.
