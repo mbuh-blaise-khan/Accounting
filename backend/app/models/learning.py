@@ -131,6 +131,9 @@ class Question(Base):
     remediation_section: Mapped["LessonSection | None"] = relationship(
         foreign_keys=[remediation_section_id]
     )
+    # Session 11 Part C2 — spaced-review cards that point at this question
+    # (at most one per user, enforced by review_items' unique constraint).
+    review_items: Mapped[list["ReviewItem"]] = relationship(back_populates="question")
 
 
 class Answer(Base):
@@ -167,6 +170,11 @@ class Attempt(Base):
     )
     submitted_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Session 11 Part C2 — optional learner self-assessment sent WITH the
+    # answer: 'understood' ("I understand this") or 'guessed' ("I got it, but
+    # I guessed"). NULL when the client does not send it (older clients).
+    # It NEVER affects scoring — only whether a spaced-review item is created.
+    confidence: Mapped[str | None] = mapped_column(String(20), nullable=True)
     organization_id: Mapped[int | None] = mapped_column(
         ForeignKey("organizations.id"), nullable=True
     )
@@ -212,3 +220,60 @@ class LessonProgress(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+
+class ReviewItem(Base):
+    """One spaced-review card per (user, question) — Session 11 Part C2.
+
+    Deterministic spaced repetition, no AI: the stage index alone decides the
+    next due date (see learning/service.py `_stage_interval_days`):
+
+        correct review answer:  stage 0 -> 1 day, 1 -> 3 days, 2 -> 7 days,
+                                3+ -> 14 days (interval caps at 14)
+        incorrect review answer: reset to stage 0, due immediately
+
+    - The UNIQUE (user_id, question_id) constraint makes duplicate active
+      reviews for the same user/question IMPOSSIBLE at the database level;
+      an existing row is updated (reset/reactivated) instead of duplicated.
+    - `is_active` retires a card only through a confident lesson answer path
+      reserved for later UX; wrong/guessed answers always (re)activate it.
+    - All timestamps are timezone-aware UTC (same convention as the rest of
+      the learning engine).
+    - Review rows NEVER influence lesson progress, completion or certificate
+      eligibility: they are answered on their own endpoints and create no
+      `attempts` rows.
+    """
+
+    __tablename__ = "review_items"
+    __table_args__ = (
+        UniqueConstraint("user_id", "question_id", name="uq_review_user_question"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id"), nullable=False, index=True
+    )
+    question_id: Mapped[int] = mapped_column(
+        ForeignKey("questions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # 0-based stage into the interval ladder; reset to 0 on any wrong answer.
+    stage: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    due_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # 'wrong' | 'guessed' (lesson-created) | 'review_correct' | 'review_wrong'
+    last_outcome: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    question: Mapped["Question"] = relationship(back_populates="review_items")

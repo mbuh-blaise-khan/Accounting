@@ -1,6 +1,6 @@
 """Pydantic schemas for the learning engine (Session 11 Part A + Part B1)."""
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -84,6 +84,11 @@ class AttemptCreate(BaseModel):
     option_key: Optional[str] = Field(default=None, max_length=4)
     text: Optional[str] = Field(default=None, max_length=500)
     organization_id: Optional[int] = None
+    # Session 11 Part C2 — optional learner self-assessment sent WITH the
+    # answer ('understood' = "I understand this", 'guessed' = "I got it, but
+    # I guessed"). Pydantic's Literal rejects anything else with a 422. It
+    # NEVER changes scoring — only whether a spaced-review item is created.
+    confidence: Optional[Literal["understood", "guessed"]] = None
 
 
 class RemediationOut(BaseModel):
@@ -158,3 +163,69 @@ class CourseCompletionOut(BaseModel):
     completed_lessons: int = 0
     completion_percentage: int = 0  # 0-100, rounded
     certificate_status: str = "locked"  # 'locked' | 'available' | 'issued'
+
+
+# --- Session 11 Part C2: confidence tracking + spaced review ------------------
+
+class ReviewSummaryOut(BaseModel):
+    """Counts for the signed-in user's review queue (authenticated, scoped).
+
+    `due_now` counts active cards whose `due_at` is in the past or now;
+    `scheduled` counts active cards not yet due. Review data never changes
+    lesson progress, completion or certificate eligibility.
+    """
+
+    total_active: int = 0
+    due_now: int = 0
+    scheduled: int = 0
+    next_due_at: Optional[datetime] = None  # earliest future due date, UTC
+
+
+class ReviewItemOut(BaseModel):
+    """One spaced-review card for the signed-in user.
+
+    Carries the QUESTION and its selectable options (exactly like the lesson
+    detail payload) so the review UI can be built later WITHOUT any answer
+    material: no `is_correct` flag, no correct option key/text and no accepted
+    short-answer text ever rides on a review response.
+    """
+
+    id: int
+    question_id: int
+    lesson_id: int
+    lesson_title_en: str
+    lesson_title_fr: str
+    question_en: str
+    question_fr: str
+    kind: str  # 'mcq' | 'short_answer'
+    answers: list[QuestionAnswerOut] = []  # options only — never the key
+    stage: int
+    due_at: datetime  # timezone-aware UTC
+    last_outcome: Optional[str] = None
+    is_due: bool
+
+
+class ReviewAnswerCreate(BaseModel):
+    """One answer to a review card (straight comparison, same as lessons)."""
+
+    option_key: Optional[str] = Field(default=None, max_length=4)
+    text: Optional[str] = Field(default=None, max_length=500)
+
+
+class ReviewAnswerOut(BaseModel):
+    """Result of answering a review card.
+
+    DELIBERATELY NARROWER than the lesson attempt response: it has NO
+    `correct_option_key`, NO `correct_text` and NO top-level `explanation_en/fr`
+    — the review endpoints must never expose the answer key. The learner-safe
+    `feedback` object (explanation / correction / optional remediation target,
+    all prose authored in the seed) is reused from Part C1.
+    """
+
+    review_id: int
+    question_id: int
+    correct: bool
+    stage: int
+    due_at: datetime  # next due date, timezone-aware UTC
+    interval_days: Optional[int] = None  # days until due_at (None when reset)
+    feedback: AnswerFeedbackOut

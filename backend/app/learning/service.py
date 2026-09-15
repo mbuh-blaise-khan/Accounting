@@ -15,7 +15,7 @@ Deterministic engine rule (see .clinerules): nothing here decides a
 debit/credit outcome with AI. The practice posting uses fixed, balanced
 double-entry lines against the org's own chart (Cash Dr / Sales Cr).
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException, status
@@ -32,6 +32,9 @@ from app.learning.schemas import (
     QuestionAnswerOut,
     QuestionOut,
     RemediationOut,
+    ReviewAnswerOut,
+    ReviewItemOut,
+    ReviewSummaryOut,
 )
 from app.learning.seed_data import LESSONS
 from app.models.account import Account
@@ -42,6 +45,7 @@ from app.models.learning import (
     LessonProgress,
     LessonSection as LessonSectionModel,
     Question,
+    ReviewItem,
 )
 from app.models.user import User
 from app.services import posting_service, transaction_service
@@ -527,41 +531,15 @@ def _answer_feedback(
     )
 
 
-def submit_attempt(
-    db: Session,
-    user: User,
-    lesson_id: int,
-    question_id: int,
-    option_key: str | None = None,
-    text: str | None = None,
-    organization_id: int | None = None,
-    lang: str | None = None,
-) -> AttemptOut:
-    """Score one submitted answer (straight comparison) and record progress.
+def _score_submission(
+    question: Question, option_key: str | None, text: str | None
+) -> tuple[bool, str | None, int | None]:
+    """Straight-comparison scoring shared by lesson attempts AND review cards.
 
-    Also triggers the Lesson 4 practice-connector posting when the answer is
-    correct, the question opts in, and a demo workspace was provided.
-
-    `lang` is the requested feedback language ('en' | 'fr'); when omitted the
-    user's stored `language_preference` decides (see feedback.resolve_language).
-    Scoring is unaffected by language: accepted short answers are always
-    compared in BOTH languages, as before.
+    No AI: the stored correct option / accepted short answers decide the
+    outcome, exactly as since Part A. Raises 422 for a missing/unknown option
+    key on an MCQ. Returns ``(is_correct, correct_option_key, selected_answer_id)``.
     """
-    ensure_default_lessons(db)
-    lesson = db.get(Lesson, lesson_id)
-    if lesson is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found"
-        )
-    question = db.get(Question, question_id)
-    if question is None or question.lesson_id != lesson.id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Question not found"
-        )
-
-    is_correct = False
-    correct_option_key = None
-    selected_answer_id = None
     if question.kind == "mcq":
         if not option_key:
             raise HTTPException(
@@ -576,19 +554,61 @@ def submit_attempt(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Unknown option_key for this question",
             )
-        selected_answer_id = chosen.id
-        is_correct = bool(chosen.is_correct)
         correct_option_key = next(
             (a.option_key for a in question.answers if a.is_correct), None
         )
-    else:
-        submitted = _normalise(text or "")
-        accepted = {
-            _normalise(v)
-            for v in [question.short_answer_en, question.short_answer_fr]
-            if v
-        }
-        is_correct = bool(submitted and submitted in accepted)
+        return bool(chosen.is_correct), correct_option_key, chosen.id
+    submitted = _normalise(text or "")
+    accepted = {
+        _normalise(v)
+        for v in [question.short_answer_en, question.short_answer_fr]
+        if v
+    }
+    return bool(submitted and submitted in accepted), None, None
+
+
+def submit_attempt(
+    db: Session,
+    user: User,
+    lesson_id: int,
+    question_id: int,
+    option_key: str | None = None,
+    text: str | None = None,
+    organization_id: int | None = None,
+    lang: str | None = None,
+    confidence: str | None = None,
+) -> AttemptOut:
+    """Score one submitted answer (straight comparison) and record progress.
+
+    Also triggers the Lesson 4 practice-connector posting when the answer is
+    correct, the question opts in, and a demo workspace was provided.
+
+    `lang` is the requested feedback language ('en' | 'fr'); when omitted the
+    user's stored `language_preference` decides (see feedback.resolve_language).
+    Scoring is unaffected by language: accepted short answers are always
+    compared in BOTH languages, as before.
+
+    Session 11 Part C2: the optional `confidence` self-assessment ('understood'
+    | 'guessed') decides whether a spaced-review card is created — a wrong
+    answer or a guessed correct answer (re)activates the user's review card for
+    this question; a confident correct answer never creates one. Confidence
+    NEVER changes the score.
+    """
+    ensure_default_lessons(db)
+    lesson = db.get(Lesson, lesson_id)
+    if lesson is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Lesson not found"
+        )
+    question = db.get(Question, question_id)
+    if question is None or question.lesson_id != lesson.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Question not found"
+        )
+
+    is_correct, correct_option_key, selected_answer_id = _score_submission(
+        question, option_key, text
+    )
 
     attempt = Attempt(
         user_id=user.id,
@@ -598,6 +618,7 @@ def submit_attempt(
         submitted_text=text,
         is_correct=is_correct,
         organization_id=organization_id,
+        confidence=confidence,
     )
 
     practice_transaction_id = None
@@ -611,6 +632,11 @@ def submit_attempt(
         attempt.practice_transaction_id = practice_transaction_id
 
     db.add(attempt)
+    # Part C2: (re)activate the user's spaced-review card for this question
+    # according to the outcome + confidence. Same transaction — no review is
+    # ever created for a question that failed to grade, and a card is never
+    # created/modified by a confident correct answer.
+    _apply_confidence_review(db, user, question, is_correct, confidence)
     # SessionLocal is created with autoflush=False, so the pending INSERT
     # would otherwise be invisible to _refresh_progress's Attempt query —
     # the rollup would report the user as one answer behind reality (and
@@ -639,4 +665,219 @@ def submit_attempt(
         practice_transaction_id=attempt.practice_transaction_id,
         practice_error=practice_error,
         created_at=attempt.created_at,
+    )
+
+
+# --- Session 11 Part C2: confidence tracking + spaced review ------------------
+
+#: Deterministic interval ladder, in days, indexed by the CURRENT stage after a
+#: correct review answer: stage 0 -> 1 day, stage 1 -> 3 days, stage 2 -> 7 days
+#: and stage 3+ -> 14 days (capped). A wrong review answer ignores this ladder
+#: entirely: it resets the stage to 0 and makes the card due immediately.
+_REVIEW_INTERVAL_DAYS = (1, 3, 7, 14)
+
+
+def _stage_interval_days(stage: int) -> int:
+    """Interval for the review card's CURRENT stage (caps at 14 days)."""
+    return _REVIEW_INTERVAL_DAYS[min(max(stage, 0), len(_REVIEW_INTERVAL_DAYS) - 1)]
+
+
+def _apply_confidence_review(
+    db: Session,
+    user: User,
+    question: Question,
+    is_correct: bool,
+    confidence: str | None,
+) -> None:
+    """(Re)activate the user's spaced-review card for this question (Part C2).
+
+    Rules (deterministic, per the C2 spec):
+    - a WRONG lesson answer always creates/resets the card (due immediately);
+    - a correct answer marked 'guessed' ("I got it, but I guessed") does the
+      same;
+    - a correct answer marked 'understood' ("I understand this") NEVER creates
+      a new card — and deliberately does not touch an existing one either:
+      cards only advance through their own review answers, so lesson confidence
+      and review scheduling stay two independent, predictable mechanisms.
+
+    The (user_id, question_id) unique constraint makes duplicate active cards
+    impossible; an existing row is reset/reactivated in place instead.
+    """
+    if is_correct and confidence != "guessed":
+        return  # 'understood' (or no confidence given): nothing to schedule
+    outcome = "wrong" if not is_correct else "guessed"
+    now = datetime.now(timezone.utc)
+    item = (
+        db.query(ReviewItem)
+        .filter(
+            ReviewItem.user_id == user.id,
+            ReviewItem.question_id == question.id,
+        )
+        .first()
+    )
+    if item is None:
+        item = ReviewItem(
+            user_id=user.id,
+            question_id=question.id,
+            stage=0,
+            due_at=now,
+            is_active=True,
+            last_outcome=outcome,
+        )
+        db.add(item)
+        return
+    item.stage = 0
+    item.due_at = now
+    item.is_active = True
+    item.last_outcome = outcome
+
+
+def _as_utc_aware(value: datetime) -> datetime:
+    """Normalise a stored datetime to timezone-aware UTC.
+
+    PostgreSQL's timestamptz returns aware datetimes; SQLite (tests) returns
+    naive ones (it stores UTC strings without offset). Treating naive values as
+    UTC keeps due-date comparisons correct on both engines.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _review_item_out(item: ReviewItem, now: datetime) -> ReviewItemOut:
+    """Project one review card for its owner — question + options, NO key."""
+    question = item.question
+    lesson = question.lesson
+    due_at = _as_utc_aware(item.due_at)
+    return ReviewItemOut(
+        id=item.id,
+        question_id=question.id,
+        lesson_id=lesson.id,
+        lesson_title_en=lesson.title_en,
+        lesson_title_fr=lesson.title_fr,
+        question_en=question.question_en,
+        question_fr=question.question_fr,
+        kind=question.kind,
+        answers=[
+            QuestionAnswerOut(
+                option_key=a.option_key, text_en=a.text_en, text_fr=a.text_fr
+            )
+            for a in question.answers
+        ],
+        stage=item.stage,
+        due_at=due_at,
+        last_outcome=item.last_outcome,
+        is_due=due_at <= now,
+    )
+
+
+def get_review_summary(db: Session, user: User) -> ReviewSummaryOut:
+    """Counts for the signed-in user's review queue (authenticated, scoped)."""
+    items = (
+        db.query(ReviewItem)
+        .filter(ReviewItem.user_id == user.id, ReviewItem.is_active.is_(True))
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    due = [i for i in items if _as_utc_aware(i.due_at) <= now]
+    future = [i for i in items if _as_utc_aware(i.due_at) > now]
+    return ReviewSummaryOut(
+        total_active=len(items),
+        due_now=len(due),
+        scheduled=len(future),
+        next_due_at=min((_as_utc_aware(i.due_at) for i in future), default=None),
+    )
+
+
+def list_reviews(
+    db: Session, user: User, due_only: bool = False
+) -> list[ReviewItemOut]:
+    """The signed-in user's active review cards (optionally due ones only)."""
+    items = (
+        db.query(ReviewItem)
+        .filter(ReviewItem.user_id == user.id, ReviewItem.is_active.is_(True))
+        .order_by(ReviewItem.due_at.asc(), ReviewItem.id.asc())
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    out = [_review_item_out(item, now) for item in items]
+    if due_only:
+        out = [r for r in out if r.is_due]
+    return out
+
+
+def answer_review(
+    db: Session,
+    user: User,
+    review_id: int,
+    option_key: str | None = None,
+    text: str | None = None,
+    lang: str | None = None,
+) -> ReviewAnswerOut:
+    """Answer one of the user's OWN review cards (straight comparison).
+
+    Scheduling (deterministic, UTC):
+    - correct -> stage += 1 and due_at = now + interval(stage) where the
+      interval ladder is 1 / 3 / 7 / 14 days (stage 3+ stays at 14);
+    - incorrect -> stage reset to 0 and due_at = now (immediately).
+
+    Review answers create NO `attempts` rows and touch NO lesson progress —
+    completion and certificate eligibility are unaffected by construction.
+    User scoping: the card is looked up by (id, user_id); anything else is a
+    plain 404, so one user can neither read nor answer another user's card.
+    The response NEVER carries the answer key (no correct option key/text, no
+    accepted short-answer text) — only the Part C1 learner-safe feedback.
+    """
+    item = (
+        db.query(ReviewItem)
+        .filter(
+            ReviewItem.id == review_id,
+            ReviewItem.user_id == user.id,
+            ReviewItem.is_active.is_(True),
+        )
+        .first()
+    )
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Review not found"
+        )
+    question = item.question
+    lesson = question.lesson
+
+    is_correct, _correct_option_key, _selected_answer_id = _score_submission(
+        question, option_key, text
+    )
+
+    now = datetime.now(timezone.utc)
+    interval_days = None
+    if is_correct:
+        # The ladder is indexed by the stage the card WAS at: answering a
+        # stage-0 card correctly schedules it 1 day ahead, stage-1 -> 3 days,
+        # stage-2 -> 7 days, stage-3+ -> 14 days. The stage keeps counting up
+        # but the interval caps at 14 (deterministic, no AI).
+        interval_days = _stage_interval_days(item.stage)
+        item.stage = item.stage + 1
+        item.due_at = now + timedelta(days=interval_days)
+        item.last_outcome = "review_correct"
+    else:
+        item.stage = 0
+        item.due_at = now  # due again immediately
+        item.last_outcome = "review_wrong"
+    # Capture BEFORE commit: commit expires ORM attributes and a re-read would
+    # return engine-dependent (naive on SQLite) datetimes.
+    stage_after = item.stage
+    due_after = item.due_at
+    review_id_after = item.id
+    db.commit()
+
+    return ReviewAnswerOut(
+        review_id=review_id_after,
+        question_id=question.id,
+        correct=is_correct,
+        stage=stage_after,
+        due_at=due_after,
+        interval_days=interval_days,
+        feedback=_answer_feedback(
+            question, lesson, is_correct, lang or user.language_preference
+        ),
     )

@@ -21,6 +21,10 @@ from app.learning.schemas import (
     CourseCompletionOut,
     LessonDetailOut,
     LessonSummaryOut,
+    ReviewAnswerCreate,
+    ReviewAnswerOut,
+    ReviewItemOut,
+    ReviewSummaryOut,
 )
 from app.learning import service as learning_service
 from app.schemas.certificate import CertificateOut, PublicCertificateOut
@@ -66,6 +70,11 @@ def submit_attempt(
     remediation target). `lang` ('en' | 'fr') chooses the feedback language;
     when it is omitted the signed-in user's stored language preference decides.
     Nothing about the answer key is served before submission.
+
+    Session 11 Part C2: the optional `confidence` field ('understood' |
+    'guessed') is a self-assessment — it never changes the score, it only
+    decides whether the user's spaced-review card for this question is created
+    or reset (wrong answer or guessed correct answer).
     """
     return learning_service.submit_attempt(
         db,
@@ -76,9 +85,64 @@ def submit_attempt(
         text=payload.text,
         organization_id=payload.organization_id,
         lang=lang,
+        confidence=payload.confidence,
     )
 
 # --- Part B1: authoritative completion + certificate -------------------------
+@router.get("/reviews/summary", response_model=ReviewSummaryOut)
+def get_review_summary(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Counts for the signed-in user's spaced-review queue (Part C2).
+
+    Authenticated and strictly user-scoped. Review data never changes lesson
+    progress, completion or certificate eligibility.
+    """
+    return learning_service.get_review_summary(db, current_user)
+
+
+@router.get("/reviews", response_model=list[ReviewItemOut])
+def list_reviews(
+    due_only: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The signed-in user's active spaced-review cards (Part C2).
+
+    `due_only=true` limits the list to cards whose `due_at` has passed.
+    Cards carry the question and its selectable options — NEVER the answer
+    key (no is_correct flag, no correct option key/text).
+    """
+    return learning_service.list_reviews(db, current_user, due_only=due_only)
+
+
+@router.post("/reviews/{review_id}/answer", response_model=ReviewAnswerOut)
+def answer_review(
+    review_id: int,
+    payload: ReviewAnswerCreate,
+    lang: str | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Answer one of the user's OWN review cards (Part C2).
+
+    Straight comparison, same as lesson scoring. Deterministic UTC schedule:
+    correct advances the stage (1 / 3 / 7 / 14-day ladder), incorrect resets to
+    stage 0 and is due again immediately. The response never exposes the
+    answer key — only the learner-safe feedback object from Part C1.
+    """
+    return learning_service.answer_review(
+        db,
+        current_user,
+        review_id=review_id,
+        option_key=payload.option_key,
+        text=payload.text,
+        lang=lang,
+    )
+
+
+# --- Part B1: authoritative completion + certificate (unchanged) --------------
 @router.get("/completion", response_model=CourseCompletionOut)
 def get_completion(
     current_user: User = Depends(get_current_user),

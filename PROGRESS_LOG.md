@@ -14,7 +14,46 @@ HOW TO USE THIS FILE:
 
 ---
 
+## Session 11 Part C2 — confidence tracking and spaced review backend
+
+**Date:** 2026-09-15 — learning-engine spaced-review backend (no accounting, certificate, workspace, Learn UI, or public-verification code touched; builds directly on Part C1's feedback/remediation work).
+
+**Scope:** optional post-answer confidence self-assessment, user-scoped review records, protected review endpoints, deterministic spaced-review scheduling, backend tests. **Deferred:** the review frontend (queue UI) — API-only in this part; no AI, payments, certificates, QR, workspace archive/delete, or curriculum expansion.
+
+**Data model / migration `0018_spaced_review_items.py`** (down_revision `0017`, **applied forward on the local DB: `alembic current` = `0018 (head)`**):
+- NEW table `review_items` — ONE card per (user, question): `user_id`, `question_id` (FK questions, CASCADE), `stage` (0-based, default 0), `due_at` (timezone-aware UTC), `is_active` (default True), `last_outcome` ('wrong' | 'guessed' | 'review_correct' | 'review_wrong'), created/updated UTC. **UNIQUE (user_id, question_id)** makes duplicate active cards impossible at the database level — an existing card is reset/reactivated in place, never duplicated.
+- `attempts.confidence` (nullable String(20)): 'understood' | 'guessed' — the optional self-assessment sent WITH a lesson answer. Never affects scoring.
+
+**Exact scheduling rule (deterministic, no AI):**
+- Wrong LESSON answer → create or reset the card: stage 0, due immediately (UTC now).
+- Correct lesson answer marked 'guessed' → same as wrong (create/reset, due immediately).
+- Correct lesson answer marked 'understood' → NEVER creates a card and deliberately does not touch an existing one (cards only advance through their own review answers; lesson confidence and review scheduling stay independent).
+- Correct REVIEW answer → ladder indexed by the stage the card WAS at: stage 0 → due in 1 day, 1 → 3 days, 2 → 7 days, 3+ → 14 days (interval caps at 14; stage keeps counting). Response carries `interval_days`.
+- Incorrect REVIEW answer → stage reset to 0, due immediately, `interval_days: null`.
+- All timestamps are timezone-aware UTC; a `_as_utc_aware()` helper normalizes SQLite's naive test-engine datetimes so comparisons are correct on PostgreSQL (dev) and SQLite (tests).
+
+**API (all authenticated via `get_current_user`, strictly user-scoped):**
+- `GET /learning/reviews/summary` → `{total_active, due_now, scheduled, next_due_at}`.
+- `GET /learning/reviews?due_only=true|false` → the user's active cards (question + options exactly like lesson detail; ordered by due date).
+- `POST /learning/reviews/{review_id}/answer` (body `{option_key?|text?}`, optional `?lang=`) → `{review_id, question_id, correct, stage, due_at, interval_days, feedback}`. Scoring reuses Part A's straight comparison via a new shared `_score_submission()` helper (lessons and reviews now grade identically). Review answers create NO `attempts` rows, so lesson progress, completion, and certificate eligibility are unaffected by construction.
+
+**Security decisions:**
+- User scoping: cards are looked up by (id, user_id, is_active); anything else is a plain 404 — a user can neither list, nor read, nor answer another user's card, and no existence is leaked.
+- Answer-key protection: review responses NEVER carry `correct_option_key`, `correct_text`, accepted short-answer texts, or any `is_correct` flag (enforced by exact response key-set assertions). The Part C1 learner-safe `feedback` object (explanation/correction/remediation prose) is reused, localized by `?lang` falling back to the stored language preference.
+- Confidence is validated by a Pydantic `Literal['understood'|'guessed']` → unknown values are a 422, never silently ignored.
+
+**Tests / actual results (all observed via captured output files):**
+1. Focused new file `app/tests/test_learning_reviews.py`: **14 passed** (creation rules incl. wrong/guessed/understood/no-confidence, invalid confidence 422, duplicate prevention at the DB level, user scoping + cross-user 404, auth required, full ladder 1/3/7/14 with UTC-offset assertions, reset to stage 0 due immediately, due_only/summary agreement, answer-key protection on list + answer, progress/completion/certificate untouched + no `attempts` rows from reviews).
+2. Full suite `pytest app/tests -q`: **161 passed, 12 warnings in 59.26s, RC=0** (147 C1 baseline + 14 new C2 — all C1, certificate, accounting, and workspace tests still pass).
+3. No frontend files changed → no frontend build run (per instruction).
+4. Migration applied: `alembic current` = **0018 (head)**, RC=0.
+
+**Operational note:** after pulling this change, run `alembic upgrade head` (0018) before restarting the backend.
+
+**Deferred:** review queue frontend (list/detail/answer UI + i18n keys), review-card confidence prompts, any notification/digest mechanism.
+
 ## Session 11 Part C1 — remediation links and post-answer feedback UX
+
 
 **Date:** 2026-09-15 — learning-engine feedback layer (no accounting, certificate, workspace, or public-verification code touched).
 
