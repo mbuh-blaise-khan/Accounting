@@ -4,7 +4,11 @@
 //
 // credentials: 'include' is required so the httpOnly auth cookie set by the
 // backend is sent on every cross-origin request.
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
+const API_BASE =
+  // Guarded so this module stays importable in plain Node (npm run test:*):
+  // `import.meta.env` only exists under Vite.
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE) ||
+  'http://localhost:8000'
 
 function parseError(res, body) {
   try {
@@ -323,6 +327,37 @@ export async function submitAttempt(questionId, payload, lang) {
 export async function fetchCourseCompletion() {
   return request('/learning/completion');
 }
+
+// --- Session 11 Part C2/C3 — spaced review (authenticated, user-scoped) ------
+
+/** GET /learning/reviews/summary -> {total_active, due_now, scheduled, next_due_at}. */
+export async function fetchReviewSummary() {
+  return request('/learning/reviews/summary');
+}
+
+/**
+ * GET /learning/reviews -> the signed-in user's active review cards.
+ * `dueOnly=true` adds ?due_only=true (server filters to cards due now).
+ * Cards carry the question + options ONLY — never the answer key.
+ */
+export async function fetchReviews(dueOnly = false) {
+  return request(`/learning/reviews${dueOnly ? '?due_only=true' : ''}`);
+}
+
+/**
+ * POST /learning/reviews/{id}/answer -> ReviewAnswerOut
+ * ({review_id, question_id, correct, stage, due_at, interval_days, feedback}).
+ * The response never carries the answer key; `feedback` is the same
+ * learner-safe object the lesson attempts return (Part C1 shape).
+ */
+export async function answerReview(reviewId, payload, lang) {
+  const query = lang ? `?lang=${encodeURIComponent(lang)}` : '';
+  return request(`/learning/reviews/${reviewId}/answer${query}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 
 /** POST /learning/certificate -> CertificateOut (idempotent; 403 when not eligible). */
 export async function issueCertificate() {

@@ -13,6 +13,111 @@ HOW TO USE THIS FILE:
 - Do not delete old entries. This is a running history, not just a status.
 
 ---
+## Session 11 Part C3 — review queue and remediation UX
+
+**Date:** 2026-09-17
+
+**What was built:**
+- Added a spaced-review queue to the Learn flow so missed questions and
+  "guessed but correct" answers come back as due-now or scheduled-later
+  review cards.
+- Review summary in Learn mode (LearnPage `ReviewSummaryCard`): surfaces
+  `ready to review now` / `scheduled for later` / `You're all caught up!`
+  states pulled from the C2 `GET /learning/reviews/summary` endpoint.
+- Review now action: the summary card links into a one-question-at-a-time
+  review flow (`ReviewPage`).
+- One-question-at-a-time review flow (`ReviewPage` + `reviewQueue.js`):
+  - loads due cards from `GET /learning/reviews`, filters to `due_only` on
+    load;
+  - shows card progress (`Card 2 of 5`), source lesson, and the question +
+    its selectable options (MCQ or short answer);
+  - submits the learner's answer via `POST /learning/reviews/{id}/answer`
+    (option_key for MCQ, text for short answer);
+  - displays feedback/correction/remediation via the existing C1
+    `feedbackStatus` / `feedbackProjection` / `remediationTarget` helpers in
+    `lessonFeedback.js`, adapted through `reviewResultView`;
+  - shows the next review date/state after each answer (`nextDue`,
+    `dueAgainNow`);
+  - empty / loading / error / retry states throughout.
+- Confidence behavior: after each review answer the learner picks
+  `I understand this` or `I got it, but I guessed` (C2-validated
+  `Literal['understood'|'guessed']`); only those two values are sent, never
+  any other string. Confidence scheduling is driven entirely by C2 on the
+  server.
+- Protected review API use: ReviewPage/reviewQueue call exactly the C2
+  review endpoints with the right request/response shapes. The response
+  payloads never carry `correct_option_key`, `correct_text`, `is_correct`,
+  or accepted short-answer text — enforced by both the C2 backend assertions
+  and the C3 `reviewQueue.test.mjs` "review payloads never carry the answer
+  key" check.
+- No correct answers embedded in frontend code: the review UI renders only
+  what the server's `feedback` object returns (explanation / correction /
+  remediation target). It does not hold or display the correct option key,
+  the correct option text, or any accepted short-answer text.
+- EN/FR strings: all review + confidence UI labels exist in both
+  `en.json` and `fr.json`; the C3 test asserts key parity.
+- Mobile-responsive and accessible: ReviewPage is a full React page rendered
+  inside the App shell with the same responsive layout as the rest of the
+  Learn route; no separate mobile app.
+- Certificate access and Learn/Practice navigation preserved: the new
+  `ReviewPage` route is a sibling of Learn/Practice, not a replacement;
+  App.jsx keeps all existing routes and certificate access intact.
+
+**C1 feedback/remediation integration:**
+- ReviewPage reuses the C1 `feedbackStatus`, `feedbackProjection`, and
+  `remediationTarget` helpers from `lessonFeedback.js` via
+  `reviewQueue.reviewResultView`, so the same correction/encouragement/
+  "Review this concept" deep-link behavior seen in LessonDetailPage applies
+  in the review queue.
+- The remediation button opens the card's OWN lesson at the stable section
+  anchor (derived from `remediation.lesson_id` + `section_id`).
+
+**C2 confidence/scheduling integration:**
+- Review answers are submitted with the optional `confidence` field; the
+  server validates it against `Literal['understood'|'guessed']` and uses it
+  for interval progression (correct+confident advances the schedule;
+  guessed or incorrect resets to stage 0 / due now).
+- The `next review` display in ReviewPage reflects the C2-computed
+  `due_at` + stage, localized by `?lang`.
+
+**API helpers used:**
+- `api.fetchReviewSummary()` — `GET /learning/reviews/summary`
+- `api.fetchReviews({ dueOnly })` — `GET /learning/reviews`
+- `api.answerReview(cardId, optionKey, text, confidence, lang)` —
+  `POST /learning/reviews/{id}/answer`
+- `reviewQueue.js`: `reviewSummaryState`, `formatDueDate`,
+  `reviewAnswerPayload`, `CONFIDENCE`, `confidencePayload`,
+  `reviewResultView`, `correctReviewAnswer`, `incorrectReviewAnswer`
+
+**Tests:**
+- `npm run test:review` → 10 checks passed (reviewQueue.test.mjs):
+  null/missing summaries not displayable; due cards surface Review-now state;
+  future-only cards surface scheduled state with next date; correct answer
+  shows encouragement + next schedule; incorrect answer shows correction +
+  remediation target; confidence sends ONLY the two C2-supported
+  self-assessments; remediation opens the card's OWN lesson at a stable
+  anchor; helpers call exact C2 endpoints with right shape; payloads never
+  carry the answer key; EN/FR label parity.
+- `npm run build` → success (1,322 kB JS bundle; chunk-size warning only).
+
+**Deferred work:**
+- Review flow polish (animations, empty-state illustration, keyboard
+  navigation refinements) — acceptable as-is for this session.
+- Review analytics / spaced-review reporting on the dashboard — later.
+- Pidgin i18n for review/confidence labels — later.
+
+**Decisions:**
+- Reuse C1 feedback helpers rather than reimplementing correction/remediation
+  display in the review queue — keeps one source of truth for post-answer
+  UX.
+- Keep confidence optional on review answers (older clients that omit it keep
+  the C2 default behavior) — forward-compatible.
+- Do NOT expose correct answer material in the review UI under any path —
+  enforced by backend + frontend assertions.
+
+---
+
+
 
 ## Session 11 Part C2 — confidence tracking and spaced review backend
 

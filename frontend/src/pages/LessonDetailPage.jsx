@@ -8,6 +8,7 @@ import {
   FEEDBACK_STATUS,
   sectionAnchorId,
 } from '../utils/lessonFeedback.js';
+import { CONFIDENCE, confidencePayload } from '../utils/reviewQueue.js';
 
 /**
  * Lesson detail — content sections, then one question at a time with instant
@@ -24,7 +25,7 @@ import {
  * deterrent, not blocking), and content is served per-request from the API
  * (never static/downloadable files).
  */
-export default function LessonDetailPage({ lessonId, orgId, onBack }) {
+export default function LessonDetailPage({ lessonId, orgId, onBack, focusSectionId }) {
   const { t, lang } = useLanguage();
   const { user } = useAuth();
   const [lesson, setLesson] = useState(null);
@@ -38,7 +39,24 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
   // Part C1: DOM anchor of the section the learner was sent back to via
   // "Review this concept" (null = no remediation focus active).
   const [focusAnchor, setFocusAnchor] = useState(null);
+  // Part C3: optional self-assessment sent WITH the answer (C2 only accepts
+  // 'understood' | 'guessed'; anything else sends an identical payload to the
+  // pre-C2 clients). It never changes the score — a guessed correct answer
+  // schedules a spaced-review card.
+  const [confidence, setConfidence] = useState(null);
 
+  useEffect(() => {
+    let alive = true;
+    setError('');
+    setLesson(null);
+    setQIndex(0);
+    setSelected(null);
+    setTextAnswer('');
+    setResult(null);
+    setProgress(null);
+    setFocusAnchor(null);
+    setConfidence(null);
+  }, []);
   useEffect(() => {
     let alive = true;
     setError('');
@@ -93,7 +111,7 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
     if (checking || result || !q) return;
     setChecking(true);
     try {
-      const payload = { lesson_id: lesson.id };
+      const payload = { lesson_id: lesson.id, ...confidencePayload(confidence) };
       if (orgId != null) payload.organization_id = orgId;
       if (q.kind === 'short_answer') payload.text = textAnswer.trim();
       else payload.option_key = selected;
@@ -112,6 +130,7 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
     setSelected(null);
     setTextAnswer('');
     setFocusAnchor(null);
+    setConfidence(null);
     setQIndex((i) => i + 1);
   }
 
@@ -142,6 +161,30 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
     );
     return match ? match.position : null;
   })();
+
+  useEffect(() => {
+    // Part C3: entering from Review mode with a remediation section id focuses
+    // the exact section the C2 API pointed at (same anchor shape the detail
+    // page itself uses). Runs after the lesson content is rendered; a missing
+    // id is silently ignored and the prop does not linger.
+    if (lesson == null || focusSectionId == null) return;
+    const anchor = sectionAnchorId({ sectionId: focusSectionId });
+    if (!anchor) return;
+    const target = (lesson.sections || []).find(
+      (s) => sectionAnchorId(s) === anchor
+    );
+    if (!target) return;
+    setFocusAnchor(anchor);
+    if (typeof document !== 'undefined') {
+      requestAnimationFrame(() => {
+        const node = document.getElementById(anchor);
+        if (node && typeof node.scrollIntoView === 'function') {
+          node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson, focusSectionId]);
 
   const watermarkLabel = user
     ? [user.display_name, user.email].filter(Boolean).join(' · ')
@@ -258,6 +301,15 @@ export default function LessonDetailPage({ lessonId, orgId, onBack }) {
             )}
 
             {!result ? (
+              <ConfidenceChoice
+                t={t}
+                selected={confidence}
+                onSelect={(nextValue) =>
+                  setConfidence(nextValue === confidence ? null : nextValue)
+                }
+              />
+            ) : null}
+            {!result ? (
               <button
                 type="button"
                 onClick={check}
@@ -324,6 +376,47 @@ function Shell({ onBack, t, watermarkLabel, children }) {
         {t('learn.watermarkNote')}
       </p>
     </section>
+  );
+}
+
+/**
+ * Session 11 Part C3 — optional self-assessment sent WITH the lesson answer
+ * ("I understand this" | "I got it, but I guessed"). It never changes the
+ * score; a guessed correct answer schedules a spaced-review card (Part C2).
+ * Single-select toggle: clicking the active choice clears it (sends the
+ * request shape identical to the pre-C2 clients).
+ */
+function ConfidenceChoice({ t, selected, onSelect }) {
+  return (
+    <div className="mt-3">
+      <p className="text-xs text-slate-500">{t('learn.confidenceQuestion')}</p>
+      <div className="mt-1 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => onSelect(CONFIDENCE.understood)}
+          aria-pressed={selected === CONFIDENCE.understood}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+            selected === CONFIDENCE.understood
+              ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
+              : 'border-slate-200 text-slate-600 hover:border-slate-300'
+          }`}
+        >
+          {t('learn.confidenceUnderstood')}
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelect(CONFIDENCE.guessed)}
+          aria-pressed={selected === CONFIDENCE.guessed}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+            selected === CONFIDENCE.guessed
+              ? 'border-amber-500 bg-amber-50 text-amber-800'
+              : 'border-slate-200 text-slate-600 hover:border-slate-300'
+          }`}
+        >
+          {t('learn.confidenceGuessed')}
+        </button>
+      </div>
+    </div>
   );
 }
 

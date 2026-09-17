@@ -24,6 +24,7 @@ import RegisterPage from './pages/RegisterPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 import OnboardingChoicePage from './pages/OnboardingChoicePage.jsx'
 import LearnPage from './pages/LearnPage.jsx'
+import ReviewPage from './pages/ReviewPage.jsx'
 import LessonDetailPage from './pages/LessonDetailPage.jsx'
 import CertificateVerificationPage from './pages/CertificateVerificationPage.jsx'
 import { fetchOrganizations, createOrganization } from './services/api.js'
@@ -292,8 +293,33 @@ function AppShell() {
 // Standalone Learn flow (entered from the hub, outside any workspace).
 // No org is passed, so lesson 4's practice connector simply does not post
 // (the lesson itself still works; posting happens from a workspace).
+//
+// Session 11 Part C3 — review mode lives inside this same standalone Learn
+// flow: entering it never touches workspaces, lesson progress or the
+// certificate UI (certificates render inside LearnPage, which the review page
+// does not disturb). It is tracked as its own local flag (like `lessonId`),
+// so nothing about the Learn/Practice hub or its mounted-but-hidden state
+// handling changes.
 function LearnFlow({ lessonId, onOpenLesson, onBackToStart }) {
   const { t } = useLanguage()
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [reviewAnchor, setReviewAnchor] = useState(null)
+
+  // A review card's remediation action opens its lesson focused on the exact
+  // section the C2 API pointed at. The anchor string is consumed once by the
+  // detail page (see its focusSectionId effect) and cleared on every other
+  // navigation, so it can never linger into an unrelated lesson.
+  function openFromReview(lessonIdValue, anchor) {
+    setReviewAnchor(anchor || null)
+    setReviewOpen(false)
+    onOpenLesson(lessonIdValue)
+  }
+
+  function openLessonList() {
+    setReviewAnchor(null)
+    onOpenLesson(null)
+  }
+
   return (
     <div>
       <div className="mx-auto max-w-3xl px-4 pt-4">
@@ -312,10 +338,24 @@ function LearnFlow({ lessonId, onOpenLesson, onBackToStart }) {
         <LessonDetailPage
           lessonId={lessonId}
           orgId={null}
-          onBack={() => onOpenLesson(null)}
+          focusSectionId={
+            reviewAnchor ? Number(reviewAnchor.split('-').pop()) : null
+          }
+          onBack={openLessonList}
+        />
+      ) : reviewOpen ? (
+        <ReviewPage
+          onBack={() => {
+            setReviewAnchor(null)
+            setReviewOpen(false)
+          }}
+          onOpenLesson={openFromReview}
         />
       ) : (
-        <LearnPage onOpenLesson={onOpenLesson} />
+        <LearnPage
+          onOpenLesson={onOpenLesson}
+          onStartReview={() => setReviewOpen(true)}
+        />
       )}
     </div>
   )

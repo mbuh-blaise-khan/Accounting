@@ -4,9 +4,15 @@ import {
   fetchLessons,
   fetchCourseCompletion,
   issueCertificate,
+  fetchReviewSummary,
 } from '../services/api';
 import CertificateCard from '../components/CertificateCard';
 import { certificateState } from '../utils/certificatePresentation';
+import {
+  formatDueDate,
+  REVIEW_SUMMARY_STATE,
+  reviewSummaryState,
+} from '../utils/reviewQueue';
 
 /**
  * Learn Mode — lesson list with per-lesson and overall progress.
@@ -19,10 +25,14 @@ import { certificateState } from '../utils/certificatePresentation';
  * from the AUTHORITATIVE server endpoint (GET /learning/completion), never
  * guessed from local progress: locked -> available (issue) -> issued.
  */
-export default function LearnPage({ onOpenLesson }) {
+export default function LearnPage({ onOpenLesson, onStartReview }) {
   const { t, lang } = useLanguage();
   const [lessons, setLessons] = useState(null);
   const [completion, setCompletion] = useState(null); // CourseCompletionOut
+  // Session 11 Part C3 — spaced-review summary (ReviewSummaryOut or null while
+  // loading). Rows/errors are handled quietly here: a review summary failure
+  // never blocks the lesson list or the certificate UI.
+  const [reviewSummary, setReviewSummary] = useState(null);
   const [lessonsError, setLessonsError] = useState('');
   const [completionError, setCompletionError] = useState('');
   const [issueError, setIssueError] = useState('');
@@ -35,6 +45,7 @@ export default function LearnPage({ onOpenLesson }) {
     setCompletionError('');
     setLessons(null);
     setCompletion(null);
+    setReviewSummary(null);
     fetchLessons()
       .then((data) => {
         if (alive) setLessons(data);
@@ -48,6 +59,14 @@ export default function LearnPage({ onOpenLesson }) {
       })
       .catch(() => {
         if (alive) setCompletionError(t('certificate.loadError'));
+      });
+    fetchReviewSummary()
+      .then((data) => {
+        if (alive) setReviewSummary(data);
+      })
+      .catch(() => {
+        // Quiet degradation (see above): lessons + certificate stay usable.
+        if (alive) setReviewSummary({ total_active: 0, due_now: 0, scheduled: 0, next_due_at: null });
       });
     return () => {
       alive = false;
@@ -228,6 +247,9 @@ export default function LearnPage({ onOpenLesson }) {
         </div>
       ) : null}
 
+      {reviewSummary ? (
+        <ReviewSummaryCard summary={reviewSummary} t={t} lang={lang} onStartReview={onStartReview} />
+      ) : null}
       <ol className="space-y-3">
         {lessons.map((lesson, idx) => {
           const p = lesson.progress || {};
@@ -280,6 +302,63 @@ function statusLabel(t, status) {
   if (status === 'completed') return t('learn.completed');
   if (status === 'in_progress') return t('learn.inProgress');
   return t('learn.notStarted');
+}
+
+/**
+ * Session 11 Part C3 — spaced-review summary card (derived ONLY from the
+ * C2 `GET /learning/reviews/summary` payload):
+ * - 'due'       → amber card with the due count and a "Review now" action;
+ * - 'scheduled' → quiet slate card with the scheduled count + next due date;
+ * - 'empty'     → renders nothing (calm Learn page; empty state lives on the
+ *   review page when opened).
+ */
+function ReviewSummaryCard({ summary, t, lang, onStartReview }) {
+  const state = reviewSummaryState(summary);
+  if (state === REVIEW_SUMMARY_STATE.due) {
+    return (
+      <div className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <span className="text-2xl" aria-hidden="true">
+            ⏰
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-amber-800">
+              {summary.due_now} {t('review.readyNow')}
+            </p>
+            <p className="mt-1 text-sm text-amber-700">{t('review.subtitle')}</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onStartReview}
+          className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-700"
+        >
+          {t('review.reviewNow')}
+        </button>
+      </div>
+    );
+  }
+  if (state === REVIEW_SUMMARY_STATE.scheduled) {
+    const nextDue = formatDueDate(summary.next_due_at, lang);
+    return (
+      <div className="mb-6 flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <span className="text-2xl" aria-hidden="true">
+          📅
+        </span>
+        <div>
+          <p className="text-sm font-semibold text-slate-800">
+            {summary.scheduled} {t('review.scheduledLater')}
+          </p>
+          {nextDue ? (
+            <p className="mt-1 text-xs text-slate-500">
+              {t('review.nextDue')}: {nextDue}
+            </p>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+  return null;
 }
 
 /** Small status pill for the server-side completion summary. */

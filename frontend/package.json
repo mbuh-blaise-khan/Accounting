@@ -14,7 +14,8 @@
     "test:excel": "node src/utils/excel.test.mjs",
     "test:profile": "node src/utils/profile.test.mjs",
     "test:certificate": "node src/utils/certificatePresentation.test.mjs",
-    "test:feedback": "node src/utils/lessonFeedback.test.mjs"
+    "test:feedback": "node src/utils/lessonFeedback.test.mjs",
+    "test:review": "node src/utils/reviewQueue.test.mjs"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
