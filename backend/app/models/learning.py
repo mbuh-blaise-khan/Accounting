@@ -88,6 +88,16 @@ class Question(Base):
     kind: Mapped[str] = mapped_column(String(20), nullable=False)  # 'mcq' | 'short_answer'
     explanation_en: Mapped[str | None] = mapped_column(Text, nullable=True)
     explanation_fr: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Session 11 Part C1 -- post-submission corrections and remediation.
+    # correction_en/fr: plain-language correction shown after a wrong answer.
+    #   States what is correct without exposing the correct option key/text.
+    # remediation_section_id: optional pointer to a section of THIS question's
+    #   lesson for "Review this concept". Never points at another lesson.
+    correction_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    correction_fr: Mapped[str | None] = mapped_column(Text, nullable=True)
+    remediation_section_id: Mapped[int | None] = mapped_column(
+        ForeignKey("lesson_sections.id", ondelete="SET NULL"), nullable=True
+    )
     # Session 11 Part C1 — post-submission learner feedback. Like the
     # explanations above, these are NEVER served by the read endpoints; they are
     # returned only by the scoring endpoint (POST /learning/attempts).

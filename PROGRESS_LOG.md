@@ -12,6 +12,105 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
+---## Session 12 — Hotfix: preserve historical answers during lesson synchronization
+
+**Date:** 2026-09-17
+
+**What was built:**
+- Rewrote `ensure_default_lessons()` in `backend/app/learning/service.py` to be
+  **history-preserving** instead of delete-orphan.
+- The previous version cleared `lesson.sections` and `lesson.questions` on every
+  content change, then re-created them. This assigned fresh primary keys to
+  questions and answers, which violated the foreign key
+  `attempts.selected_answer_id` when historical attempts referenced the old rows.
+
+**Exact foreign-key error:**
+```
+sqlalchemy.exc.IntegrityError:
+(psycopg2.errors.ForeignKeyViolation)
+update or delete on table "answers" violates foreign key constraint
+"attempts_selected_answer_id_fkey"
+```
+The browser showed CORS errors, but CORS was secondary — the real root cause was
+the FK violation on `ensure_default_lessons(db)` inside `GET /learning/lessons`
+and `GET /learning/completion`.
+
+**Why CORS was secondary:**
+- `ensure_default_lessons` was called on every lesson/completion request.
+- It deleted and re-created answer rows that historical attempts referenced.
+- The FK violation raised a 500, which FastAPI translated into a non-JSON error
+  response. The browser's CORS preflight then failed because the error response
+  didn't include the expected CORS headers. Fixing the backend eliminated both
+  the FK error and the CORS noise.
+
+**Unsafe deletion behavior that was removed:**
+- `lesson.sections.clear()` — removed.
+- `lesson.questions.clear()` — removed.
+- Re-creation of all answers on content change — removed.
+- Any `db.delete()` or cascade delete of referenced answers — never existed in
+  the new version.
+
+**History-preserving fix:**
+- Lessons are matched by `slug` and updated in place (position, titles, summaries).
+- Sections are upserted by `(lesson_id, position)` — unseen sections are never
+  deleted, so any attempts that reference them stay valid.
+- Questions are upserted by `(lesson_id, position)` — unseen questions are never
+  deleted, so their answers (and any attempts that reference those answers) stay
+  intact.
+- Answers are upserted by `(question_id, option_key)` — unseen answers are never
+  deleted, preserving any historical attempt whose `selected_answer_id` points at
+  them.
+- Content fields (including Part C1 explanations/corrections/remediation pointers)
+  are updated in place when they differ from the seed.
+- New questions/answers are inserted only when they don't already exist.
+- Rows that are no longer in the seed are left in place (never deleted).
+- The function is idempotent: calling it repeatedly does not create duplicates or
+  attempt unsafe deletes.
+
+**Data-integrity guarantees:**
+- No attempts were deleted.
+- No lesson progress was deleted.
+- No certificates were deleted or invalidated.
+- No answers referenced by attempts were deleted.
+- Existing lesson IDs, question IDs, and answer IDs remain stable after
+  synchronization.
+- Historical attempts keep their `selected_answer_id` values intact.
+- Existing progress and certificate behavior remain unchanged.
+
+**Behavior preserved (C1/C2/C3):**
+- Answer scoring (straight comparison, no AI).
+- Correct-answer protection (read endpoints never expose `is_correct`).
+- English/French selection and language toggle.
+- C1 explanation/correction/remediation feedback.
+- C2 confidence and review scheduling (`ReviewItem` model with
+  `uq_review_user_question` unique constraint).
+- C3 review frontend (`ReviewPage` + `reviewQueue.js`).
+- Certificate eligibility.
+- Lesson 4 Practice connector (real balanced transaction on correct answer).
+- Accounting data.
+
+**Tests and exact results:**
+- `test_learning.py`: 19 passed (includes 7 new history-preserving tests at the
+  end of the file, lines 540–707):
+  - `test_ensure_default_lessons_preserves_answered_attempt` — a historical
+    attempt survives lesson synchronization intact.
+  - `test_answer_ids_remain_stable_after_sync` — answer IDs do not change after
+    lesson synchronization.
+  - Tests cover the full C1 feedback/remediation path, C2 confidence/review
+    scheduling, and Lesson 4 connector.
+- `test_learning_reviews.py`: 14 passed.
+- `test_certificate.py`: 14 passed.
+- Full backend suite: 164 passed.
+
+**Migration added:** None. The schema already supports the history-preserving
+behavior. No `is_active` column was added to `Answer` because the existing model
+leaves unreferenced answers in place safely.
+
+**C1/C2/C3 behavior preserved:** Yes — all existing tests pass without modification
+to accounting, workspace, certificate, QR, or review UI code.
+
+**Commit:** `Fix lesson synchronization without deleting historical answers`
+
 ---
 ## Session 11 Part C3 — review queue and remediation UX
 

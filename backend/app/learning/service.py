@@ -80,10 +80,20 @@ def _progress_dict(user: User, lesson: Lesson, row: LessonProgress | None) -> di
 
 
 def ensure_default_lessons(db: Session) -> None:
-    """Idempotent seed: create/update the 7-lesson curriculum by slug.
+    """Idempotent, history-preserving seed: create/update the 7-lesson curriculum
+    by slug.
 
-    Safe to call on every startup / test setup. Sections and questions are
-    fully re-synced (delete-orphan) so content edits flow through on re-seed.
+    Existing lessons, questions, and answers keep their IDs. Content fields
+    (including Part C1 explanations/corrections/remediation pointers) are
+    updated in place when they differ from the seed. New questions/answers are
+    inserted only when they don't already exist. Rows that are no longer in the
+    seed are left in place (never deleted) so historical attempts keep their
+    referential integrity.
+
+    Safe to call on every startup / request / test setup. Unlike the previous
+    delete-orphan re-sync, this version never removes answers that historical
+    attempts may reference, so FK violations on attempts.selected_answer_id are
+    impossible.
     """
     for data in LESSONS:
         lesson = db.query(Lesson).filter(Lesson.slug == data["slug"]).first()
@@ -105,79 +115,112 @@ def ensure_default_lessons(db: Session) -> None:
             lesson.summary_en = data["summary_en"]
             lesson.summary_fr = data["summary_fr"]
 
-        # Re-sync sections + questions ONLY when the content actually differs.
-        # Clearing + re-adding on every call would assign fresh primary keys
-        # each request, invalidating the question ids the client just received
-        # from the detail endpoint (breaking in-flight attempts with
-        # "Question not found"). A fingerprint comparison makes the seed a
-        # true no-op when nothing changed; explicit content edits still flow
-        # through (delete-orphan cascade removes old rows on real changes).
-        if _content_differs(lesson, data):
-            if lesson.sections:
-                lesson.sections.clear()
-            if lesson.questions:
-                lesson.questions.clear()
-
-            for sec in data["sections"]:
-                lesson.sections.append(
-                    LessonSectionModel(
-                        position=sec["position"],
-                        heading_en=sec.get("heading_en"),
-                        heading_fr=sec.get("heading_fr"),
-                        body_en=sec["body_en"],
-                        body_fr=sec["body_fr"],
-                    )
+        # Sections: upsert by (lesson_id, position). Leave unseen sections in
+        # place -- they are never deleted, so any attempt/refs they own stay valid.
+        for sec_data in data["sections"]:
+            existing_sec = next(
+                (s for s in lesson.sections if s.position == sec_data["position"]), None
+            )
+            if existing_sec:
+                existing_sec.heading_en = sec_data.get("heading_en")
+                existing_sec.heading_fr = sec_data.get("heading_fr")
+                existing_sec.body_en = sec_data["body_en"]
+                existing_sec.body_fr = sec_data["body_fr"]
+            else:
+                new_sec = LessonSectionModel(
+                    position=sec_data["position"],
+                    heading_en=sec_data.get("heading_en"),
+                    heading_fr=sec_data.get("heading_fr"),
+                    body_en=sec_data["body_en"],
+                    body_fr=sec_data["body_fr"],
                 )
+                lesson.sections.append(new_sec)
 
-            created_questions: list[tuple[Question, dict]] = []
-            for q in data["questions"]:
-                question = Question(
-                    position=q["position"],
-                    question_en=q["question_en"],
-                    question_fr=q["question_fr"],
-                    kind=q["kind"],
-                    explanation_en=q.get("explanation_en"),
-                    explanation_fr=q.get("explanation_fr"),
-                    # Part C1 — post-submission feedback content (returned only
-                    # by the scoring endpoint, never by the read endpoints).
-                    correction_en=q.get("correction_en"),
-                    correction_fr=q.get("correction_fr"),
-                    short_answer_en=q.get("short_answer_en"),
-                    short_answer_fr=q.get("short_answer_fr"),
-                    posts_demo_transaction=q.get("posts_demo_transaction", False),
-                    practice_amount=q.get("practice_amount"),
+        # Questions: upsert by (lesson_id, position). Leave unseen questions in
+        # place -- they are never deleted, so their answers (and any attempts that
+        # reference those answers) stay intact.
+        for q_data in data["questions"]:
+            existing_q = next(
+                (q for q in lesson.questions if q.position == q_data["position"]), None
+            )
+            if existing_q:
+                existing_q.question_en = q_data["question_en"]
+                existing_q.question_fr = q_data["question_fr"]
+                existing_q.kind = q_data["kind"]
+                existing_q.explanation_en = q_data.get("explanation_en")
+                existing_q.explanation_fr = q_data.get("explanation_fr")
+                existing_q.correction_en = q_data.get("correction_en")
+                existing_q.correction_fr = q_data.get("correction_fr")
+                existing_q.short_answer_en = q_data.get("short_answer_en")
+                existing_q.short_answer_fr = q_data.get("short_answer_fr")
+                existing_q.posts_demo_transaction = q_data.get(
+                    "posts_demo_transaction", False
                 )
-                for a in q.get("answers", []):
-                    question.answers.append(
-                        Answer(
-                            option_key=a["option_key"],
-                            position=a["position"],
-                            text_en=a["text_en"],
-                            text_fr=a["text_fr"],
-                            is_correct=a.get("is_correct", False),
-                        )
+                existing_q.practice_amount = q_data.get("practice_amount")
+            else:
+                existing_q = Question(
+                    position=q_data["position"],
+                    question_en=q_data["question_en"],
+                    question_fr=q_data["question_fr"],
+                    kind=q_data["kind"],
+                    explanation_en=q_data.get("explanation_en"),
+                    explanation_fr=q_data.get("explanation_fr"),
+                    correction_en=q_data.get("correction_en"),
+                    correction_fr=q_data.get("correction_fr"),
+                    short_answer_en=q_data.get("short_answer_en"),
+                    short_answer_fr=q_data.get("short_answer_fr"),
+                    posts_demo_transaction=q_data.get("posts_demo_transaction", False),
+                    practice_amount=q_data.get("practice_amount"),
+                )
+                lesson.questions.append(existing_q)
+
+            # Answers: upsert by (question_id, option_key). Leave unseen answers
+            # in place -- they are never deleted, preserving any historical attempt
+            # whose selected_answer_id points at them.
+            for a_data in q_data.get("answers", []):
+                existing_answer = next(
+                    (
+                        a for a in existing_q.answers
+                        if a.option_key == a_data["option_key"]
+                    ),
+                    None,
+                )
+                if existing_answer:
+                    existing_answer.position = a_data["position"]
+                    existing_answer.text_en = a_data["text_en"]
+                    existing_answer.text_fr = a_data["text_fr"]
+                    existing_answer.is_correct = a_data.get("is_correct", False)
+                else:
+                    new_answer = Answer(
+                        option_key=a_data["option_key"],
+                        position=a_data["position"],
+                        text_en=a_data["text_en"],
+                        text_fr=a_data["text_fr"],
+                        is_correct=a_data.get("is_correct", False),
                     )
-                lesson.questions.append(question)
-                created_questions.append((question, q))
+                    existing_q.answers.append(new_answer)
 
-            # Part C1 — resolve each question's optional remediation pointer to
-            # a section of THIS lesson. The sections above are still pending
-            # (no primary key yet), so flush first, then map the seed's section
-            # position to the stored section id. Looking the section up inside
-            # `lesson.sections` is what guarantees a remediation target can
-            # never point at another lesson.
-            db.flush()
-            sections_by_position = {s.position: s for s in lesson.sections}
-            for question, seed_question in created_questions:
-                position = seed_question.get("remediation_section_position")
-                if position is None:
-                    continue  # optional by design: omitted, never guessed
-                section = sections_by_position.get(position)
-                if section is not None:
-                    question.remediation_section_id = section.id
+        # Flush to get section IDs for remediation pointers
+        db.flush()
+        sections_by_position = {s.position: s for s in lesson.sections}
 
-    # Part C1 — copy the authored feedback content onto questions that already
-    # exist from an earlier seed (no-op once everything is in sync).
+        # Set remediation pointers for questions in the seed
+        for q_data in data["questions"]:
+            question = next(
+                (q for q in lesson.questions if q.position == q_data["position"]),
+                None,
+            )
+            if question is None:
+                continue
+            position = q_data.get("remediation_section_position")
+            if position is None:
+                continue
+            section = sections_by_position.get(position)
+            if section is not None:
+                question.remediation_section_id = section.id
+
+    # Sync question feedback for DBs seeded before Part C1 (redundant with the
+    # upsert above for most rows, but harmless and acts as a safety net).
     _sync_question_feedback(db)
     db.commit()
 

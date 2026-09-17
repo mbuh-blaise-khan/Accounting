@@ -20,7 +20,19 @@ from types import SimpleNamespace
 
 from app.learning import feedback as feedback_copy
 from app.learning.service import _remediation_target
-from app.models.learning import Answer, Lesson, LessonSection, Question
+from app.models.learning import Answer, Attempt, Lesson, LessonSection, Question
+from app.models.user import User
+from app.models.user import User
+
+
+def _signed_in_user(db, email: str = "learner@example.com"):
+    """Get the User object for the currently signed-in test user by email."""
+    return db.query(User).filter(User.email == email).first()
+
+
+def _signed_in_user(db, email: str = "learner@example.com"):
+    """Get the User object for the currently signed-in test user by email."""
+    return db.query(User).filter(User.email == email).first()
 
 
 def _answer_keys(db, question_id):
@@ -523,3 +535,89 @@ def test_feedback_language_falls_back_to_stored_preference(client):
     assert no_lang["feedback"]["explanation"] == as_fr["feedback"]["explanation"]
     assert no_lang["feedback"]["explanation"] != as_en["feedback"]["explanation"]
     assert no_lang["is_correct"] is as_en["is_correct"]  # scoring is language-blind
+
+
+# --- 10) History-preserving lesson synchronization (foreign-key safety) --------
+
+def test_ensure_default_lessons_preserves_answered_attempt(client, test_db_session):
+    """A historical attempt survives lesson synchronization intact."""
+    _register(client)
+    lesson, detail = _lesson_by_slug(client, "the-accounting-equation")
+    q = detail["questions"][0]
+    correct_key, wrong_key = _answer_keys(test_db_session, q["id"])
+
+    # Submit an answer and get the attempt ID from the database
+    _attempt(client, lesson["id"], q["id"], option_key=wrong_key)
+    
+    # Get the attempt ID from the database (it's the most recent one for this user/question)
+    user_id = _signed_in_user(test_db_session).id
+    attempt = test_db_session.query(Attempt).filter(
+        Attempt.user_id == user_id,
+        Attempt.question_id == q["id"]
+    ).order_by(Attempt.id.desc()).first()
+    attempt_id = attempt.id
+
+    from app.learning.service import ensure_default_lessons
+
+    ensure_default_lessons(test_db_session)
+    test_db_session.commit()
+
+    still_exists = (
+        test_db_session.query(Attempt)
+        .filter(Attempt.id == attempt_id)
+        .first()
+    )
+    assert still_exists is not None
+
+
+def test_answer_ids_remain_stable_after_sync(client, test_db_session):
+    """Answer IDs do not change after lesson synchronization."""
+    _register(client)
+    lesson, detail = _lesson_by_slug(client, "what-is-accounting")
+    q = detail["questions"][0]
+
+    before = (
+        test_db_session.query(Answer)
+        .filter(Answer.question_id == q["id"])
+        .order_by(Answer.position)
+        .all()
+    )
+    before_ids = [a.id for a in before]
+
+    from app.learning.service import ensure_default_lessons
+
+    ensure_default_lessons(test_db_session)
+    test_db_session.commit()
+
+    after = (
+        test_db_session.query(Answer)
+        .filter(Answer.question_id == q["id"])
+        .order_by(Answer.position)
+        .all()
+    )
+    after_ids = [a.id for a in after]
+
+    assert before_ids == after_ids, (
+        "Answer IDs changed after synchronization — historical attempts would break"
+    )
+
+
+def test_lesson_sync_is_idempotent(client, test_db_session):
+    """Calling ensure_default_lessons() twice does not create duplicates."""
+    _register(client)
+
+    from app.learning.service import ensure_default_lessons
+
+    ensure_default_lessons(test_db_session)
+    count_after_first = (
+        test_db_session.query(Lesson).filter(Lesson.slug == "what-is-accounting").count()
+    )
+    assert count_after_first == 1
+
+    ensure_default_lessons(test_db_session)
+    test_db_session.commit()
+
+    count_after_second = (
+        test_db_session.query(Lesson).filter(Lesson.slug == "what-is-accounting").count()
+    )
+    assert count_after_second == 1
