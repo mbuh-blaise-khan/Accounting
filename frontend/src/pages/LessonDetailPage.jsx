@@ -86,6 +86,32 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lessonId, lang]);
 
+  // Part C3: entering from Review mode with a remediation section id focuses
+  // the exact section the C2 API pointed at (same anchor shape the detail
+  // page itself uses). Runs after the lesson content is rendered; a missing
+  // id is silently ignored and the prop does not linger.
+  // This effect must stay above the conditional returns so the hook order is
+  // stable across all render paths (loading / error / empty / populated).
+  useEffect(() => {
+    if (lesson == null || focusSectionId == null) return;
+    const anchor = sectionAnchorId({ sectionId: focusSectionId });
+    if (!anchor) return;
+    const target = (lesson.sections || []).find(
+      (s) => sectionAnchorId(s) === anchor
+    );
+    if (!target) return;
+    setFocusAnchor(anchor);
+    if (typeof document !== 'undefined') {
+      requestAnimationFrame(() => {
+        const node = document.getElementById(anchor);
+        if (node && typeof node.scrollIntoView === 'function') {
+          node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson, focusSectionId]);
+
   if (error) {
     return (
       <Shell onBack={onBack} t={t}>
@@ -161,30 +187,6 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
     );
     return match ? match.position : null;
   })();
-
-  useEffect(() => {
-    // Part C3: entering from Review mode with a remediation section id focuses
-    // the exact section the C2 API pointed at (same anchor shape the detail
-    // page itself uses). Runs after the lesson content is rendered; a missing
-    // id is silently ignored and the prop does not linger.
-    if (lesson == null || focusSectionId == null) return;
-    const anchor = sectionAnchorId({ sectionId: focusSectionId });
-    if (!anchor) return;
-    const target = (lesson.sections || []).find(
-      (s) => sectionAnchorId(s) === anchor
-    );
-    if (!target) return;
-    setFocusAnchor(anchor);
-    if (typeof document !== 'undefined') {
-      requestAnimationFrame(() => {
-        const node = document.getElementById(anchor);
-        if (node && typeof node.scrollIntoView === 'function') {
-          node.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lesson, focusSectionId]);
 
   const watermarkLabel = user
     ? [user.display_name, user.email].filter(Boolean).join(' · ')

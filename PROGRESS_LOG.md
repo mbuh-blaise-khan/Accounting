@@ -12,7 +12,30 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
----## Session 12 — Hotfix: preserve historical answers during lesson synchronization
+---## Session 13 — Hotfix: React hook order in LessonDetailPage
+
+**Date:** 2026-09-18
+
+**What was built:**
+- Fixed `frontend/src/pages/LessonDetailPage.jsx` — moved the C3 remediation/focus `useEffect` (lines 165-187 in the original) from *after* the conditional `if (error)` / `if (!lesson)` early returns to the unconditional top of the component, immediately after the lesson-loading effect.
+- The bug: when `error` was set or `lesson` was null, the component returned early and never reached the hook at line 165, so React saw a different hook count between renders → blank page + "Rendered more hooks than during the previous render" error.
+- The moved effect (dependency array `[lesson, focusSectionId]`, same logic, same eslint-disable comment) now runs on every render path — loading, error, empty, and populated — so hook ordering is stable.
+
+**Hook that was conditional:**
+- `useEffect(() => { /* C3 review-mode focus scroll */ }, [lesson, focusSectionId])` was at line 165, *after* the `if (error) return` and `if (!lesson) return` guards.
+
+**Where it was moved:**
+- To line 88-113, right after the lesson-loading `useEffect` and *before* the conditional returns.
+
+**Build result:** `npm run build` → **passed** (dist/index.html + dist/assets built successfully).
+
+**Feedback/review test results:**
+- `npm run test:feedback` → **10 checks passed**.
+- `npm run test:review` → **10 checks passed**.
+
+**No backend, migrations, database, accounting, certificates, workspace, or review API changes.**
+
+**Next session to run:** None scheduled — this was a hotfix only.
 
 **Date:** 2026-09-17
 
