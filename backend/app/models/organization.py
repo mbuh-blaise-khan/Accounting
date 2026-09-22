@@ -92,6 +92,24 @@ class Organization(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    # --- Archive (workspace archive / restore / conditional delete) ----------
+    # NULL = active. Archiving is the PRIMARY, always-available owner action:
+    # it hides the workspace from the default active "Your Workspaces" list and
+    # makes it read-only at the SERVICE layer, but deletes nothing — the
+    # business profile, chart of accounts, drafts, posted transactions,
+    # reports and memberships all stay intact, and every historical view
+    # (Journal, Ledger, Trial Balance, Financial Statements, profile) remains
+    # readable. Restore clears this timestamp. Permanent deletion is a
+    # separate, owner-only, conditionally-eligible action (see
+    # organization_service.delete_organization) — it is NOT this column.
+    # NOTE: retention duties around accounting records vary by jurisdiction
+    # and applicable commercial/tax/audit rules; IFRS and OHADA do NOT define
+    # one universal record-retention period. Archive-first is used here as a
+    # safe product/data-integrity policy because this project treats posted
+    # accounting records as immutable.
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class OrganizationMember(Base):

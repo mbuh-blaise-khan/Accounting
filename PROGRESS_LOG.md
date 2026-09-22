@@ -12,6 +12,95 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
+## Session 14 — Hotfix: workspace delete 500 + archived read-only access
+
+**Date:** 2026-09-21
+
+**Symptom 1 (delete):** `DELETE /organizations/33 → HTTP 500`. The browser
+reported missing CORS headers — CORS was SECONDARY: the unhandled exception
+made Starlette's outermost ServerErrorMiddleware return a plain-text 500 that
+never passes through CORSMiddleware, so the response carried no
+`access-control-allow-origin` header (verified against the live server: the
+500's headers were only date/server/content-length/content-type). Fixing the
+500 restores normal CORS headers automatically; no CORS config was changed.
+
+**Real delete 500 root cause (captured via pytest traceback):**
+```
+sqlalchemy.exc.InvalidRequestError: Can't call Query.update() or
+Query.delete() when join(), outerjoin(), select_from(), or from_self()
+has been called
+```
+`organization_service.delete_organization()` built its draft-line cleanup as
+`db.query(TransactionLine).join(Transaction, ...).delete(...)` — SQLAlchemy
+forbids bulk delete on a JOIN and raises at statement-compile time, BEFORE any
+SQL runs. That is why EVERY eligible delete 500'd (even with zero drafts, as
+with org 33: 0 transactions / 87 accounts), on both SQLite and PostgreSQL. A
+direct DB probe confirmed the deletion order itself was FK-safe; the failure
+was purely the ORM call.
+
+**Delete fix:** the draft-line cleanup now filters with an IN-(scalar_subquery)
+of the workspace's draft transaction ids — a plain single-statement DELETE
+allowed by SQLAlchemy on SQLite and PostgreSQL. Deletion order unchanged:
+draft lines → draft transactions → accounts → memberships → clear
+`attempts.organization_id` (never delete attempts) → the org row. Owner-only,
+server-side typed name confirmation (422), 409 on posted/reversed history,
+204 with empty body on success — all previously built behavior kept.
+
+**Symptom 2 (archived workspaces):** "Show archived workspaces" offered only
+Restore/Delete — archived workspaces could not be OPENED at all.
+
+**Archived read-only access decision:** added an "Open read-only" action
+(`ws.openReadonlyAction`, EN/FR) as the PRIMARY action on an archived card
+(`archivedWorkspaceActions` now returns openReadonly → restore → delete).
+It opens the SAME WorkSpace shell (`openOrg`) with an "Archived — read-only"
+badge in the header — opening never restores, and active workspaces are
+unchanged (`workspaceActions` never contains archived-only keys). While
+archived: all reports and history stay open (Journal, Cash Book, General
+Ledger, Trial Balance, Income Statement, Financial Position); **chart of
+accounts and business profile became READ-ONLY VIEWABLE** instead of fully
+blocked — `readOnly` is threaded into ChartOfAccountsPage (add-account +
+per-account edit/deactivate controls hidden) and BusinessProfilePage (form
+disabled inside a `<fieldset>`, Save hidden, notice shown); only
+newTransaction and Learn remain hard-disabled (they post transactions).
+Service-layer guard `ensure_workspace_not_archived` (409 +
+ARCHIVED_WORKSPACE_DETAIL) already blocks every mutation path
+(create draft, post, reverse, account create/update, profile PATCH, lesson
+connector) — unchanged. Restore now also updates an OPEN workspace in place
+(badge clears, mutations return) and stays owner-only.
+
+**Test-harness fixes found during reproduction:** the installed httpx rejects
+`json=` on `.delete()` — the suite's `_delete_org` helper now uses
+`client.request("DELETE", ...)` (the real endpoint requires a JSON body, as
+browsers send). The archived-reads test hit `GET /transactions/{id}`, an
+endpoint that has never existed (the frontend reads the org-scoped list and
+finds rows client-side) — it now asserts the list keeps returning the posted
+transaction while archived.
+
+**Tests:** new regression `test_delete_regression_no_500_with_draft_lines`
+(reproduces the prior failure shape: eligible workspace WITH draft lines →
+204, empty body, workspace + its accounts + draft lines gone, no orphans).
+Full `app/tests/test_workspace_archive_delete.py` now 15 passed — covering
+eligible delete success, no-500, response handling, posted/reversed 409
+rejection, archived reads through report services, archived mutation 409s,
+restore-to-active, learning/review/certificate/other-workspace survival, and
+orphan-free deletion (stale identity-map artifact fixed with
+`test_db_session.expire_all()` before direct-DB assertions).
+
+**Verification (real outputs):**
+- `pytest app/tests -q` → **179 passed** (was 127), RC=0
+- `npm run test:ws-archive` → **all workspaceArchive checks passed (9)**, RC=0
+- `npm run build` → **built in 14.09s**, RC=0 (pre-existing >500 kB chunk
+  warning only)
+- Live-server E2E before the fix: `DELETE → 500`, no CORS header (probe
+  evidence); probe user/orgs created for that check were then fully removed
+  from the dev DB, and all temporary probe/test artifacts deleted.
+
+**Next session to run:** Session 14 proper (per the build guide) — this was a
+hotfix only; no learning, certificate, review, AI, payment, accounting-report
+or curriculum work was touched.
+
+---
+
 ---## Session 13 — Hotfix: React hook order in LessonDetailPage
 
 **Date:** 2026-09-18

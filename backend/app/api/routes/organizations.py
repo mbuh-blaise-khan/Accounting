@@ -11,6 +11,7 @@ from app.schemas.organization import (
     OrganizationCreate,
     OrganizationOut,
     OrganizationUpdate,
+    WorkspaceDeleteIn,
 )
 from app.services import organization_service
 
@@ -47,10 +48,22 @@ def create_organization(
 
 @router.get("", response_model=list[OrganizationOut])
 def list_organizations(
+    archived: bool = Query(
+        False,
+        description=(
+            "false (default): ACTIVE workspaces only. true: ONLY the "
+            "archived workspaces — the deliberate archived-retrieval path."
+        ),
+    ),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return organization_service.list_organizations_for_user(db, current_user)
+    """List my workspaces. Default = active only; `archived=true` returns only
+    archived ones (always membership-scoped, exactly like the active list)."""
+    rows = organization_service.list_organizations_for_user(
+        db, current_user, include_archived=archived
+    )
+    return [organization_service.serialize_organization(db, o) for o in rows]
 
 
 @router.get("/{org_id}", response_model=OrganizationOut)
@@ -59,7 +72,51 @@ def get_organization(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return organization_service.get_organization_for_user(db, current_user, org_id)
+    org = organization_service.get_organization_for_user(db, current_user, org_id)
+    return organization_service.serialize_organization(db, org)
+
+
+@router.post("/{org_id}/archive", response_model=OrganizationOut)
+def archive_organization(
+    org_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Archive a workspace (owner-only). Deletes nothing: the profile,
+    accounts, drafts, posted transactions, reports and memberships stay; the
+    workspace leaves the active list and becomes read-only at the service
+    layer. Restore is always available."""
+    org = organization_service.archive_organization(db, current_user, org_id)
+    return organization_service.serialize_organization(db, org)
+
+
+@router.post("/{org_id}/restore", response_model=OrganizationOut)
+def restore_organization(
+    org_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Restore an archived workspace to the active list (owner-only)."""
+    org = organization_service.restore_organization(db, current_user, org_id)
+    return organization_service.serialize_organization(db, org)
+
+
+@router.delete("/{org_id}", status_code=204)
+def delete_organization(
+    org_id: int,
+    payload: WorkspaceDeleteIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Permanently delete an ELIGIBLE workspace (owner-only).
+
+    Server-side typed confirmation: `confirm_name` must exactly equal the
+    current workspace name. Rejected with 409 when the workspace has ANY
+    posted or reversed transaction — the only safe option then is archiving.
+    """
+    organization_service.delete_organization(
+        db, current_user, org_id, payload.confirm_name
+    )
 
 
 @router.patch("/{org_id}", response_model=OrganizationOut)

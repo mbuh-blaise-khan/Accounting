@@ -85,6 +85,38 @@ export function createOrganization(data) {
   return request('/organizations', { method: 'POST', body: JSON.stringify(data) })
 }
 
+/** GET /organizations?archived=true -> ONLY the archived workspaces
+ * (membership-scoped). The default list (fetchOrganizations) stays active-only. */
+export function fetchArchivedOrganizations() {
+  return request('/organizations?archived=true')
+}
+
+/** POST /organizations/{id}/archive -> archived workspace (owner-only).
+ * Deletes nothing; the workspace leaves the active list and becomes
+ * read-only at the service layer until restored. */
+export function archiveOrganization(orgId) {
+  return request(`/organizations/${orgId}/archive`, { method: 'POST' })
+}
+
+/** POST /organizations/{id}/restore -> active workspace again (owner-only). */
+export function restoreOrganization(orgId) {
+  return request(`/organizations/${orgId}/restore`, { method: 'POST' })
+}
+
+/**
+ * DELETE /organizations/{id} -> 204 (owner-only, eligible workspaces only).
+ * `confirmName` must EXACTLY match the current workspace name; the backend
+ * validates it server-side (the UI dialog is never the only gate). The
+ * backend rejects (409) any workspace holding posted or reversed
+ * transactions — those must be archived instead.
+ */
+export function deleteOrganization(orgId, confirmName) {
+  return request(`/organizations/${orgId}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ confirm_name: confirmName }),
+  })
+}
+
 /** GET /organizations/identity-options?framework=OHADA|IFRS -> country +
  * legal-form dropdown data (single source of truth: OHADA = 17 member states
  * + AUSCGIE forms; IFRS = full ISO list + international forms). */

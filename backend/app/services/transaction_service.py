@@ -14,6 +14,7 @@ from app.models.organization import Organization, OrganizationMember
 from app.models.transaction import Transaction, TransactionLine
 from app.models.user import User
 from app.schemas.transaction import TransactionLineOut, TransactionOut
+from app.services.organization_service import ensure_workspace_not_archived
 
 _TRANSACTION_LOAD = joinedload(Transaction.lines).joinedload(TransactionLine.account)
 
@@ -49,6 +50,10 @@ def create_draft_transaction(
 ) -> Transaction:
     """Create a draft transaction (no balance requirement yet)."""
     org = _ensure_org_access(db, user, organization_id)
+
+    # Archived workspaces are read-only (this also covers the lesson-4
+    # practice connector, which posts through this same service path).
+    ensure_workspace_not_archived(org)
 
     if not description or not description.strip():
         raise HTTPException(

@@ -83,7 +83,14 @@ function splitActivityValue(raw) {
   return { code: 'other', text: raw }
 }
 
-export default function BusinessProfilePage({ org, onBack, onSaved, onDone, mandatory = false }) {
+export default function BusinessProfilePage({
+  org,
+  onBack,
+  onSaved,
+  onDone,
+  mandatory = false,
+  readOnly = false,
+}) {
   const { t, lang } = useLanguage()
   // identity_type is REQUIRED for everyone (Part 2). country is required for
   // every identity; legal_form for the two business identities; rccm/tax only
@@ -297,6 +304,16 @@ export default function BusinessProfilePage({ org, onBack, onSaved, onDone, mand
         {mandatory ? t('bp.mandatorySubtitle') : t('bp.subtitle')}
       </p>
 
+      {/* ARCHIVED workspace: the profile is VIEWABLE but not editable — the
+          whole form is disabled and the Save button hidden. The service layer
+          rejects the PATCH with 409 regardless (defense in depth). */}
+      {readOnly && (
+        <p className="mt-3 rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700">
+          {t('ws.archivedNotice')}
+        </p>
+      )}
+
+      <fieldset disabled={readOnly} className={readOnly ? 'opacity-60' : ''}>
       <form onSubmit={onSave} className="mt-6 space-y-4">
         <div>
           <label htmlFor="bp-address" className="mb-1 block text-sm font-medium text-slate-700">
@@ -582,14 +599,17 @@ export default function BusinessProfilePage({ org, onBack, onSaved, onDone, mand
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={saving || loading}
-          className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
-        >
-          {t('bp.save')}
-        </button>
+        {!readOnly && (
+          <button
+            type="submit"
+            disabled={saving || loading}
+            className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
+          >
+            {t('bp.save')}
+          </button>
+        )}
       </form>
+      </fieldset>
     </div>
   )
 }

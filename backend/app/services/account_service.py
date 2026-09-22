@@ -22,6 +22,7 @@ from app.models.enums import FrameworkCode, NormalBalance, TransactionStatus
 from app.models.organization import Organization, OrganizationMember
 from app.models.transaction import Transaction, TransactionLine
 from app.models.user import User
+from app.services.organization_service import ensure_workspace_not_archived
 
 
 def _ensure_org_access(db: Session, user: User, org_id: int) -> Organization:
@@ -153,6 +154,9 @@ def create_custom_account(
     """
     org = _ensure_org_access(db, user, organization_id)
 
+    # Archived workspaces are read-only.
+    ensure_workspace_not_archived(org)
+
     # A custom account's framework must match the org's chosen framework.
     if FrameworkCode(framework) != FrameworkCode(org.framework):
         raise HTTPException(
@@ -246,6 +250,11 @@ def update_account(
     active: bool | None = None,
 ) -> Account:
     """Edit plain-language names and/or toggle active for an org's account."""
+    org = _ensure_org_access(db, user, org_id)
+
+    # Archived workspaces are read-only.
+    ensure_workspace_not_archived(org)
+
     account = _get_owned_account(db, user, org_id, account_id)
 
     if active is not None and active is False and account.active:

@@ -12,8 +12,10 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.enums import TransactionStatus
+from app.models.organization import Organization
 from app.models.transaction import Transaction, TransactionLine
 from app.services import transaction_service
+from app.services.organization_service import ensure_workspace_not_archived
 
 
 def _to_decimal(value) -> Decimal:
@@ -33,6 +35,10 @@ def post_transaction(
 ) -> Transaction:
     """Validate balance and mark a draft transaction as posted (immutable)."""
     txn = transaction_service.get_transaction(db, user, org_id, transaction_id)
+
+    # Archived workspaces are read-only (access/404 already checked above).
+    ensure_workspace_not_archived(db.get(Organization, org_id))
+
     if txn.status != TransactionStatus.draft:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -85,6 +91,10 @@ def reverse_transaction(
     directly.
     """
     txn = transaction_service.get_transaction(db, user, org_id, transaction_id)
+
+    # Archived workspaces are read-only (access/404 already checked above).
+    ensure_workspace_not_archived(db.get(Organization, org_id))
+
     if txn.status != TransactionStatus.posted:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

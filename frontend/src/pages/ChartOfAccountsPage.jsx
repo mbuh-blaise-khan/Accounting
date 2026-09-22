@@ -5,6 +5,11 @@
 // framework-aware demo notice. OHADA rows are the real SYSCOHADA 2017 révisé
 // structure; IFRS rows are an editable starting template. Plain-language
 // labels keep it readable for a non-accountant.
+//
+// ARCHIVED workspaces open this page READ-ONLY (readOnly prop): the chart
+// stays fully viewable/searchable, but the add-account button and every
+// per-account edit/deactivate control are hidden — and the service layer
+// rejects account mutations with 409 regardless (defense in depth).
 import { useEffect, useMemo, useState } from 'react'
 import {
   createAccount,
@@ -19,7 +24,7 @@ const INPUT_CLS =
   'mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none'
 const LABEL_CLS = 'block text-sm font-medium text-slate-700'
 
-export default function ChartOfAccountsPage({ org, onBack }) {
+export default function ChartOfAccountsPage({ org, onBack, readOnly = false }) {
   const { t, lang } = useLanguage()
   const [accounts, setAccounts] = useState(null) // null = loading
   const [search, setSearch] = useState('')
@@ -119,11 +124,18 @@ export default function ChartOfAccountsPage({ org, onBack }) {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
+            hidden={readOnly}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
           >
             + {t('coa.addAccount')}
           </button>
         </div>
+
+        {readOnly && (
+          <p className="mt-3 rounded-lg border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-700">
+            {t('ws.archivedNotice')}
+          </p>
+        )}
 
         <p className="mt-3 text-xs text-slate-500">{t(demoNoticeKey())}</p>
         <p className="mt-1 text-sm text-slate-500">{count}</p>
@@ -167,6 +179,7 @@ export default function ChartOfAccountsPage({ org, onBack }) {
               accounts={filtered}
               framework={org.framework}
               lang={lang}
+              readOnly={readOnly}
               onEdit={(a) => setEditing(a)}
               onToggleActive={(a) =>
                 handleUpdate(a.id, { active: !a.active })
@@ -201,7 +214,7 @@ export default function ChartOfAccountsPage({ org, onBack }) {
 // then filtered that same invisible data. Now EVERY account is always rendered:
 // the tree walks roots parent-first, then appends any account that was not
 // reachable (e.g. an orphan whose parent is missing) as an extra top-level item.
-function AccountTree({ accounts, framework, lang, onEdit, onToggleActive }) {
+function AccountTree({ accounts, framework, lang, readOnly = false, onEdit, onToggleActive }) {
   const children = new Map()
   const roots = []
   for (const a of accounts) {
@@ -246,6 +259,7 @@ function AccountTree({ accounts, framework, lang, onEdit, onToggleActive }) {
           depth={depth}
           framework={framework}
           lang={lang}
+          readOnly={readOnly}
           onEdit={() => onEdit(node)}
           onToggleActive={onToggleActive}
         />
@@ -254,7 +268,7 @@ function AccountTree({ accounts, framework, lang, onEdit, onToggleActive }) {
   )
 }
 
-function TreeNode({ account, depth, framework, onEdit, onToggleActive, lang }) {
+function TreeNode({ account, depth, framework, readOnly = false, onEdit, onToggleActive, lang }) {
   const { t } = useLanguage()
   const name = lang === 'fr' ? account.name_fr : account.name_en
   // IFRS accounts have no code (Part B) — never render a code badge for them.
@@ -303,26 +317,28 @@ function TreeNode({ account, depth, framework, onEdit, onToggleActive, lang }) {
             {account.description || t('coa.noDescription')}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onEdit(account)}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-          >
-            {t('coa.edit')}
-          </button>
-          <button
-            type="button"
-            onClick={() => onToggleActive(account)}
-            className={
-              account.active
-                ? 'rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50'
-                : 'rounded-lg border border-green-300 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-50'
-            }
-          >
-            {account.active ? t('coa.deactivate') : t('coa.activate')}
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onEdit(account)}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            >
+              {t('coa.edit')}
+            </button>
+            <button
+              type="button"
+              onClick={() => onToggleActive(account)}
+              className={
+                account.active
+                  ? 'rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50'
+                  : 'rounded-lg border border-green-300 px-3 py-1.5 text-sm font-medium text-green-700 hover:bg-green-50'
+              }
+            >
+              {account.active ? t('coa.deactivate') : t('coa.activate')}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

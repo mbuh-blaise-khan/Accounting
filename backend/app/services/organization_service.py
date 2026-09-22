@@ -6,7 +6,10 @@ Logic lives here (not in the endpoint) so it is independently testable:
 - the Business Profile update enforces the identity_type-driven required-
   field rules server-side (mirroring frontend/src/utils/profile.js).
 """
+from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.accounting.identity_reference import (
@@ -16,17 +19,45 @@ from app.accounting.identity_reference import (
     is_valid_legal_form,
     legal_form_options,
 )
+from app.models.account import Account
 from app.models.enums import (
     AccountingBasis,
     FrameworkCode,
     IdentityType,
     MembershipRole,
     OrgPurpose,
+    TransactionStatus,
 )
+from app.models.learning import Attempt
 from app.models.organization import Organization, OrganizationMember
+from app.models.transaction import Transaction, TransactionLine
 from app.models.user import User
+from app.schemas.organization import OrganizationOut
 
 DEFAULT_CURRENCY = "XAF"
+
+# Stable, client-safe detail string for the archived-workspace mutation guard.
+# The frontend matches on the 409 + this message to render the archived
+# workspace as read-only. Reads/reports are NEVER guarded — only mutations.
+ARCHIVED_WORKSPACE_DETAIL = (
+    "Workspace is archived — restore it before making changes"
+)
+
+
+def ensure_workspace_not_archived(org: Organization | None) -> None:
+    """Read-only guard for archived workspaces.
+
+    Called by every workspace-data mutation path (draft creation, posting,
+    reversal, account create/update, business-profile update — and, through
+    create_draft/post, by the lesson-4 practice connector). Read and report
+    endpoints deliberately do NOT call this: archived workspaces keep their
+    Journal, Ledger, Trial Balance, Financial Statements and profile views.
+    """
+    if org is not None and org.archived_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ARCHIVED_WORKSPACE_DETAIL,
+        )
 
 # Sentinel the frontend uses for "Other" in the business-activity dropdown. When
 # a user picks "Other", the free-text description REPLACES this sentinel on
@@ -74,12 +105,26 @@ def create_organization(
     return org
 
 
-def list_organizations_for_user(db: Session, user: User) -> list[Organization]:
-    """Organizations the user is a member of, newest first."""
+def list_organizations_for_user(
+    db: Session, user: User, include_archived: bool = False
+) -> list[Organization]:
+    """Organizations the user is a member of, newest first.
+
+    DEFAULT excludes archived workspaces (active list). With
+    include_archived=True this returns ONLY the user's ARCHIVED workspaces —
+    the deliberate retrieval path behind the "Show archived workspaces"
+    toggle. Both branches are membership-scoped exactly like before (a user
+    never sees another user's workspaces either way).
+    """
     rows = (
         db.query(Organization)
         .join(OrganizationMember, OrganizationMember.org_id == Organization.id)
         .filter(OrganizationMember.user_id == user.id)
+        .filter(
+            Organization.archived_at.is_not(None)
+            if include_archived
+            else Organization.archived_at.is_(None)
+        )
         .order_by(Organization.created_at.desc())
         .all()
     )
@@ -111,6 +156,194 @@ def get_organization_for_user(db: Session, user: User, org_id: int) -> Organizat
             detail="Organization not found",
         )
     return org
+
+
+def serialize_organization(db: Session, org: Organization) -> OrganizationOut:
+    """API representation with the COMPUTED delete-eligibility flag.
+
+    `has_protected_history` is never stored on the model — it is derived from
+    real posted/reversed transactions here so the frontend can decide whether
+    permanent deletion is even offered (the service re-checks it authoritatively
+    inside delete_organization regardless).
+    """
+    return OrganizationOut.model_validate(org).model_copy(
+        update={"has_protected_history": has_protected_history(db, org.id)}
+    )
+
+
+def has_protected_history(db: Session, org_id: int) -> bool:
+    """True when the workspace has ANY posted OR reversed transaction.
+
+    Drives the frontend's conditional permanent-delete UI and is re-checked
+    (authoritatively) inside delete_organization. Reversals count too: a
+    reversed pair is still accounting history, so its rows are never deleted.
+    """
+    exists = (
+        db.query(Transaction.id)
+        .filter(
+            Transaction.organization_id == org_id,
+            Transaction.status.in_(
+                [TransactionStatus.posted, TransactionStatus.reversed]
+            ),
+        )
+        .first()
+    )
+    return exists is not None
+
+
+def _ensure_owner(db: Session, user: User, org_id: int) -> Organization:
+    """Membership check + owner-role check for archive/restore/delete.
+
+    - Non-members get 404 (never 403) so the API does not reveal whether the
+      organization exists — same convention as get_organization_for_user.
+    - Authenticated members who are NOT the owner get 403: the org's
+      existence is already known to them, and archive/restore/delete are
+      OWNER-ONLY actions by product rule.
+    """
+    org = db.get(Organization, org_id)
+    if org is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
+        )
+    membership = (
+        db.query(OrganizationMember)
+        .filter(
+            OrganizationMember.org_id == org.id,
+            OrganizationMember.user_id == user.id,
+        )
+        .first()
+    )
+    if membership is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
+        )
+    if membership.role != MembershipRole.owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the workspace owner can do this",
+        )
+    return org
+
+
+def archive_organization(db: Session, user: User, org_id: int) -> Organization:
+    """Archive a workspace (owner-only, idempotent, deletes NOTHING).
+
+    Archive is the primary action: it hides the workspace from the active
+    list and makes it read-only at the service layer while keeping the
+    profile, accounts, drafts, posted transactions, reports and memberships
+    fully intact. The owner can always restore.
+    """
+    org = _ensure_owner(db, user, org_id)
+    if org.archived_at is None:
+        org.archived_at = datetime.now(timezone.utc)
+        db.commit()
+    db.refresh(org)
+    return org
+
+
+def restore_organization(db: Session, user: User, org_id: int) -> Organization:
+    """Restore an archived workspace to the active list (owner-only, idempotent)."""
+    org = _ensure_owner(db, user, org_id)
+    if org.archived_at is not None:
+        org.archived_at = None
+        db.commit()
+    db.refresh(org)
+    return org
+
+
+def delete_organization(
+    db: Session, user: User, org_id: int, confirm_name: str
+) -> None:
+    """Permanently delete an eligible workspace (owner-only).
+
+    PRODUCT RULE — archive first:
+    - Owner-only (members get 403; non-members 404).
+    - Typed confirmation REQUIRED and validated HERE, server-side: the
+      provided value must exactly match the CURRENT workspace name. The API
+      never relies on a frontend-only confirmation.
+    - Eligibility: ZERO posted AND ZERO reversed transactions. Any protected
+      accounting history makes deletion impossible — the clear error tells
+      the owner to archive instead. There is NO bypass, here or elsewhere.
+    - Deletes ONLY this workspace's own dependent data, in an explicit,
+      safe order (no assumed cascade behavior):
+        1. draft transaction lines (drafts are the only lines possible in an
+           eligible workspace — zero posted/reversed history by definition),
+        2. draft transactions,
+        3. accounts (all of them: with no posted/reversed lines left, no
+           account is referenced by protected history),
+        4. organization memberships,
+        5. the organization row itself (business-profile fields live here).
+    - NEVER deletes: user accounts, other organizations, learner progress,
+      attempts, review records, certificate records, or public verification
+      data (those are user/course-scoped, not organization-scoped — verified
+      against the actual foreign keys). EXCEPTION-NOT-DELETION: attempts
+      carry a NULLABLE organization_id FK; on org deletion that reference is
+      cleared (set NULL) instead of deleting the attempts — history is kept,
+      no dangling FK values remain.
+    """
+    org = _ensure_owner(db, user, org_id)
+
+    # Server-side typed confirmation (never trust the frontend alone).
+    if not confirm_name or confirm_name.strip() != org.name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Confirmation must exactly match the workspace name to "
+                "permanently delete it"
+            ),
+        )
+
+    # Eligibility: zero posted + zero reversed transactions. Protected
+    # accounting history is immutable — archive is the only safe option.
+    if has_protected_history(db, org.id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This workspace has posted or reversed transactions, so it "
+                "cannot be permanently deleted — archive it instead"
+            ),
+        )
+
+    # --- Explicit deletion order (this workspace's data ONLY) ---------------
+    # 1. Draft transaction lines. NOTE: bulk Query.delete() forbids .join()
+    #    (sqlalchemy.exc.InvalidRequestError — this was the real cause of the
+    #    production HTTP 500 on DELETE). A correlated subquery of this
+    #    workspace's draft transaction ids is used instead, which is allowed
+    #    and runs as a plain single-statement DELETE on both SQLite and
+    #    PostgreSQL.
+    draft_txn_ids = (
+        db.query(Transaction.id)
+        .filter(
+            Transaction.organization_id == org.id,
+            Transaction.status == TransactionStatus.draft,
+        )
+        .scalar_subquery()
+    )
+    db.query(TransactionLine).filter(
+        TransactionLine.transaction_id.in_(draft_txn_ids)
+    ).delete(synchronize_session=False)
+    # 2. Draft transactions.
+    db.query(Transaction).filter(
+        Transaction.organization_id == org.id,
+        Transaction.status == TransactionStatus.draft,
+    ).delete(synchronize_session=False)
+    # 3. Accounts — safe because eligibility guarantees no posted/reversed
+    #    lines reference them (transaction_lines.account_id has NO cascade).
+    db.query(Account).filter(Account.organization_id == org.id).delete(
+        synchronize_session=False
+    )
+    # 4. Memberships.
+    db.query(OrganizationMember).filter(
+        OrganizationMember.org_id == org.id
+    ).delete(synchronize_session=False)
+    # 4b. Attempts are NEVER deleted — their nullable organization_id FK is
+    #     cleared so no attempt row is orphaned with a dangling reference.
+    db.query(Attempt).filter(Attempt.organization_id == org.id).update(
+        {Attempt.organization_id: None}, synchronize_session=False
+    )
+    # 5. The organization (business-profile columns live on this row).
+    db.delete(org)
+    db.commit()
 
 
 def update_business_profile(
@@ -152,6 +385,10 @@ def update_business_profile(
       guard is belt-and-braces so a future code path cannot silently add one.
     """
     org = get_organization_for_user(db, user, org_id)
+
+    # Archived workspaces are read-only: the business profile cannot be
+    # updated (viewing it stays possible via the same GET endpoints).
+    ensure_workspace_not_archived(org)
 
     # --- Immutable framework (see docstring) --------------------------------
     if framework is not None and framework != org.framework.value:

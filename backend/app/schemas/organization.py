@@ -47,6 +47,25 @@ class OrganizationOut(BaseModel):
     accounting_basis: str = "accrual"
     company_description: Optional[str] = None
     created_at: datetime
+    # --- Archive (workspace archive / restore / conditional delete) ----------
+    # NULL = active. Archived workspaces are read-only at the service layer
+    # but every historical view stays readable. has_protected_history is
+    # COMPUTED per org (any posted OR reversed transaction) — it is never
+    # stored and drives the frontend's conditional permanent-delete UI (Delete
+    # is only offered for workspaces it can never succeed on otherwise).
+    archived_at: Optional[datetime] = None
+    has_protected_history: bool = False
+
+
+class WorkspaceDeleteIn(BaseModel):
+    """Payload for permanent workspace deletion.
+
+    `confirm_name` MUST exactly equal the current workspace name — typed by
+    the user in the UI and validated SERVER-SIDE (the API never relies on a
+    frontend-only confirmation).
+    """
+
+    confirm_name: str = Field(min_length=1, max_length=120)
 
 
 class OrganizationUpdate(BaseModel):
