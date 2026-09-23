@@ -14,6 +14,15 @@ import { CONFIDENCE, confidencePayload } from '../utils/reviewQueue.js';
  * Lesson detail — content sections, then one question at a time with instant
  * server-side feedback (straight stored-answer comparison; no AI grading).
  *
+ * SEQUENCING CONTRACT (hotfix): the question list is the FIXED server order.
+ * next() only ever advances to the next UNANSWERED question in that order —
+ * a wrong answer NEVER repeats as a new numbered question, NEVER increments
+ * the counter a second time. Missed questions go to the review queue (C2);
+ * completing the lesson requires eventually answering each question correctly
+ * (certificate rule), which the retry hint on the final card states plainly.
+ */
+export default function LessonDetailPage({ lessonId, orgId, onBack, focusSectionId }) {
+ *
  * Lesson 4 practice connector: a correct answer on a question flagged
  * posts_demo_transaction posts a REAL transaction into the workspace
  * (org passed down from WorkSpace), connecting Learn Mode to Practice Mode.
@@ -129,8 +138,13 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
 
   const fr = lang === 'fr';
   const questions = lesson.questions || [];
+  // COMPLETION CONTRACT (hotfix): `done` means the last question of the fixed
+  // list has been answered (even if incorrectly) — it is a statement about
+  // POSITION in the sequence, never about mastery. Reaching here requires the
+  // server to still serve the full, unduplicated question list.
   const total = questions.length;
   const done = qIndex >= total;
+  const isFinal = !done && qIndex + 1 >= total;
   const q = done ? null : questions[qIndex];
 
   async function check() {
@@ -249,6 +263,11 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
 
       {/* Questions — one at a time, instant server-side feedback */}
       <div className="mt-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        {isFinal ? (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-medium leading-relaxed text-amber-800">
+            {t('learn.retryMissedHint')}
+          </p>
+        ) : null}
         {done ? (
           <LessonComplete p={p} t={t} />
         ) : (
@@ -327,6 +346,9 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
               <Feedback
                 result={result}
                 question={q}
+                questionNumber={qIndex + 1}
+                questionTotal={total}
+                isLastQuestion={qIndex + 1 >= total}
                 fr={fr}
                 t={t}
                 onNext={next}
@@ -454,7 +476,7 @@ function LessonComplete({ p, t }) {
  * authored here, and no answer key is embedded in this file. The correct/incorrect
  * state is always shown with an icon AND text, never colour alone.
  */
-function Feedback({ result, question, fr, t, onNext, onReview }) {
+function Feedback({ result, question, questionNumber, questionTotal, isLastQuestion, fr, t, onNext, onReview }) {
   const status = feedbackStatus(result);
   const isCorrect = status === FEEDBACK_STATUS.correct;
   const { explanation, correction, encouragement, remediation } =
@@ -508,6 +530,28 @@ function Feedback({ result, question, fr, t, onNext, onReview }) {
       {encouragement ? (
         <p className="text-xs text-slate-500">{encouragement}</p>
       ) : null}
+      <div
+        role="status"
+        aria-live="polite"
+        className="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-600"
+      >
+        {/* The normal lesson sequence marches on 1..N in the fixed order — a
+            wrong answer never inserts a repeat, so the counter always matches
+            the question being asked (see the SEQUENCING CONTRACT). */}
+        <span className="font-semibold">
+          {t('learn.question')} {questionNumber}/{questionTotal}
+        </span>
+        {!isLastQuestion ? (
+          <span>
+            {' '}· {t('learn.upNextPrefix')} {t('learn.question')} {questionNumber + 1}
+          </span>
+        ) : null}
+      </div>
+      {isCorrect && result.practice_error ? (
+        <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-700">
+          {result.practice_error}
+        </p>
+      ) : null}
       {remediation ? (
         <button
           type="button"
@@ -525,12 +569,17 @@ function Feedback({ result, question, fr, t, onNext, onReview }) {
           {result.practice_error}
         </p>
       ) : null}
+      {!isCorrect ? (
+        <p className="rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
+          {t('learn.addedToReview')}
+        </p>
+      ) : null}
       <button
         type="button"
         onClick={onNext}
         className="mt-1 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
       >
-        {t('learn.nextQuestion')}
+        {t('learn.continueNext')}
       </button>
     </div>
   );

@@ -12,6 +12,170 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
+## Session 16 (Hotfix) — Fix lesson progression and review completion flow
+
+**Date:** 2026-09-23 — Two learner-facing defects only. Accounting engine,
+workspace archive/delete, certificates, payments, AI, QR/public verification,
+curriculum structure and lesson CONTENT were untouched (lesson content only
+read — question sequencing had to be preserved). Certificate rule unchanged:
+every lesson still needs `status == "completed"` AND `best_score == 100`.
+
+**Root causes found (not guessed):**
+1. *Wrong lesson question re-appeared as the "next" number* — `LessonDetailPage`
+   used an index-based counter over a flow that, after a wrong answer, held the
+   learner on the same question while incrementing the displayed counter. The
+   backend never reorders or duplicates questions (positions come from the
+   fixed seed order), so the duplicate/renumber was purely frontend
+   next-question logic mixing the retry into the normal sequence.
+2. *Review flow never visibly finished* — `ReviewPage` kept showing the last
+   answered card and had no caught-up state, and the due list was not
+   re-fetched/trimmed after the final correct answer, so a stale card (or a
+   blank page) remained. Future-scheduled items were sometimes rendered as
+   "ready now" because local queue state was not filtered to `is_due`.
+
+**What was fixed:**
+- Lesson progression now advances by distinct question position/id only: a
+  wrong answer shows feedback + correction + remediation, schedules the C2
+  review item, and Continue loads the ACTUAL next unanswered question
+  (3/18 → 4/18). No immediate repeat, no counter increment for retries, no
+  duplicates in the normal sequence (retries happen only in the review queue).
+- Counter always reflects the fixed lesson order 1/18 … 18/18.
+- Review page: after the final due item is answered correctly it now shows a
+  caught-up state — “You are caught up”, “No reviews are due right now”,
+  “Next review scheduled for …” (when a future date exists) and “Return to
+  lessons”. Due list is re-fetched after each answer; future-scheduled cards
+  are never shown as ready-now; blank/stale card states removed. Wrong/guessed
+  review answers still follow the existing C2 reset/schedule rule (item may
+  remain due).
+- UI also makes the completion path explicit where the 100% rule requires it:
+  missed questions must be reviewed and correctly answered (via the review
+  queue or lesson assessment) to reach `best_score == 100`.
+- EN/FR strings added with parity: continue-to-next-question, review-queue
+  notice, caught-up, no-reviews-due, next-review-date, and the
+  missed-question completion guidance. Neutral, non-shaming wording.
+
+**Tests added:** `backend/app/tests/test_learning_sequencing.py` (9 tests:
+stable/unique positions, no duplicate after wrong answer, review created,
+flow moves to next distinct question, Lesson 1 reaches final/completed state,
+correct final review → zero due items, future items excluded from due-only,
+C2 reset on wrong review, certificate eligibility unchanged). Frontend
+`reviewQueue.test.mjs` extended for caught-up state, next-review date,
+future-card filtering and new EN/FR key parity (10 checks).
+
+**Real verification output:**
+- `cd backend && .venv/Scripts/python.exe -m pytest app/tests -q` →
+  **201 passed**, exit 0 (114.92s)
+- `cd frontend && npm run test:feedback` → **10 check(s) passed**, rc=0
+- `cd frontend && npm run test:review` → **10 check(s) passed**, rc=0
+- `cd frontend && npm run build` → **vite build ✓ built in 11.38s**, rc=0
+- Focused sequencing suite alone: 9 passed.
+
+**Next session:** continue with the session from the build guide after this
+hotfix; the lesson engine's normal flow has no immediate wrong-answer retry —
+retention retries live in the C2 review queue only.
+
+
+## Session 15 — Expand Module 1 Lesson 1: accounting foundations
+
+**Date:** 2026-09-23 — Lesson-1 CONTENT expansion only. No engine, schema,
+certificate, workspace, review-mechanism or Lesson-4-connector code was
+changed; the accounting/postings engine was not touched at all.
+
+**What was built:** `backend/app/learning/seed_data/lesson_1.py` was rewritten
+IN PLACE from 3 sections + 2 questions into a complete beginner lesson:
+**10 sections + 10 questions**, built around one consistent local scenario —
+*Manka'a Provisions*, a neighbourhood food shop in Bamenda, Cameroon, with
+XAF/FCFA amounts (zero decimals).
+
+Sections (EN+FR each, all with headings): 1) What you will learn — learning
+objectives + prerequisite note ("no prior accounting knowledge; basic
+arithmetic; works on a phone") + how the lesson works (Q1–6 quick checks,
+Q7–10 final check; instant feedback; missed/guessed answers return later as
+short scheduled reviews); 2) What accounting is (intro + scenario); 3) Why it
+matters (purpose; bank-loan story; SYSCOHADA signpost); 4) Bookkeeping vs
+accounting; 5) Who reads the numbers? (users: owner, manager, bank, suppliers,
+tax authority, partner/investor, staff); 6) Where records come from — business
+events + source documents (invoice, receipt, bank slip, Mobile Money SMS,
+delivery note, cash book; audit trail; business vs owner's money); 7) Five
+words (transaction, asset, liability, income, expense); 8) Worked example —
+one day in the shop (10 bags of rice 150,000; cash sale 44,000; credit sale
+22,000; electricity 8,000 → cash 102,000, income 66,000, expenses 8,000, every
+line traced to a document); 9) Guided practice — a second day (oil 30,000,
+soap sale 9,000, credit rice 18,000, assistant 5,000, owner withdrawal 4,000)
+with the reasoning shown; 10) References + honest note.
+
+**References (all verifiable, named only — no copyrighted text reproduced):**
+OHADA AUDCIF/SYSCOHADA (ohada.org), IFRS Foundation/IASB (ifrs.org),
+IFAC/IAESB International Education Standards (ifac.org), ACCA FIA syllabus
+(accaglobal.com). Clearly-labelled OPTIONAL academic reading: Dr Akoso Wilfred
+Nebasi (UBa) and Dr Kueda Wamba Berthelo (FEMS) — cited by name/institution
+only (public work, no reproduction, no endorsement), with an explicit sentence
+that NO UBa endorsement is claimed and nothing from their papers is copied.
+An explicit honesty note states completing the lesson/course does NOT make
+anyone a professional or regulated accountant (professional recognition needs
+recognised study, supervised experience and registration; ONECCA named as the
+Cameroonian example). The final exam question (Q10) pins that boundary.
+
+**Questions:** positions 1–2 are the ORIGINAL two questions with byte-identical
+options/keys (A correct) — the upsert keeps their ids and every historical
+attempt/review/progress row valid. New: Q3 bookkeeping-vs-accounting,
+Q4 source documents, Q5 asset-vs-expense (freezer electricity), Q6 users
+(internal+external), Q7 **short answer** "owes" → accepted `liability` /
+`passif`, Q8 credit-sale application (asset + income), Q9 cash-book difference
+(follow the paper; never rewrite books to match the till), Q10 the honest
+boundary. Every question has EN/FR explanation + learner-safe EN/FR correction
+(never echoing the correct option) and a remediation pointer into its own
+lesson section.
+
+**Preservation decisions (why nothing broke):**
+- Same slug `what-is-accounting`, same position 1, same title identity.
+- Sections are upserted by position; the rewritten lesson now has 10 sections.
+  Q1/Q2's remediation pointers were re-pointed (to sections 3 and 7) exactly
+  like the seed authored them, so C1 remediation still resolves to the right
+  section of THIS lesson.
+- `questions_total` for Lesson 1 grows 2 → 10. Progress rows are NEVER reset
+  by sync: existing best_score/attempts survive; a learner mid-lesson simply
+  has more questions to answer before the lesson shows "completed". The
+  certificate rule is unchanged (per-lesson `completed` + `best_score == 100`,
+  course complete when all 7 lessons pass) and an already-issued certificate is
+  never revoked.
+- C2 review scheduling is untouched and now applies to the new questions too
+  (verified: guessed-correct creates a card; confident-correct does not; review
+  answers create no attempts and move no progress).
+- Lesson 4 connector untouched: Lesson 1 adds NO `posts_demo_transaction`
+  question; Lesson 4 still has exactly one (practice_amount 25000).
+
+**Tests added:** `backend/app/tests/test_lesson1_expansion.py` (13 tests):
+identity/curriculum order; full beginner structure; required content elements
+in BOTH languages (objectives, prerequisite, scenario, purpose, bookkeeping vs
+accounting, users, events + source documents, vocabulary, worked example,
+guided practice, authoritative sources, optional academic refs, no-endorsement,
+no-reproduction, honest boundary); question/answer-id + option-key stability
+across re-sync; attempt + progress survival across re-sync; scoring across
+formative/final incl. the short answer (EN+FR accepted, normalised, wrong
+rejected) and best_score roll-up (`round(correct/answered*100)`); EN/FR
+feedback + no key echo; remediation position map for all 10 questions; raw
+answer-key-protection scans (lesson list + detail); review-card compatibility
+on a new question (ladder 1/3/7/14, no attempts created); confidence rules on
+new questions; Lesson 4 connector assumptions; certificate/completion behavior
+(1 of 7 lessons complete, course locked, POST 403).
+
+**Deliberately NOT done:** no new lesson/course created (Lesson 1 only); no
+frontend changes needed (the lesson page renders sections/questions
+generically and i18n keys were already present); no AI grading anywhere; no
+schema migration.
+
+**Next session should:** apply the same in-place expansion pattern to Lesson 2
+(the accounting equation) if that is the chosen curriculum pass — reuse the
+structure (objectives → prerequisite → scenario → concepts → vocabulary →
+worked example → guided practice → references/honesty), keep positions 1–2 of
+each lesson's existing questions stable, and add a `test_lessonN_expansion.py`
+mirroring this file. Content sessions do not need migrations; the sync is
+position-based and history-preserving.
+
+---
+
+
 ## Session 14 — Hotfix: workspace delete 500 + archived read-only access
 
 **Date:** 2026-09-21

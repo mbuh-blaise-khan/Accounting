@@ -411,6 +411,10 @@
     "score": "Score",
     "practicePosted": "Une écriture d'exercice a été enregistrée dans votre espace de démonstration.",
     "viewInJournal": "Ouvrez le Journal pour la voir.",
+    "continueNext": "Passer à la question suivante",
+    "upNextPrefix": "à suivre :",
+    "addedToReview": "Ajoutée à votre file de révision — elle reviendra pour un petit rappel plus tard.",
+    "retryMissedHint": "Pour terminer cette leçon, répondez à chaque question — celles manquées peuvent être retentées via la file de révision.",
     "watermarkNote": "Le contenu des leçons est destiné à votre étude personnelle. La copie et la redistribution sont déconseillées."
   },
   "review": {
@@ -419,6 +423,10 @@
     "readyNow": "à réviser maintenant",
     "scheduledLater": "prévues plus tard",
     "nextDue": "Prochaine révision",
+    "nextScheduled": "Prochaine révision prévue",
+    "noDueRightNow": "Aucune révision n'est due pour le moment.",
+    "emptyTitle": "Rien à réviser",
+    "comeBackLater": "Revenez plus tard — les éléments programmés apparaîtront ici quand ils seront dus.",
     "reviewNow": "Réviser maintenant",
     "allCaughtUp": "Vous êtes à jour !",
     "emptyHint": "Quand vous manquez une question de leçon — ou marquez une bonne réponse comme devinée — une courte révision apparaît ici.",

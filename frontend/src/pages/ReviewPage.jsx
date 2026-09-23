@@ -17,7 +17,7 @@
 // `reviewResultView` adapter.
 import { useEffect, useState } from 'react';
 import { useLanguage } from '../i18n/index.jsx';
-import { fetchReviews, answerReview } from '../services/api';
+import { fetchReviews, fetchReviewSummary, answerReview } from '../services/api';
 import {
   feedbackProjection,
   feedbackStatus,
@@ -43,6 +43,9 @@ export default function ReviewPage({ onBack, onOpenLesson }) {
   const [checking, setChecking] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
+  // REVIEW-END CONTRACT (hotfix): the summary mirrors GET /learning/reviews/summary
+  // so the caught-up empty state can show the next scheduled review date.
+  const [summary, setSummary] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -52,12 +55,20 @@ export default function ReviewPage({ onBack, onOpenLesson }) {
     setIndex(0);
     setAnswered(0);
     setResult(null);
+    setSummary(null);
     fetchReviews(true)
       .then((data) => {
         if (alive) setCards(Array.isArray(data) ? data : []);
       })
       .catch(() => {
         if (alive) setLoadError(t('review.loadError'));
+      });
+    fetchReviewSummary()
+      .then((data) => {
+        if (alive) setSummary(data);
+      })
+      .catch(() => {
+        if (alive) setSummary(null);
       });
     return () => {
       alive = false;
@@ -70,15 +81,54 @@ export default function ReviewPage({ onBack, onOpenLesson }) {
 
   const retry = () => setReloadKey((k) => k + 1);
 
-  /** Advance to the next card in this session's queue, or re-confirm it is empty. */
+  // REVIEW-END CONTRACT (hotfix): the question list is authoritative and
+  // due-only by construction (the loader asks for ?due_only=true). When the
+  // last queued card is graded, the list is RE-EMPTYED immediately so neither
+  // a stale card nor a blank question screen survives. The empty branch below
+  // then decides between the plain empty state and "caught up + next review
+  // scheduled", and the summary is re-read so the Learn-page badge agrees.
+  /** Remove the just-graded card from this session's queue. Returns true when
+   *  at least one more due card remains to be shown. */
+  function retireCurrentCard(answeredCardId) {
+    const remaining = (cards || []).filter((c) => c.id !== answeredCardId);
+    setCards(remaining);
+    setIndex(0);
+    return remaining.length > 0;
+  }
+
+  /** Advance to the next card in this session's queue. */
   function next() {
-    const remaining = (cards || []).slice(index + 1);
-    setCards(remaining.length ? remaining : cards);
     setResult(null);
     setSelected(null);
     setTextAnswer('');
     setAnswerError('');
-    setIndex(0);
+  }
+
+  /**
+   * Due date of the just-graded review answer, if it scheduled a future re-check.
+   * A wrong answer has no future date (stage reset, due now): never shown as a
+   * "next review" — the card simply returns to the top of the due queue when it
+   * reloads, consistent with the C2 rule.
+   */
+  function resultNextDue() {
+    if (!result || result.correct !== true) return null;
+    const next = result.due_at;
+    try {
+      if (next && !Number.isNaN(new Date(next).getTime())) return next;
+    } catch {
+      // Ignore malformed dates — the line is hidden instead of showing junk.
+    }
+    return null;
+  }
+
+  async function refreshSummary() {
+    try {
+      const data = await fetchReviewSummary();
+      setSummary(data);
+    } catch {
+      // Quiet degradation: the queue itself is already authoritative; a stale
+      // summary badge is better than a failed session.
+    }
   }
 
   async function check() {
@@ -95,6 +145,8 @@ export default function ReviewPage({ onBack, onOpenLesson }) {
       const answer = await answerReview(card.id, payload, lang);
       setResult(answer);
       setAnswered((n) => n + 1);
+      retireCurrentCard(card.id);
+      void refreshSummary();
     } catch {
       setAnswerError(t('review.answerError'));
     } finally {
@@ -126,8 +178,13 @@ export default function ReviewPage({ onBack, onOpenLesson }) {
     );
   }
   if (cards.length === 0) {
-    // Genuine empty state (nothing due) AND completion state (session queue
-    // exhausted behave the same: calm "all caught up").
+    // REVIEW-END CONTRACT (hotfix): the question list only ever shrinks — an
+    // empty list has exactly two meanings: never had work (plain empty state)
+    // or the session queue was exhausted (caught up). Future-scheduled cards
+    // are never rendered here; when they exist the next review date shows.
+    const didSomething = answered > 0;
+    const nextDueISO = (summary && summary.next_due_at) || resultNextDue() || null;
+    const nextDueLabel = formatDueDate(nextDueISO, lang);
     return (
       <section className="mx-auto w-full max-w-3xl px-4 py-6">
         <BackLink onBack={onBack} t={t} />
@@ -136,10 +193,25 @@ export default function ReviewPage({ onBack, onOpenLesson }) {
             ✅
           </p>
           <p className="mt-2 text-lg font-bold text-emerald-700">
-            {t('review.allCaughtUp')}
+            {didSomething ? t('review.allCaughtUp') : t('review.emptyTitle')}
           </p>
           <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
-            {t('review.emptyHint')}
+            {t('review.noDueRightNow')}
+            {didSomething ? ` ${t('review.comeBackLater')}` : ` ${t('review.emptyHint')}`}
+          </p>
+          {didSomething && nextDueLabel ? (
+            <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
+              {t('review.nextScheduled')}: <span className="font-semibold">{nextDueLabel}</span>
+            </p>
+          ) : null}
+          <p className="mt-4">
+            <button
+              type="button"
+              onClick={onBack}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+            >
+              {t('review.backToLessons')}
+            </button>
           </p>
         </div>
       </section>

@@ -411,6 +411,10 @@
     "score": "Score",
     "practicePosted": "A practice transaction was posted to your demo workspace.",
     "viewInJournal": "Open the Journal to see it.",
+    "continueNext": "Continue to the next question",
+    "upNextPrefix": "up next:",
+    "addedToReview": "Added to your review queue — it will come back for a short re-check later.",
+    "retryMissedHint": "To complete this lesson, answer every question — missed ones can be retried through the review queue.",
     "watermarkNote": "Lesson content is for your personal study. Copying and redistribution are discouraged."
   },
   "review": {
@@ -419,6 +423,10 @@
     "readyNow": "ready to review now",
     "scheduledLater": "scheduled for later",
     "nextDue": "Next review",
+    "nextScheduled": "Next scheduled review",
+    "noDueRightNow": "No reviews are due right now.",
+    "emptyTitle": "Nothing to review",
+    "comeBackLater": "Come back later — scheduled items appear here when they are due.",
     "reviewNow": "Review now",
     "allCaughtUp": "You're all caught up!",
     "emptyHint": "When you miss a lesson question — or mark a correct answer as a guess — a short review appears here.",
