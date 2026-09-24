@@ -21,19 +21,20 @@ import { CONFIDENCE, confidencePayload } from '../utils/reviewQueue.js';
  * completing the lesson requires eventually answering each question correctly
  * (certificate rule), which the retry hint on the final card states plainly.
  */
-export default function LessonDetailPage({ lessonId, orgId, onBack, focusSectionId }) {
- *
- * Lesson 4 practice connector: a correct answer on a question flagged
- * posts_demo_transaction posts a REAL transaction into the workspace
- * (org passed down from WorkSpace), connecting Learn Mode to Practice Mode.
- *
- * Content-protection DETERRENTS — honest scope: NO website can block
- * screenshots or screen recording; that is a browser/OS limitation. What is
- * done here: right-click and text selection are disabled on lesson content,
- * a subtle watermark of the signed-in user is overlaid (traceability
- * deterrent, not blocking), and content is served per-request from the API
- * (never static/downloadable files).
- */
+// export default function LessonDetailPage({ lessonId, orgId, onBack, focusSectionId }) {
+//  /*
+//  * Lesson 4 practice connector: a correct answer on a question flagged
+//  * posts_demo_transaction posts a REAL transaction into the workspace
+//  * (org passed down from WorkSpace), connecting Learn Mode to Practice Mode.
+//  *
+//  * Content-protection DETERRENTS — honest scope: NO website can block
+//  * screenshots or screen recording; that is a browser/OS limitation. What is
+//  * done here: right-click and text selection are disabled on lesson content,
+//  * a subtle watermark of the signed-in user is overlaid (traceability
+//  * deterrent, not blocking), and content is served per-request from the API
+//  * (never static/downloadable files).
+//  */
+// }
 export default function LessonDetailPage({ lessonId, orgId, onBack, focusSectionId }) {
   const { t, lang } = useLanguage();
   const { user } = useAuth();
@@ -174,7 +175,7 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
     setQIndex((i) => i + 1);
   }
 
-  /**
+  /* 
    * Part C1 remediation action: bring the section the server pointed at into
    * view and highlight it. The target only ever comes from the API (it is
    * omitted when the question has no clearly-relevant section), and it is
@@ -263,11 +264,6 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
 
       {/* Questions — one at a time, instant server-side feedback */}
       <div className="mt-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        {isFinal ? (
-          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-medium leading-relaxed text-amber-800">
-            {t('learn.retryMissedHint')}
-          </p>
-        ) : null}
         {done ? (
           <LessonComplete p={p} t={t} />
         ) : (
