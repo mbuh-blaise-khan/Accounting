@@ -12,6 +12,187 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
+## Session 19 — Expand Module 1 Lesson 2: the accounting equation (in place)
+
+**Date:** 2026-10-01 — content-only lesson expansion. NO engine change, NO
+migration, NO schema change. Lesson 1, the accounting engine, the duplicate-
+position healing, C1 remediation, C2 scheduling, C3 review UI, the certificate
+rule, workspaces/archive/delete, payments, AI and QR/public verification were
+all left exactly as Session 18 left them.
+
+**What was built — `backend/app/learning/seed_data/lesson_2.py` only:**
+Module 1 Lesson 2 (`slug: the-accounting-equation`, curriculum position 2) went
+from 3 sections / 3 questions to **10 sections / 18 questions**, upgraded **in
+place** inside the existing 7-lesson curriculum. No duplicate lesson, no
+parallel course, no replacement ID, no slug change.
+
+- **Identity preserved:** slug, position, `title_en` ("The accounting
+  equation") / `title_fr` ("L'équation comptable") unchanged; only the summary
+  was sharpened. The three ORIGINAL questions (positions 1, 2, 3) keep their
+  question ids, answer ids, option keys, correct answers and accepted
+  short-answer texts **byte-identical** — verified against the seed and re-pinned
+  by a test. Position 2 is deliberately still the FIRST `short_answer` in served
+  order with `equity` / `capitaux propres`, because the existing cross-file
+  tests select the first short answer of Lesson 2.
+- **10 sections, EN + FR, all with headings:** 1 What you will learn
+  (objectives + `BEFORE YOU START` prerequisite + how-this-lesson-works +
+  honesty promise) · 2 The equation (the original section, extended with the
+  three words inside one shop and the backwards rearrangements) · 3 Why it never
+  breaks (the original section, extended with the "two places at once" pattern
+  and the market-scale image) · 4 Assets: what the shop owns (incl. receivables)
+  · 5 Liabilities: what the shop owes (incl. payables, and the
+  TO-the-shop-vs-BY-the-shop rule) · 6 Equity: capital + profit − drawings ·
+  7 The paper behind each number (source documents per side; equity needs no
+  paper, it is arithmetic) · 8 Worked example (Wednesday closing at Manka'a
+  Provisions) · 9 Your turn: Thursday at the shop (guided practice, with the
+  answers worked out) · 10 Going further + one honest note.
+- **Cameroon / local-small-business context throughout:** the same
+  "Manka'a Provisions" Bamenda neighbourhood shop used in Lesson 1 (continuous
+  scenario), Nkwen Market as supplier, Mama Ndifor as a credit customer, the
+  unpaid electricity bill, Mobile Money float, a delivery bicycle, the bank
+  loan, XAF/FCFA with zero decimals everywhere.
+- **Arithmetic is internally consistent and was verified programmatically:**
+  Wednesday assets 96 000 + 40 000 + 145 000 + 120 000 + 45 000 + 22 000 =
+  **468 000**; liabilities 60 000 + 150 000 + 8 000 = **218 000**; equity =
+  **250 000**, and the second road (capital 200 000 + profits 54 000 − drawings
+  4 000) reaches the same 250 000. Thursday: loan repayment → 438 000/188 000;
+  receivable collected → unchanged; oil on credit → 483 000/233 000; family
+  withdrawal → **478 000/233 000, equity 245 000**, and 233 000 + 245 000 =
+  478 000. Q13/Q14 ask for exactly these figures.
+- **18 questions, unique fixed positions 1..18:** Q1–Q3 original; Q4 receivable
+  is an asset; Q5 supplier invoice is a payable; Q6 "the owners' share"
+  (short answer); Q7 rearranging the equation; Q8 buying for cash moves no
+  total; Q9 family withdrawal; Q10 collecting a receivable; Q11 paying the
+  supplier; Q12 capital + profit − drawings; Q13 Wednesday worked example;
+  Q14 Thursday guided practice; Q15 which document proves the loan liability;
+  Q16 the French equation (short answer); Q17 an unbalanced sheet means a
+  recording error, not a broken equation; Q18 the honest boundary (a perfect
+  score does **not** make you an accountant). Every question carries
+  `explanation_en/fr`, `correction_en/fr` and a `remediation_section_position`
+  inside this lesson (2, 2, 3, 4, 5, 2, 2, 3, 6, 4, 5, 6, 8, 9, 7, 2, 3, 10).
+- **Sources (Section 10), named by title, nothing reproduced:** OHADA SYSCOHADA
+  (ohada.org), IFRS Foundation / IASB (ifrs.org), IFAC / IAESB International
+  Education Standards (ifac.org), ACCA Foundations in Accountancy syllabus
+  (accaglobal.com). OPTIONAL ACADEMIC READING is a clearly separated block:
+  Neba, Akoso Wilfred (UBa) and Kueda Wamba, Berthelo (FEMS) — public listable
+  work only, with the explicit sentence that NO UBa endorsement is claimed or
+  implied and nothing from their papers is copied, in both EN and FR. SYSCOHADA
+  is described as a signpost and the platform's charts as an illustrative demo
+  subset, never an official chart. The honest note states in EN and FR that the
+  course does **not** make anyone a professional or regulated accountant
+  (recognised study + supervised experience + professional body membership;
+  ONECCA named for Cameroon).
+
+**Stable-ID / seed-upsert safeguards (verified, not assumed):**
+- No concurrent or double seed was run. `ensure_default_lessons` was NOT
+  modified, NOT re-run by hand against the dev database, and NOT bypassed; the
+  existing idempotent by-position upsert (insert-or-update, never delete) was
+  used exactly as designed, so the immutable question ids of Q1–Q3 are
+  untouched and every historical attempt, review card and progress row that
+  points at them still resolves.
+- A **double re-sync is now a test**, not a hope:
+  `test_resync_preserves_ids_attempts_and_progress` calls
+  `ensure_default_lessons` twice and then asserts the served question ids are
+  byte-identical, positions are still exactly 1..18, there are still 18 unique
+  ids, every answer id is unchanged, and the learner's progress payload equals
+  its pre-resync value.
+- Lesson 2 verified as **one unique row per immutable question id and one unique
+  fixed position** (18 ids, positions 1..18, no adjacent duplicate by id,
+  position, EN text or FR text) — both in the seed, in the served payload and
+  against the real dev Postgres database.
+
+**Wrong answers / remediation / review behaviour (unchanged by design):** a
+wrong answer still returns the C1 feedback object (explanation + correction +
+a remediation target scoped to THIS lesson's own section), schedules the C2
+review card, and NEVER inserts a second numbered question — the served sequence
+is byte-identical before and after the miss, and the next question is a
+distinct id at position + 1. Review resolution still records exactly ONE
+append-only `attempts` row on the SAME immutable question id and rolls mastery
+up through the unchanged `_refresh_progress`.
+
+**Progress integrity:** counts are distinct immutable question ids (never raw
+attempt rows), and the numerator can never exceed the denominator — pinned for
+Lesson 2 by `test_full_walk_counts_distinct_ids_and_never_exceeds_total`, which
+asserts the invariant after every single answer.
+**NEW TESTS — `backend/app/tests/test_lesson2_expansion.py` (14 tests):**
+identity + 7-lesson curriculum order · 18 unique ids and positions 1..18 with
+no adjacent duplicates · the three original questions preserved · history
+preservation through a double re-sync · MCQ + short-answer scoring (EN and FR
+accepted, language-blind) · bilingual content completeness (objectives,
+prereq, scenario, vocabulary, source documents, worked example, guided
+practice, further study, optional academic reading, honest note, both
+languages) · the C1 remediation map resolving to the intended section of THIS
+lesson in EN and FR · a wrong answer creating a review card without
+duplicating the normal sequence · review correction updating mastery for the
+SAME immutable question id (94% → 100%) · progress invariants on a full walk ·
+certificate behaviour (one completed lesson leaves `completed_lessons == 1` of
+7, `certificate_status == "locked"`, `POST /learning/certificate` → 403) · the
+Lesson 1 regression guard (18 unique ids, 18/18 answered, 17/18 correct at 94%
+with one miss, review correction → 100%, certificate still 403) · answer-key
+protection on the read endpoints.
+
+**Test / build output actually observed:**
+- Focused: `pytest app/tests/test_lesson2_expansion.py -q` → first run 12
+  passed / 2 failed. Both failures were bugs in the NEW test file, not in the
+  lesson or the engine: a stale assertion on the Q18 stem, and a loop that
+  skipped position 1 by slicing `[1:]` while the retried question was position
+  4 — which is itself a live demonstration that progress counts distinct ids
+  and never silently fills a gap. Both fixed; the Lesson 2 content was also
+  verified independently (a clean full walk of all 18 yields
+  `completed / best_score 100 / 18 of 18`).
+- `cd backend && .venv/Scripts/python.exe -m pytest app/tests -q` →
+  **228 passed, 13 warnings in 565.76s (0:09:25), RC=0.**
+- `cd frontend && npm run test:progression` → **14 checks passed, RC=0**;
+  `npm run test:feedback` → **10 checks passed, RC=0**;
+  `npm run test:review` → **10 checks passed, RC=0**;
+  `npm run test:i18n` → **3 checks passed, RC=0**;
+  `npm run build` → **RC=0, vite 6.4.3, 79 modules transformed, built in
+  55.48s** (only the pre-existing chunk-size advisory).
+- No frontend change was needed: `LearnPage.jsx` / `LessonDetailPage.jsx` render
+  the server's fixed sequence and progress payload generically, and no frontend
+  file is lesson-specific.
+**Manual verification with a disposable learner (against the REAL dev Postgres
+database, `MODE: postgres (real configured DATABASE_URL)`), learner
+`manual-l2-verify@example.com` created and then deleted along with its
+attempts, review cards and progress row:**
+- Curriculum order unchanged; Lesson 2 served **10 sections and 18 questions**,
+  `ids unique = True`, `positions = [1..18]`, `adjacent duplicates = False`,
+  `numbering ok = True`, `questions_total = 18`.
+- Wrong answer on Question 1 → `is_correct=False`, feedback with explanation and
+  correction, remediation to `lesson_id=2, section_position=2`; the next served
+  question was **#2, a distinct id**; the served sequence was **unchanged**;
+  exactly 1 review card appeared.
+- Refresh / resume returned the **same ids** with progress
+  `in_progress / 1 answered of 18`.
+- A *guessed* correct short answer scored correct and scheduled a card (C2
+  confidence path intact).
+- Full walk of the remaining questions reached
+  `completed / best_score 94 / 18 answered / 17 correct`; the numerator never
+  exceeded the total at any step (max answered = 18 = total).
+- Two due review cards answered correctly: each produced **exactly 1 new attempt
+  row on the SAME immutable question id** (ids 3 and 4 — the original Lesson 2
+  rows), and mastery moved to `100`, `questions_correct = 18`.
+- **Lesson 1 unaffected:** `not_started`, `questions_total = 18`, 18 questions,
+  ids unique; `GET /learning/completion` → `completed_lessons: 1 / 7`,
+  `completed: false`, `certificate_status: "locked"`; `POST /learning/certificate`
+  → **403**. Disposable learner and all of its rows removed afterwards.
+
+**Files changed (intentionally, only these):**
+- `backend/app/learning/seed_data/lesson_2.py` (content only)
+- `backend/app/tests/test_lesson2_expansion.py` (new)
+- `PROGRESS_LOG.md` (this entry)
+All temporary verification scripts and output files were removed before staging.
+
+**Next session suggestion:** Module 1 Lesson 3 (`debits-and-credits`) is the next
+unexpanded lesson (3 questions, 3 sections) and is the natural continuation of
+this work; the same in-place recipe applies — original questions keep positions
+1–3 and their ids, positions 1..18 for the finished lesson, no engine change.
+Watch one thing: Lesson 3's position 3 is a `short_answer`, so keep the first
+`short_answer` of Lesson 3 at its original position and accepted texts, since
+`test_learning.py::test_short_answer_accepts_both_languages_straight_comparison`
+and `test_learning_reviews.py::test_review_endpoints_never_expose_the_answer_key`
+both read the first short answer of Lesson 3 straight from the database.
+
 ## Session 18 (Hotfix) — review fixes mastery (94% → 100%) and duplicate normal questions are gone
 
 **Date:** 2026-09-25 — focused learning-integrity hotfix. Accounting engine, workspace
