@@ -20,11 +20,12 @@ remediation still targets this lesson's own sections.
 """
 from datetime import datetime, timedelta, timezone
 
-from app.models.learning import Lesson
+from app.models.learning import Lesson, Question
 from app.tests.test_learning import (
     EXPECTED_SLUGS,
     _answer_keys,
     _attempt,
+    _correct_answer_payload,
     _lesson_by_slug,
     _register,
 )
@@ -103,11 +104,8 @@ def test_lesson1_reaches_final_question_and_completes(client, test_db_session):
     qs = _questions(detail)
 
     for q in qs:
-        if q["kind"] == "mcq":
-            correct, _w = _answer_keys(test_db_session, q["id"])
-            r = _attempt(client, lesson["id"], q["id"], option_key=correct)
-        else:
-            r = _attempt(client, lesson["id"], q["id"], text="liability")
+        r = _attempt(client, lesson["id"], q["id"],
+                     **_correct_answer_payload(test_db_session, q))
         assert r["is_correct"] is True
     # The last payload in server order is the final question.
     assert qs[-1]["position"] == len(qs)
@@ -207,11 +205,8 @@ def test_certificate_eligibility_rule_unchanged(client, test_db_session):
     ).first()
     lesson, detail = _lesson_by_slug(client, SLUG)
     for q in _questions(detail):
-        if q["kind"] == "mcq":
-            correct, _w = _answer_keys(test_db_session, q["id"])
-            _attempt(client, lesson["id"], q["id"], option_key=correct)
-        else:
-            _attempt(client, lesson["id"], q["id"], text="liability")
+        _attempt(client, lesson["id"], q["id"],
+                 **_correct_answer_payload(test_db_session, q))
 
     total, completed = certificate_service.course_completion_metrics(
         test_db_session, user
@@ -236,3 +231,186 @@ def test_wrong_lesson_answer_still_offers_own_lesson_remediation(
     assert rem is not None
     assert rem["lesson_id"] == lesson["id"]
     assert rem["section_id"] in section_ids
+
+
+# --- 12) Lesson 1 fixed 18-question invariants (Session 18 hotfix) ------------
+def test_lesson1_has_18_unique_ids_and_positions_1_through_18(client):
+    """Seed invariant: exactly 18 unique question ids served in the fixed
+    order with positions 1..18 each appearing exactly once."""
+    _register(client)
+    _lesson, detail = _lesson_by_slug(client, SLUG)
+    qs = _questions(detail)
+    ids = [q["id"] for q in qs]
+    positions = [q["position"] for q in qs]
+    assert len(qs) == 18
+    assert len(set(ids)) == 18  # each immutable id exactly once
+    assert positions == list(range(1, 19))  # each position exactly once
+    # No two consecutive entries share an id, a position or question text —
+    # the reported "Question 3 == Question 4" pairing can never reappear.
+    for a, b in zip(qs, qs[1:]):
+        assert a["id"] != b["id"]
+        assert a["position"] != b["position"]
+        assert a["question_en"] != b["question_en"]
+
+
+def test_repeated_wrong_and_correct_events_never_move_question_3(
+    client, test_db_session
+):
+    """Question 3 keeps its seeded position through any number of wrong/correct
+    answer events — it can never occupy another normal position."""
+    _register(client)
+    lesson, detail = _lesson_by_slug(client, SLUG)
+    qs = _questions(detail)
+    q3 = qs[2]
+    assert q3["position"] == 3
+    correct, wrong = _answer_keys(test_db_session, q3["id"])
+    baseline_ids = [x["id"] for x in qs]
+    baseline_positions = [x["position"] for x in qs]
+
+    for key in (wrong, correct, wrong, wrong, correct, correct):
+        _attempt(client, lesson["id"], q3["id"], option_key=key)
+        served = _questions(_lesson_by_slug(client, SLUG)[1])
+        assert [x["id"] for x in served] == baseline_ids
+        assert [x["position"] for x in served] == baseline_positions
+        hits = [i for i, x in enumerate(served) if x["id"] == q3["id"]]
+        assert hits == [2]  # exactly once, at index 2 (position 3)
+        assert served[2]["position"] == 3
+
+
+def test_retries_reviews_and_refetches_never_duplicate_the_sequence(
+    client, test_db_session
+):
+    """No combination of wrong answers, review records or re-fetches may add,
+    drop or reorder a normal lesson question; counters stay in bounds."""
+    _register(client)
+    lesson, detail = _lesson_by_slug(client, SLUG)
+    qs = _questions(detail)
+    baseline_ids = [x["id"] for x in qs]
+    baseline_positions = [x["position"] for x in qs]
+
+    q1, q2 = qs[0], qs[1]
+    c1, w1 = _answer_keys(test_db_session, q1["id"])
+    _c2, w2 = _answer_keys(test_db_session, q2["id"])
+    _attempt(client, lesson["id"], q1["id"], option_key=w1)
+    _attempt(client, lesson["id"], q2["id"], option_key=w2)
+
+    # Answer both review cards (one correct, one wrong) — review records must
+    # never ride on, or be confused with, the fixed normal sequence. Each card
+    # is answered with ITS OWN question's keys (matched by question_id).
+    cards = client.get("/learning/reviews").json()
+    assert len(cards) == 2
+    for card in cards:
+        if card["question_id"] == q1["id"]:
+            _answer_review(client, card["id"], option_key=c1)
+        else:
+            _answer_review(client, card["id"], option_key=w2)
+
+    for _ in range(3):  # repeated re-fetch (refresh / resume / hydration paths)
+        detail_now = _lesson_by_slug(client, SLUG)[1]
+        served = _questions(detail_now)
+        assert [x["id"] for x in served] == baseline_ids
+        assert [x["position"] for x in served] == baseline_positions
+        assert len({x["id"] for x in served}) == len(served)
+        assert len({x["position"] for x in served}) == len(served)
+        progress = detail_now["progress"]
+        assert progress["questions_total"] == 18
+        assert 0 <= progress["questions_answered"] <= 18
+        assert 0 <= progress["best_score"] <= 100
+
+
+def test_legacy_duplicate_positions_are_healed_without_losing_history(
+    client, test_db_session
+):
+    """Root-cause regression: a question row duplicated at an existing
+    position (the double-seed-insert corruption) is RENUMBERED to the next
+    free position — never deleted — and the heal is idempotent. Uses a
+    throwaway scratch lesson so the shared curriculum stays untouched."""
+    from app.learning.service import ensure_default_lessons
+
+    _register(client)
+    scratch = Lesson(
+        slug="heal-scratch",
+        position=99,
+        title_en="Scratch",
+        title_fr="Scratch",
+        summary_en="scratch",
+        summary_fr="scratch",
+    )
+    first = Question(position=1, question_en="A", question_fr="A", kind="mcq")
+    dup = Question(position=1, question_en="B", question_fr="B", kind="mcq")
+    scratch.questions = [first, dup]
+    test_db_session.add(scratch)
+    test_db_session.commit()
+    first_id, dup_id = first.id, dup.id
+    try:
+        ensure_default_lessons(test_db_session)
+        test_db_session.commit()
+        test_db_session.expire_all()
+
+        rows = (
+            test_db_session.query(Question)
+            .filter(Question.lesson_id == scratch.id)
+            .order_by(Question.position)
+            .all()
+        )
+        # Both rows kept (no deletion); positions now unique: 1 and 2.
+        assert {q.id for q in rows} == {first_id, dup_id}
+        assert [q.position for q in rows] == [1, 2]
+
+        # Idempotent: an immediate second heal changes nothing.
+        before = [(q.id, q.position) for q in rows]
+        ensure_default_lessons(test_db_session)
+        test_db_session.commit()
+        test_db_session.expire_all()
+        rows2 = (
+            test_db_session.query(Question)
+            .filter(Question.lesson_id == scratch.id)
+            .order_by(Question.position)
+            .all()
+        )
+        assert [(q.id, q.position) for q in rows2] == before
+    finally:
+        test_db_session.delete(scratch)  # synthetic rows only — test cleanup
+        test_db_session.commit()
+
+
+def test_served_sequence_stays_unique_after_a_late_duplicate_row(
+    client, test_db_session
+):
+    """Defense in depth: a duplicate-position row arriving on Lesson 1 is
+    healed on the very next sync, the original 18 keep positions 1..18, and
+    the served payload contains each id/position exactly once."""
+    from app.learning.service import ensure_default_lessons
+
+    _register(client)
+    lesson, detail = _lesson_by_slug(client, SLUG)
+    qs = _questions(detail)
+    original_count = len(qs)
+    lesson_row = test_db_session.query(Lesson).filter(Lesson.slug == SLUG).one()
+    dup = Question(
+        lesson_id=lesson_row.id,
+        position=qs[2]["position"],
+        question_en="late duplicate",
+        question_fr="doublon tardif",
+        kind="mcq",
+    )
+    test_db_session.add(dup)
+    test_db_session.commit()
+    try:
+        ensure_default_lessons(test_db_session)
+        test_db_session.commit()
+        served = _questions(_lesson_by_slug(client, SLUG)[1])
+        ids = [x["id"] for x in served]
+        positions = [x["position"] for x in served]
+        assert len(ids) == len(set(ids))
+        assert len(positions) == len(set(positions))
+        assert positions == sorted(positions)
+        # The original 18 keep their exact positions 1..18 and ids...
+        assert positions[:original_count] == list(range(1, original_count + 1))
+        assert ids[:original_count] == [x["id"] for x in qs]
+        # ...and the healed duplicate sits after them at a fresh position.
+        assert dup.id in ids
+        assert positions[original_count] == original_count + 1
+    finally:
+        test_db_session.delete(dup)  # synthetic row only — test cleanup
+        test_db_session.commit()

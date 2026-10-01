@@ -1,8 +1,10 @@
 """Lesson 1 expansion tests (Session 15).
 
 The original 2-question/3-section Lesson 1 was upgraded IN PLACE into a full
-beginner lesson (10 sections + 10 questions, built around the "Manka'a
-Provisions" scenario) WITHOUT touching the engine: same slug
+beginner lesson (10 sections + 18 questions — Session 15 built 10, Session 18
+completed the fixed 18-question sequence with positions 11-18, all built
+around the "Manka'a Provisions" scenario) WITHOUT touching the engine: same
+slug
 ("what-is-accounting"), same curriculum position, and the two ORIGINAL
 questions keep their positions (1, 2), question ids, answer ids, option keys
 and correct answers (A correct on both), so historical attempts, progress
@@ -36,6 +38,7 @@ from app.tests.test_learning import (
     EXPECTED_SLUGS,
     _answer_keys,
     _attempt,
+    _correct_answer_payload,
     _lesson_by_slug,
     _register,
 )
@@ -55,6 +58,15 @@ EXPECTED_REMEDIATION = {
     8: 8,   # credit-sale application    -> worked example
     9: 9,   # cash difference            -> guided practice
     10: 10, # honest boundary            -> references + honest note
+    # Session 18 — the fixed 18-question sequence (positions 11-18):
+    11: 6,  # proof of a SALE            -> source documents
+    12: 7,  # income vocabulary          -> "Five words..."
+    13: 7,  # asset bought on credit     -> "Five words..."
+    14: 5,  # external user              -> "Who reads the numbers?"
+    15: 7,  # "owns" short answer        -> "Five words..."
+    16: 6,  # cash receipt               -> source documents
+    17: 3,  # why records matter         -> "Why it matters"
+    18: 4,  # recording vs accounting    -> bookkeeping vs accounting
 }
 
 
@@ -74,7 +86,7 @@ def test_lesson1_identity_and_curriculum_unchanged(client):
     first = lessons[0]
     assert first["slug"] == SLUG
     assert first["position"] == 1
-    assert first["progress"]["questions_total"] == 10
+    assert first["progress"]["questions_total"] == 18
 
 
 # --- 2) Structure ---------------------------------------------------------------
@@ -82,9 +94,9 @@ def test_lesson1_full_beginner_structure(client):
     _register(client)
     _lesson, detail = _lesson_by_slug(client, SLUG)
     secs, qs = detail["sections"], detail["questions"]
-    assert len(secs) == 10 and len(qs) == 10
+    assert len(secs) == 10 and len(qs) == 18
     assert [s["position"] for s in secs] == list(range(1, 11))
-    assert [q["position"] for q in qs] == list(range(1, 11))
+    assert [q["position"] for q in qs] == list(range(1, 19))
     for s in secs:
         assert s["heading_en"] and s["heading_fr"]
         assert s["body_en"] and s["body_fr"]
@@ -93,6 +105,8 @@ def test_lesson1_full_beginner_structure(client):
     assert kinds == {
         1: "mcq", 2: "mcq", 3: "mcq", 4: "mcq", 5: "mcq", 6: "mcq",
         7: "short_answer", 8: "mcq", 9: "mcq", 10: "mcq",
+        11: "mcq", 12: "mcq", 13: "mcq", 14: "mcq",
+        15: "short_answer", 16: "mcq", 17: "mcq", 18: "mcq",
     }
     # original questions keep exactly 3 options with A correct (pinned by the
     # Session 11 tests; kept stable here on purpose).
@@ -204,7 +218,7 @@ def test_original_questions_and_answer_ids_preserved_across_resync(
         )
         assert [a.option_key for a in rows] == ["A", "B", "C"]
         assert [a.is_correct for a in rows] == [True, False, False]
-    assert len(after["questions"]) == 10
+    assert len(after["questions"]) == 18
 
 
 def test_attempt_and_progress_survive_resync(client, test_db_session):
@@ -231,7 +245,7 @@ def test_attempt_and_progress_survive_resync(client, test_db_session):
     after = _lesson_by_slug(client, SLUG)[1]["progress"]
     assert after["questions_answered"] == 1
     assert after["questions_correct"] == 0
-    assert after["questions_total"] == 10
+    assert after["questions_total"] == 18
     assert after["best_score"] == 0
     assert after["status"] == "in_progress"
 
@@ -244,16 +258,13 @@ def test_scoring_covers_formative_and_final_questions(client, test_db_session):
 
     # Grade EVERY question correctly (the certificate test does the same).
     for q in detail["questions"]:
-        if q["kind"] == "mcq":
-            correct, _wrong = _answer_keys(test_db_session, q["id"])
-            r = _attempt(client, lesson["id"], q["id"], option_key=correct)
-        else:
-            r = _attempt(client, lesson["id"], q["id"], text="liability")
+        r = _attempt(client, lesson["id"], q["id"],
+                     **_correct_answer_payload(test_db_session, q))
         assert r["is_correct"] is True, q["position"]
 
     progress = _lesson_by_slug(client, SLUG)[1]["progress"]
-    assert progress["questions_answered"] == 10
-    assert progress["questions_correct"] == 10
+    assert progress["questions_answered"] == 18
+    assert progress["questions_correct"] == 18
     assert progress["best_score"] == 100
     assert progress["status"] == "completed"
 
@@ -266,13 +277,15 @@ def test_scoring_covers_formative_and_final_questions(client, test_db_session):
         "is_correct"
     ] is False
 
-    # Roll-up over ALL attempts: 14 answered, 13 correct -> 93.
+    # Roll-up over DISTINCT questions: every raw attempt row beyond the first
+    # per question never counts — each question is judged by its LATEST
+    # attempt. Q7's last try was wrong -> 17/18 -> 94.
     correct1, _w = _answer_keys(test_db_session, by_pos[1]["id"])
     _attempt(client, lesson["id"], by_pos[1]["id"], option_key=correct1)
     final = _lesson_by_slug(client, SLUG)[1]["progress"]
-    assert final["questions_answered"] == 14
-    assert final["questions_correct"] == 13
-    assert final["best_score"] == 93  # round(13 / 14 * 100)
+    assert final["questions_answered"] == 18  # distinct, NOT raw rows
+    assert final["questions_correct"] == 17  # Q7's latest attempt is wrong
+    assert final["best_score"] == 94  # round(17 / 18 * 100)
     assert final["status"] == "completed"
 
 
@@ -379,10 +392,17 @@ def test_new_final_question_review_card_compatibility(client, test_db_session):
     assert body["stage"] == 1
     assert body["interval_days"] == 1
 
-    # Review answers create NO attempt rows.
-    attempts_before = test_db_session.query(Attempt).count()
+    # Session 18: each review answer records ONE attempt row on the SAME
+    # immutable question id (append-only mastery resolution), and nothing else
+    # about the card's schedule changes.
+    attempts_before = {a.id for a in test_db_session.query(Attempt).all()}
     client.post(f"/learning/reviews/{card['id']}/answer", json={"option_key": correct})
-    assert test_db_session.query(Attempt).count() == attempts_before
+    after = test_db_session.query(Attempt).all()
+    assert {a.id for a in after} >= attempts_before  # history preserved
+    new_rows = [a for a in after if a.id not in attempts_before]
+    assert len(new_rows) == 1
+    assert new_rows[0].question_id == q8["id"]
+    assert new_rows[0].is_correct is True
 
 
 def test_confidence_rules_apply_to_new_questions(client, test_db_session):
@@ -423,11 +443,8 @@ def test_expanded_lesson_feeds_completion_but_course_still_locked(
     _register(client)
     lesson, detail = _lesson_by_slug(client, SLUG)
     for q in detail["questions"]:
-        if q["kind"] == "mcq":
-            correct, _w = _answer_keys(test_db_session, q["id"])
-            _attempt(client, lesson["id"], q["id"], option_key=correct)
-        else:
-            _attempt(client, lesson["id"], q["id"], text="liability")
+        _attempt(client, lesson["id"], q["id"],
+                 **_correct_answer_payload(test_db_session, q))
 
     completion = client.get("/learning/completion").json()
     assert completion["total_lessons"] == 7

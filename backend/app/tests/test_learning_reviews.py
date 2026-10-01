@@ -9,18 +9,22 @@ Covers the Part C2 acceptance points:
 6. Correct review answers advance the deterministic ladder 1/3/7/14 days;
    incorrect ones reset to stage 0, due immediately. All UTC-aware.
 7. Review endpoints never expose the answer key.
-8. Review answers create no `attempts` rows and never move lesson progress or
-   certificate status.
+8. (Session 18) A review answer is recorded as an `attempts` row for the SAME
+   immutable question id and rolls THAT lesson's mastery up (append-only);
+   reviewing one lesson never moves ANOTHER lesson's progress or certificate
+   status, and the certificate rule itself is unchanged.
 9. Existing lesson behavior (scoring, practice connector) is unchanged —
    covered by test_learning.py, re-run with the full suite.
 """
 from datetime import datetime, timedelta, timezone
 
-from app.models.learning import Attempt, ReviewItem
+from app.models.learning import Attempt, LessonProgress, Question, ReviewItem
+from app.models.user import User
 
 from app.tests.test_learning import (
     _answer_keys,
     _attempt,
+    _correct_answer_payload,
     _lesson_by_slug,
     _register,
 )
@@ -321,10 +325,13 @@ def test_review_endpoints_never_expose_the_answer_key(client, test_db_session):
     }
 
 
-# --- 6) Review data never moves lesson progress or certificates -----------------
+# --- 6) Review answers on one lesson never move ANOTHER lesson's progress ------
 def test_review_answers_do_not_change_progress_or_completion(
     client, test_db_session
 ):
+    """Reviewing a DIFFERENT lesson's question leaves this lesson's stored
+    progress, completion and certificate status byte-identical (the reviewed
+    lesson's own mastery update is pinned separately below)."""
     _register(client)
     # Baseline lesson progress: one correct lesson attempt.
     lesson, detail = _lesson_by_slug(client, "what-is-accounting")
@@ -338,16 +345,162 @@ def test_review_answers_do_not_change_progress_or_completion(
     rid_lesson, rid_q, rid_correct, _rid_wrong, _rid = _make_review(
         client, test_db_session, slug="the-accounting-equation"
     )
+    before_ids = {a.id for a in test_db_session.query(Attempt).all()}
 
     # Several review interactions…
     _answer_review(client, _rid, option_key=rid_correct)
     _answer_review(client, _rid, option_key=rid_correct)
 
-    # …change NO lesson progress and NO completion/certificate status.
+    # …change NO lesson progress and NO completion/certificate status here.
     after_progress = _lesson_by_slug(client, "what-is-accounting")[1]["progress"]
     assert after_progress == base_progress
     after_completion = client.get("/learning/completion").json()
     assert after_completion == base_completion
 
-    attempts = test_db_session.query(Attempt).count()
-    assert attempts == 2  # review answers create no `attempts` rows
+    # Session 18: each review answer IS recorded as an attempt row — but on
+    # the REVIEWED question's lesson (same immutable question id), never as an
+    # unrelated row, and existing history is never rewritten or removed.
+    attempts = test_db_session.query(Attempt).all()
+    assert {a.id for a in attempts} >= before_ids  # history preserved
+    new_rows = [a for a in attempts if a.id not in before_ids]
+    assert len(new_rows) == 2  # one per review answer
+    assert all(a.question_id == rid_q["id"] for a in new_rows)
+    assert all(a.lesson_id == rid_lesson["id"] for a in new_rows)
+    assert all(a.is_correct is True for a in new_rows)
+
+
+# --- 12) Defect-1 regression: 94% -> 100% through the review flow (Session 18) --
+def test_one_error_gives_94_then_review_correction_gives_100(
+    client, test_db_session
+):
+    """The reported flow, end to end on a clean disposable learner:
+
+    1. Complete Lesson 1's fixed 18-question sequence with EXACTLY one
+       initial error (Question 3) -> 18/18 answered, 17 correct, 94%,
+       status 'completed' (normal completed behavior intact).
+    2. Correctly resolve the missed question through the established review
+       flow -> the SAME immutable question id's current mastery updates ->
+       18/18, 100%. History is append-only: every prior attempt row survives.
+    3. The certificate rule stays exactly
+       `status == "completed" AND best_score == 100` (course still locked on
+       Lesson 1 alone; issuance still 403).
+    """
+    from app.services import certificate_service
+    from app.services.certificate_service import _lesson_passed
+
+    _register(client)
+    lesson, detail = _lesson_by_slug(client, "what-is-accounting")
+    qs = detail["questions"]
+    assert len(qs) == 18
+
+    missed = qs[2]  # Question 3
+    correct_m, wrong_m = _answer_keys(test_db_session, missed["id"])
+
+    for q in qs:
+        if q["id"] == missed["id"]:
+            _attempt(client, lesson["id"], q["id"], option_key=wrong_m)
+        else:
+            _attempt(client, lesson["id"], q["id"],
+                     **_correct_answer_payload(test_db_session, q))
+
+    progress = _lesson_by_slug(client, "what-is-accounting")[1]["progress"]
+    assert progress["questions_total"] == 18
+    assert progress["questions_answered"] == 18  # 18/18
+    assert progress["questions_correct"] == 17  # one initial error
+    assert progress["best_score"] == 94  # round(17 / 18 * 100)
+    assert progress["status"] == "completed"  # normal completed behavior
+
+    history_ids = {a.id for a in test_db_session.query(Attempt).all()}
+    assert len(history_ids) == 18  # one attempt per question so far
+
+    # Exactly one review card is due: the missed Question 3.
+    due = client.get("/learning/reviews", params={"due_only": "true"}).json()
+    assert len(due) == 1
+    card = due[0]
+    assert card["question_id"] == missed["id"]
+
+    res = _answer_review(client, card["id"], option_key=correct_m)
+    assert res["correct"] is True
+    assert res["question_id"] == missed["id"]  # same immutable question id
+
+    # The authoritative roll-up now reflects the corrected resolution.
+    progress = _lesson_by_slug(client, "what-is-accounting")[1]["progress"]
+    assert progress["questions_total"] == 18
+    assert progress["questions_answered"] == 18
+    assert progress["questions_correct"] == 18
+    assert progress["best_score"] == 100  # 94% -> 100% after the correction
+    assert progress["status"] == "completed"
+
+    # Append-only history: every pre-review attempt row still exists, and the
+    # ONLY new row is an attempt on the same immutable question id.
+    after_ids = {a.id for a in test_db_session.query(Attempt).all()}
+    assert history_ids <= after_ids  # nothing deleted or reset
+    assert len(after_ids) == len(history_ids) + 1
+    new_attempt = (
+        test_db_session.query(Attempt)
+        .filter(Attempt.id.notin_(history_ids))
+        .one()
+    )
+    assert new_attempt.question_id == missed["id"]
+    assert new_attempt.lesson_id == lesson["id"]
+    assert new_attempt.is_correct is True
+
+    # The review card stays scheduled under the UNCHANGED C2 ladder.
+    cards = client.get("/learning/reviews").json()
+    assert len(cards) == 1
+    assert cards[0]["stage"] == 1  # correct review advanced the stage
+
+    # Certificate rule UNCHANGED: the predicate is still exactly
+    # `status == "completed" AND best_score == 100`.
+    row = (
+        test_db_session.query(LessonProgress)
+        .filter(
+            LessonProgress.lesson_id == lesson["id"],
+            LessonProgress.user_id
+            == test_db_session.query(User)
+            .filter(User.email == "learner@example.com")
+            .one()
+            .id,
+        )
+        .one()
+    )
+    assert row.status == "completed" and row.best_score == 100
+    assert _lesson_passed(row) is True
+
+    user = test_db_session.query(User).filter(
+        User.email == "learner@example.com"
+    ).one()
+    total, completed = certificate_service.course_completion_metrics(
+        test_db_session, user
+    )
+    assert total == 7 and completed == 1  # Lesson 1 alone never finishes
+    assert client.post("/learning/certificate").status_code == 403
+
+
+def test_lesson_pass_predicate_is_exactly_completed_and_best_score_100(
+    client, test_db_session
+):
+    """Required invariant: certificate eligibility per lesson remains exactly
+    `status == "completed" AND best_score == 100` — no more, no less."""
+    from app.services.certificate_service import _lesson_passed
+
+    _register(client)
+    lesson, _detail = _lesson_by_slug(client, "what-is-accounting")
+    user = (
+        test_db_session.query(User)
+        .filter(User.email == "learner@example.com")
+        .one()
+    )
+    row = LessonProgress(
+        user_id=user.id, lesson_id=lesson["id"], status="completed",
+        best_score=99, questions_answered=18, questions_correct=17,
+    )
+    assert _lesson_passed(row) is False  # completed but not 100
+
+    row.best_score = 100
+    assert _lesson_passed(row) is True  # completed AND 100
+
+    row.status = "in_progress"
+    assert _lesson_passed(row) is False  # 100 but not completed
+
+    assert _lesson_passed(None) is False  # no progress row at all

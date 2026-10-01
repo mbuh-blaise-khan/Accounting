@@ -57,7 +57,10 @@ class Lesson(Base):
     questions: Mapped[list["Question"]] = relationship(
         back_populates="lesson",
         cascade="all, delete-orphan",
-        order_by="Question.position",
+        # Session 18: id tie-break keeps the fixed sequence deterministic when
+        # legacy rows share a position (the service additionally heals and
+        # dedupes positions before serving).
+        order_by="Question.position, Question.id",
     )
 
 
@@ -249,9 +252,12 @@ class ReviewItem(Base):
       reserved for later UX; wrong/guessed answers always (re)activate it.
     - All timestamps are timezone-aware UTC (same convention as the rest of
       the learning engine).
-    - Review rows NEVER influence lesson progress, completion or certificate
-      eligibility: they are answered on their own endpoints and create no
-      `attempts` rows.
+    - Session 18: a review answer IS recorded as the question's latest
+      resolution — an `attempts` row on the SAME immutable question id that
+      rolls that lesson's mastery up through the unchanged progress rule
+      (append-only; history is never reset). Scheduling semantics above are
+      unchanged, and certificate eligibility still follows the UNCHANGED
+      `status == "completed" AND best_score == 100` rule.
     """
 
     __tablename__ = "review_items"

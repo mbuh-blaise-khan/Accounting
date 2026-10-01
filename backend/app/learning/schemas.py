@@ -11,10 +11,10 @@ class LessonProgressOut(BaseModel):
     """Per-user progress for one lesson (rolled up server-side)."""
 
     status: str = "not_started"  # 'not_started' | 'in_progress' | 'completed'
-    best_score: int = 0  # 0-100 over the questions answered so far
+    best_score: int = 0  # 0-100 over DISTINCT questions answered so far
     questions_total: int = 0
-    questions_answered: int = 0
-    questions_correct: int = 0
+    questions_answered: int = 0  # distinct questions attempted, not raw rows
+    questions_correct: int = 0  # distinct questions correct on the LATEST attempt
     practice_posted: bool = False
 
 
@@ -171,8 +171,10 @@ class ReviewSummaryOut(BaseModel):
     """Counts for the signed-in user's review queue (authenticated, scoped).
 
     `due_now` counts active cards whose `due_at` is in the past or now;
-    `scheduled` counts active cards not yet due. Review data never changes
-    lesson progress, completion or certificate eligibility.
+    `scheduled` counts active cards not yet due. The summary itself carries no
+    progress data; answering a card updates that question's current mastery
+    through the lesson's own roll-up (Session 18) under the unchanged
+    certificate rule.
     """
 
     total_active: int = 0

@@ -45,7 +45,7 @@ LESSON = {
                 "• use the five core words — transaction, asset, liability, income, expense — correctly;\n"
                 "• follow a worked example that records one day of a real shop's business.\n\n"
                 "BEFORE YOU START (prerequisite): no prior accounting knowledge is needed. You should be able to read simple numbers and do basic addition and subtraction. Nothing to install — the whole lesson works on a phone.\n\n"
-                "HOW THIS LESSON WORKS: read the sections in order — the worked example and the guided practice show you the method. Then answer the questions. Questions 1–6 are quick checks; Questions 7–10 are the final check of the whole lesson. Every answer gets instant feedback, and anything you miss (or answer on a guess) can come back to you later as a short scheduled review, so finishing with a perfect score is realistic, not lucky.\n\n"
+                "HOW THIS LESSON WORKS: read the sections in order — the worked example and the guided practice show you the method. Then answer the questions. Questions 1–6 are quick checks; Questions 7–10 consolidate what you learned; Questions 11–18 are the final check of the whole lesson. Every answer gets instant feedback, and anything you miss (or answer on a guess) can come back to you later as a short scheduled review, so finishing with a perfect score is realistic, not lucky.\n\n"
                 "One promise about honesty: this course teaches you accounting. It does not make you an accountant — see the last section."
             ),
             "body_fr": (
@@ -57,7 +57,7 @@ LESSON = {
                 "• utiliser correctement les cinq mots de base — transaction, actif, passif, produit, charge ;\n"
                 "• suivre un exemple détaillé qui enregistre une journée d'un vrai commerce.\n\n"
                 "AVANT DE COMMENCER (prérequis) : aucune connaissance préalable en comptabilité n'est nécessaire. Vous devez savoir lire des nombres simples et faire des additions et des soustractions de base. Rien à installer — toute la leçon fonctionne sur un téléphone.\n\n"
-                "COMMENT SE DÉROULE CETTE LEÇON : lisez les sections dans l'ordre — l'exemple détaillé et l'exercice guidé vous montrent la méthode. Puis répondez aux questions. Les questions 1 à 6 sont des contrôles rapides ; les questions 7 à 10 sont le contrôle final de toute la leçon. Chaque réponse donne un retour immédiat, et tout ce que vous manquez (ou répondez au hasard) peut vous revenir plus tard sous forme de petite révision programmée : finir avec un score parfait est réaliste, pas une question de chance.\n\n"
+                "COMMENT SE DÉROULE CETTE LEÇON : lisez les sections dans l'ordre — l'exemple détaillé et l'exercice guidé vous montrent la méthode. Puis répondez aux questions. Les questions 1 à 6 sont des contrôles rapides ; les questions 7 à 10 consolident ce que vous avez appris ; les questions 11 à 18 sont le contrôle final de toute la leçon. Chaque réponse donne un retour immédiat, et tout ce que vous manquez (ou répondez au hasard) peut vous revenir plus tard sous forme de petite révision programmée : finir avec un score parfait est réaliste, pas une question de chance.\n\n"
                 "Une promesse d'honnêteté : ce cours vous enseigne la comptabilité. Il ne fait pas de vous un comptable — voir la dernière section."
             ),
         },
@@ -452,6 +452,149 @@ LESSON = {
             "correction_en": "The course gives practical ability, not a professional title: the title requires recognised study, supervised experience and registration with a professional body.",
             "correction_fr": "Le cours donne une capacité pratique, pas un titre professionnel : le titre exige des études reconnues, une expérience encadrée et une inscription à un ordre professionnel.",
             "remediation_section_position": 10,
+        },
+        # --- Session 18: final-check questions 11-18. Each has a UNIQUE seeded
+        # position and immutable id; on legacy databases where a double seed
+        # insert left positions 3-10 duplicated, these rows are the duplicates
+        # renumbered to 11-18 and updated IN PLACE (ids/answers/attempts/review
+        # cards preserved). Shapes mirror the rows they attach to (kinds and
+        # option keys), so every existing answer id keeps matching its key.
+        # --- Q11 (final check): source document — proof of a SALE ------------
+        {
+            "position": 11,
+            "kind": "mcq",
+            "question_en": "Manka'a sells 2 bags of rice to a customer who will pay next week, and hands over a document listing the goods, the price and the payment terms. Which document proves this SALE?",
+            "question_fr": "Manka'a vend 2 sacs de riz à un client qui paiera la semaine prochaine, et remet un document listant les marchandises, le prix et les conditions de paiement. Lequel de ces documents prouve cette VENTE ?",
+            "answers": [
+                {"option_key": "A", "position": 1, "text_en": "The sales invoice the shop issues to its customer", "text_fr": "La facture de vente que la boutique établit pour son client", "is_correct": True},
+                {"option_key": "B", "position": 2, "text_en": "The supplier's invoice for the shop's own purchases", "text_fr": "La facture du fournisseur pour les propres achats de la boutique", "is_correct": False},
+                {"option_key": "C", "position": 3, "text_en": "The owner's personal diary", "text_fr": "Le carnet personnel du propriétaire", "is_correct": False},
+                {"option_key": "D", "position": 4, "text_en": "The delivery note for goods the shop RECEIVED from a supplier", "text_fr": "Le bon de livraison pour les marchandises REÇUES d'un fournisseur", "is_correct": False},
+            ],
+            "explanation_en": "A sale produces a sales invoice issued BY the shop TO the customer — it names the goods, the amount and the payment terms. The supplier's invoice is the mirror image: it proves what the shop bought.",
+            "explanation_fr": "Une vente donne lieu à une facture de vente émise PAR la boutique POUR le client — elle indique les marchandises, le montant et les conditions de paiement. La facture du fournisseur est l'image inverse : elle prouve ce que la boutique a acheté.",
+            "correction_en": "Match the document to the direction of the deal: proof that the shop SELLS something is its own sales invoice to the customer.",
+            "correction_fr": "Faites correspondre le document au sens de l'opération : la preuve de ce que la boutique VEND est sa propre facture de vente au client.",
+            "remediation_section_position": 6,
+        },
+        # --- Q12 (final check): vocabulary — income --------------------------
+        {
+            "position": 12,
+            "kind": "mcq",
+            "question_en": "At the end of a good day, Manka'a has taken 45,000 FCFA from selling goods. This money EARNED from selling is called…",
+            "question_fr": "À la fin d'une bonne journée, Manka'a a encaissé 45 000 FCFA grâce à la vente de marchandises. Cet argent GAGNÉ par les ventes s'appelle…",
+            "answers": [
+                {"option_key": "A", "position": 1, "text_en": "Income — the money the business earns from selling its goods", "text_fr": "Un produit — l'argent que l'entreprise gagne en vendant ses marchandises", "is_correct": True},
+                {"option_key": "B", "position": 2, "text_en": "A liability — money the shop must pay back", "text_fr": "Un passif — de l'argent que la boutique doit rembourser", "is_correct": False},
+                {"option_key": "C", "position": 3, "text_en": "An expense — the cost of running the shop", "text_fr": "Une charge — le coût d'exploitation de la boutique", "is_correct": False},
+                {"option_key": "D", "position": 4, "text_en": "A loan from the bank", "text_fr": "Un prêt de la banque", "is_correct": False},
+            ],
+            "explanation_en": "Income is what the business EARNS by selling goods or services. The cash received is also an asset, but the earning itself — the increase that comes from selling — is income.",
+            "explanation_fr": "Le produit est ce que l'entreprise GAGNE en vendant des biens ou des services. L'argent reçu est aussi un actif, mais le fait de gagner — l'augmentation due aux ventes — est un produit.",
+            "correction_en": "Money coming IN because the shop sold something is income; what it owes is a liability and what it spends is an expense.",
+            "correction_fr": "L'argent qui ENTRE parce que la boutique a vendu est un produit ; ce qu'elle doit est un passif et ce qu'elle dépense est une charge.",
+            "remediation_section_position": 7,
+        },
+        # --- Q13 (final check): vocabulary — asset bought on credit ----------
+        {
+            "position": 13,
+            "kind": "mcq",
+            "question_en": "The shop takes a display cabinet from a carpenter and will pay for it next month. The cabinet itself is…",
+            "question_fr": "La boutique reçoit une vitrine d'un menuisier et le paiera le mois prochain. La vitrine elle-même est…",
+            "answers": [
+                {"option_key": "A", "position": 1, "text_en": "An asset — the business will use it for years, even though it is not paid for yet", "text_fr": "Un actif — l'entreprise l'utilisera pendant des années, même si elle ne l'a pas encore payée", "is_correct": True},
+                {"option_key": "B", "position": 2, "text_en": "An expense — because it has not been paid for", "text_fr": "Une charge — parce qu'elle n'a pas été payée", "is_correct": False},
+                {"option_key": "C", "position": 3, "text_en": "A liability — because nothing has been paid yet", "text_fr": "Un passif — parce que rien n'a encore été payé", "is_correct": False},
+                {"option_key": "D", "position": 4, "text_en": "Income — because the business gained something", "text_fr": "Un produit — parce que l'entreprise a gagné quelque chose", "is_correct": False},
+            ],
+            "explanation_en": "Something the business owns and will use to sell goods is an asset. Not paying yet creates a SECOND thing — the debt to the carpenter, which is a liability. The cabinet and the debt are two different records.",
+            "explanation_fr": "Ce que l'entreprise possède et utilisera pour vendre est un actif. Ne pas encore payer crée UNE SECONDE chose — la dette envers le menuisier, qui est un passif. La vitrine et la dette sont deux écritures différentes.",
+            "correction_en": "Separate the thing from the debt: the cabinet the shop owns is an asset; the unpaid bill is the liability.",
+            "correction_fr": "Séparez la chose de la dette : la vitrine que la boutique possède est un actif ; la facture impayée est le passif.",
+            "remediation_section_position": 7,
+        },
+        # --- Q14 (final check): users — external user ------------------------
+        {
+            "position": 14,
+            "kind": "mcq",
+            "question_en": "After the year ends, the tax office asks to read Manka'a's financial records. The tax office is…",
+            "question_fr": "Après la fin de l'année, l'administration fiscale demande à lire les états financiers de Manka'a. L'administration fiscale est…",
+            "answers": [
+                {"option_key": "A", "position": 1, "text_en": "An external user of accounting information — it reads the records from outside the business", "text_fr": "Un utilisateur externe de l'information comptable — il lit les registres depuis l'extérieur de l'entreprise", "is_correct": True},
+                {"option_key": "B", "position": 2, "text_en": "An internal user — it works inside the shop every day", "text_fr": "Un utilisateur interne — il travaille à l'intérieur de la boutique chaque jour", "is_correct": False},
+                {"option_key": "C", "position": 3, "text_en": "Not a user at all — records are only for the owner", "text_fr": "Pas un utilisateur du tout — les registres ne sont que pour le propriétaire", "is_correct": False},
+            ],
+            "explanation_en": "Internal users work inside the business (owner, manager, staff). External users read the numbers from outside — banks, suppliers, customers, the tax authority. The tax office stands outside the shop.",
+            "explanation_fr": "Les utilisateurs internes travaillent à l'intérieur de l'entreprise (propriétaire, gérant, employés). Les utilisateurs externes lisent les chiffres depuis l'extérieur — banques, fournisseurs, clients, administration fiscale. L'administration fiscale est à l'extérieur de la boutique.",
+            "correction_en": "The question is where the reader stands: inside the shop means internal user; outside it means external user.",
+            "correction_fr": "La question est où se trouve le lecteur : à l'intérieur de la boutique, utilisateur interne ; à l'extérieur, utilisateur externe.",
+            "remediation_section_position": 5,
+        },
+        # --- Q15 (final check): short answer — the "owns" word ---------------
+        {
+            "position": 15,
+            "kind": "short_answer",
+            "question_en": "One word completes this sentence: something a business OWNS that helps it sell for years — like Manka'a's delivery bicycle — is called a ______.",
+            "question_fr": "Un mot complète cette phrase : ce que l'entreprise POSSÈDE et qui l'aide à vendre pendant des années — comme le vélo de livraison de Manka'a — s'appelle un ______.",
+            "short_answer_en": "asset",
+            "short_answer_fr": "actif",
+            "explanation_en": "An asset is something the business owns that has value and helps it earn — cash, stock, a bicycle, a freezer. Its opposite in the five-word set is a liability: what the business owes.",
+            "explanation_fr": "Un actif est ce que l'entreprise possède, qui a de la valeur et l'aide à gagner — argent, marchandises, vélo, congélateur. Son opposé dans l'ensemble de cinq mots est un passif : ce que l'entreprise doit.",
+            "correction_en": "The word you need names what the business OWNS and uses to earn — the other side of the five-word pair from what it owes.",
+            "correction_fr": "Le mot dont vous avez besoin désigne ce que l'entreprise POSSÈDE et utilise pour gagner — l'autre côté de la paire de cinq mots par rapport à ce qu'elle doit.",
+            "remediation_section_position": 7,
+        },
+        # --- Q16 (final check): source document — cash receipt ---------------
+        {
+            "position": 16,
+            "kind": "mcq",
+            "question_en": "Manka'a pays 1,200 FCFA in cash for a box of matches and the seller hands back a printed slip proving the money was paid. This slip is…",
+            "question_fr": "Manka'a paie 1 200 FCFA en espèces pour une boîte d'allumettes et le vendeur remet un ticket prouvant que l'argent a été payé. Ce ticket est…",
+            "answers": [
+                {"option_key": "A", "position": 1, "text_en": "A receipt — the source document proving cash was paid out", "text_fr": "Un reçu — la pièce justificative prouvant que des espèces ont été payées", "is_correct": True},
+                {"option_key": "B", "position": 2, "text_en": "A sales invoice — it proves the shop sold something", "text_fr": "Une facture de vente — elle prouve que la boutique a vendu quelque chose", "is_correct": False},
+                {"option_key": "C", "position": 3, "text_en": "A bank statement — it comes from the bank", "text_fr": "Un relevé de compte — il vient de la banque", "is_correct": False},
+                {"option_key": "D", "position": 4, "text_en": "An asset — every piece of paper is an asset", "text_fr": "Un actif — tout papier est un actif", "is_correct": False},
+            ],
+            "explanation_en": "When money leaves the business over the counter, the seller's receipt is the proof: date, amount, what was bought. Invoices prove sales and purchases between businesses; the receipt proves a cash payment.",
+            "explanation_fr": "Quand l'argent quitte l'entreprise au comptoir, le reçu du vendeur est la preuve : date, montant, ce qui a été acheté. Les factures prouvent les ventes et les achats entre entreprises ; le reçu prouve un paiement en espèces.",
+            "correction_en": "Match the slip to the event: cash paid out at the counter is proved by a receipt, not by an invoice or a bank paper.",
+            "correction_fr": "Faites correspondre le ticket à l'événement : des espèces payées au comptoir se prouvent par un reçu, pas par une facture ou un document bancaire.",
+            "remediation_section_position": 6,
+        },
+        # --- Q17 (final check): why records matter — who owes us -------------
+        {
+            "position": 17,
+            "kind": "mcq",
+            "question_en": "Two months later the owner wants to know which customers still owe the shop. Where can this be found?",
+            "question_fr": "Deux mois plus tard, le propriétaire veut savoir quels clients doivent encore de l'argent à la boutique. Où peut-il le trouver ?",
+            "answers": [
+                {"option_key": "A", "position": 1, "text_en": "In the accounting records, which track what every customer owes and what the shop owes", "text_fr": "Dans les registres comptables, qui suivent ce que chaque client doit et ce que la boutique doit", "is_correct": True},
+                {"option_key": "B", "position": 2, "text_en": "Only in the owner's memory — records are not allowed to list who owes money", "text_fr": "Seulement dans la mémoire du propriétaire — les registres n'ont pas le droit de lister qui doit de l'argent", "is_correct": False},
+                {"option_key": "C", "position": 3, "text_en": "Nowhere — the information disappears once the sale is made", "text_fr": "Nulle part — l'information disparaît une fois la vente faite", "is_correct": False},
+            ],
+            "explanation_en": "That is exactly why records exist: every credit sale is written down with the customer's name and amount, so 'who owes us' is a question the books can answer months later.",
+            "explanation_fr": "C'est exactement pour cela que les registres existent : chaque vente à crédit est écrite avec le nom du client et le montant, afin que « qui nous doit » soit une question à laquelle les livres répondent des mois plus tard.",
+            "correction_en": "Recording is what keeps the information: the answer lives in the books, because credit sales are written down when they happen.",
+            "correction_fr": "C'est l'enregistrement qui conserve l'information : la réponse vit dans les livres, car les ventes à crédit s'écrivent quand elles ont lieu.",
+            "remediation_section_position": 3,
+        },
+        # --- Q18 (final check): recording is only the first job --------------
+        {
+            "position": 18,
+            "kind": "mcq",
+            "question_en": "Writing down each day's sales is done. What ELSE does accounting do with those numbers?",
+            "question_fr": "L'écriture des ventes de chaque journée est faite. Quoi D'AUTRE la comptabilité fait-elle avec ces chiffres ?",
+            "answers": [
+                {"option_key": "A", "position": 1, "text_en": "It classifies, checks, summarises and explains them so the owner can make decisions", "text_fr": "Elle les classe, les vérifie, les résume et les explique pour que le propriétaire puisse décider", "is_correct": True},
+                {"option_key": "B", "position": 2, "text_en": "Nothing — once written down, the numbers are finished with", "text_fr": "Rien — une fois écrits, les chiffres sont terminés", "is_correct": False},
+                {"option_key": "C", "position": 3, "text_en": "It changes them to match whatever cash is in the till", "text_fr": "Elle les change pour qu'ils correspondent à ce qu'il y a dans la caisse", "is_correct": False},
+            ],
+            "explanation_en": "The daily recording is one job; the wider work — classifying, checking against documents, summarising into reports and explaining what it means — is the other. Both together are accounting, which is bigger than bookkeeping alone.",
+            "explanation_fr": "L'enregistrement quotidien est un travail ; le travail plus large — classer, vérifier avec les pièces, résumer dans des rapports et expliquer ce que cela signifie — en est un autre. Les deux ensemble forment la comptabilité, qui est plus grande que la seule tenue de livres.",
+            "correction_en": "Accounting is more than writing down: after recording it classifies, checks, summarises and explains — that is the part bookkeeping alone does not do.",
+            "correction_fr": "La comptabilité est plus qu'écrire : après l'enregistrement, elle classe, vérifie, résume et explique — c'est ce que la seule tenue de livres ne fait pas.",
+            "remediation_section_position": 4,
         },
     ],
 }

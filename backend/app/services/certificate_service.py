@@ -4,7 +4,8 @@ Authoritative server-side course completion + certificate issuance (B1),
 plus privacy-safe public verification data (B3).
 
 A lesson counts as PASSED only when the user has attempted every question
-in that lesson and every attempt is correct (best_score == 100). The course
+in that lesson and every question's LATEST attempt is correct — counted over
+DISTINCT questions, never raw attempt rows (best_score == 100). The course
 is COMPLETE when every lesson in the curriculum is passed. Issuance is
 idempotent: the unique (user_id, course_slug) constraint means at most one
 certificate exists per user per course.

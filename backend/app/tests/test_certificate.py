@@ -317,3 +317,58 @@ def test_public_verification_is_read_only(client, test_db_session):
     for method in ("post", "put", "patch", "delete"):
         r = getattr(client, method)(f"/learning/certificates/verify/{cred_id}")
         assert r.status_code in (405, 404), f"{method.upper()} should be disallowed"
+
+
+# 15) Eligibility follows each question's LATEST attempt: one wrong retry on a
+#      previously-perfect course locks it again; correcting it unlocks again.
+def test_wrong_retry_relocks_course_until_corrected(client, test_db_session):
+    _register(client)
+    _complete_all_lessons(client, test_db_session)
+
+    body = client.get("/learning/completion").json()
+    assert body["completed"] is True
+    assert body["certificate_status"] == "available"
+
+    lessons = _lessons(client)
+    detail = _lesson(client, lessons[0]["id"])
+    q = detail["questions"][0]
+    rows = (
+        test_db_session.query(Answer)
+        .filter(Answer.question_id == q["id"])
+        .all()
+    )
+    wrong_key = next(a.option_key for a in rows if not a.is_correct)
+    right_key = next(a.option_key for a in rows if a.is_correct)
+
+    # One wrong retry on a previously-perfect lesson 1.
+    r = client.post(
+        "/learning/attempts",
+        json={
+            "lesson_id": detail["id"],
+            "question_id": q["id"],
+            "option_key": wrong_key,
+        },
+    )
+    assert r.status_code == 200 and r.json()["is_correct"] is False
+
+    body = client.get("/learning/completion").json()
+    assert body["completed"] is False  # Q1's latest attempt is now wrong
+    assert body["certificate_status"] == "locked"
+
+    # Correcting the SAME question restores perfect-score eligibility...
+    r = client.post(
+        "/learning/attempts",
+        json={
+            "lesson_id": detail["id"],
+            "question_id": q["id"],
+            "option_key": right_key,
+        },
+    )
+    assert r.status_code == 200 and r.json()["is_correct"] is True
+
+    body = client.get("/learning/completion").json()
+    assert body["completed"] is True
+    assert body["certificate_status"] == "available"
+    # ...and issuance still works (the idempotent rule is untouched).
+    assert client.post("/learning/certificate").status_code == 200
+

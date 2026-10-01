@@ -13,6 +13,7 @@ import {
   REVIEW_SUMMARY_STATE,
   reviewSummaryState,
 } from '../utils/reviewQueue';
+import { lessonProgressView } from '../utils/lessonProgress';
 
 /**
  * Learn Mode — lesson list with per-lesson and overall progress.
@@ -252,11 +253,14 @@ export default function LearnPage({ onOpenLesson, onStartReview }) {
       ) : null}
       <ol className="space-y-3">
         {lessons.map((lesson, idx) => {
-          const p = lesson.progress || {};
-          const total = p.questions_total || 0;
-          const answered = p.questions_answered || 0;
-          const pct = total ? Math.round((answered / total) * 100) : 0;
-          const status = p.status || 'not_started';
+          // Session 18: a bounded view of the SERVER's authoritative progress.
+          // The review-correction flow updates that payload server-side (94%
+          // -> 100%); these helpers only clamp the display.
+          const view = lessonProgressView(lesson.progress);
+          const total = view.total;
+          const answered = view.answered;
+          const pct = view.percent;
+          const status = view.status;
           return (
             <li key={lesson.id}>
               <button
@@ -286,7 +290,7 @@ export default function LearnPage({ onOpenLesson, onStartReview }) {
                   </div>
                   <span className="shrink-0 text-xs text-slate-500">
                     {answered}/{total}
-                    {p.best_score != null ? ` · ${p.best_score}%` : ''}
+                    {view.score != null ? ` · ${view.score}%` : ''}
                   </span>
                 </div>
               </button>

@@ -12,6 +12,259 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
+## Session 18 (Hotfix) — review fixes mastery (94% → 100%) and duplicate normal questions are gone
+
+**Date:** 2026-09-25 — focused learning-integrity hotfix. Accounting engine, workspace
+archive/delete, certificates (rule), payments, AI, QR/public verification, curriculum
+structure, C1 remediation design, C2 intervals and all question/answer ids were left
+alone. Lesson 1 keeps its 18-question total.
+
+**Root cause 1 — duplicate normal questions (VERIFIED, not guessed).** The dev
+Postgres database held **18 question rows for Lesson 1 with only 10 distinct
+positions**: positions 3–10 existed TWICE (ids 77–84 and 85–92, byte-identical
+`md5(question_en)`/`md5(question_fr)`, both sets carrying their own attempts and
+review cards). That is a **double seed insert** (two concurrent
+`ensure_default_lessons` runs — e.g. multi-worker startup): the seed upsert matches
+questions by position with `next(...)`, so the second batch never found the first
+batch's rows and inserted its own, and nothing ever healed them afterwards.
+`get_lesson` served `lesson.questions` ordered by `position` only, so the payload was
+`[1, 2, 3a, 3b, 4a, 4b, …]` → exactly the reported "Question 3 == Question 4,
+Question 5 == Question 6, …" with a denominator of 18. The frontend was NOT the
+cause (it renders the server list by `index + 1`), and no review card is ever merged
+into the lesson sequence.
+
+**Root cause 2 — a correct review answer never moved the score (VERIFIED).**
+`answer_review()` updated ONLY the review card's schedule: it created no `attempts`
+row and never called `_refresh_progress`. Mastery is rolled up from attempts (each
+distinct question judged by its LATEST attempt, since Session 17), so the missed
+question's latest attempt stayed wrong forever → 94% for ever. The frontend was
+already re-fetching (App.jsx mounts lesson / review / dashboard views exclusively,
+so every view remount refetches) — the stale 94% was the server's stored progress
+row, not a client cache.
+
+**Fix (deterministic, no AI, no display-only caps):**
+- `_heal_duplicate_question_positions(db)` (new, runs inside `ensure_default_lessons`
+  BEFORE the seed upsert, i.e. on every learning read/submit): for each lesson the
+  lowest-id row per position is canonical and keeps its position; later duplicates are
+  RENUMBERED to the next free positions. **Never deletes** — question ids, answer
+  ids, attempts and review cards are untouched (positions are seeded-order metadata).
+  Idempotent; a healed database performs no writes.
+- `_normal_questions(lesson)` (new) is now the single authority for "the normal
+  sequence": one row per immutable id AND per position, ascending position. It backs
+  the detail payload, `questions_total` and the progress roll-up; the
+  `Lesson.questions` relationship also gained a deterministic `position, id`
+  tie-break.
+- Seed `lesson_1.py` now defines the **fixed 18-question sequence** (positions
+  11–18 authored as 8 new, distinct EN/FR questions; section 1's "HOW THIS LESSON
+  WORKS" copy updated to describe 11–18). Their kinds/option-keys deliberately
+  mirror the duplicated rows they attach to (4/3 options, one short answer), so on an
+  existing database the renumbered rows receive the new content **in place** — same
+  ids, same answer ids, same history. Seed content/EN+FR translations were only
+  touched because duplicate seed positions were confirmed as the root cause.
+- `answer_review()` now records the graded review as an `attempts` row for the **same
+  immutable question id**, flushes, and calls `_refresh_progress()` in the same
+  transaction as the schedule. C2 scheduling (1/3/7/14-day ladder, wrong → stage 0
+  due now) is untouched, no practice posting, no confidence-card logic there.
+  Review endpoints still never expose the answer key.
+- Certificate rule UNCHANGED: `_lesson_passed()` is still exactly
+  `status == "completed" AND best_score == 100` — it just receives a corrected
+  roll-up now.
+- Frontend: new pure helpers `src/utils/lessonProgress.js`
+  (`uniqueQuestionSequence`, `safeQuestionIndex`, `displayedQuestionNumber`,
+  `nextQuestionIndex`, `lessonProgressView`) wired into `LessonDetailPage.jsx` and
+  `LearnPage.jsx` as display guards (dedupe, number clamped to 1..total, bounded
+  progress view). Backend stays authoritative.
+
+**The progress invariant enforced and tested:**
+```
+normal_questions        = unique seeded question IDs, ordered by unique fixed position
+len(normal_questions)   == 18 for Lesson 1 (positions 1..18, each exactly once)
+each normal question ID appears once; each normal position appears once
+0 <= resolved_distinct_questions <= 18
+0 <= displayed_current_position <= 18
+0 <= mastery_percentage <= 100
+```
+A review answer for question id `Q` updates/recalculates the resolution state of
+that same `Q` — it never creates a duplicate normal lesson question and never
+inflates progress (distinct-question counting is unchanged by review rows).
+
+**The 94% → 100% behavior:** a learner who finishes the 18-question sequence with
+exactly one initial error is at `18/18`, 17 correct → `best_score 94`, status
+`completed` (unchanged normal behavior). Correctly answering that missed question
+through the existing review flow records one more attempt on the SAME question id →
+`18/18`, `questions_correct 18`, `best_score 100`. History is append-only (every
+earlier attempt row survives); the certificate rule is untouched, so Lesson 1 alone
+still never unlocks the course certificate (`POST /learning/certificate` → 403).
+
+**Tests (written this session):**
+- Backend `test_learning_sequencing.py`: NEW
+  `test_lesson1_has_18_unique_ids_and_positions_1_through_18`,
+  `test_repeated_wrong_and_correct_events_never_move_question_3`,
+  `test_retries_reviews_and_refetches_never_duplicate_the_sequence`,
+  `test_legacy_duplicate_positions_are_healed_without_losing_history` (scratch
+  lesson, idempotency proven), `test_served_sequence_stays_unique_after_a_late_duplicate_row`.
+- Backend `test_learning_reviews.py`: NEW
+  `test_one_error_gives_94_then_review_correction_gives_100` (18/18 @94 → review →
+  18/18 @100, the new attempt row is on the same question id, all prior history
+  preserved, card ladder advanced to stage 1) and
+  `test_lesson_pass_predicate_is_exactly_completed_and_best_score_100`;
+  UPDATED `test_review_answers_do_not_change_progress_or_completion` (reviewing lesson
+  B never moves lesson A; review rows now exist and are asserted to belong to the
+  REVIEWED question/lesson).
+- Backend `test_lesson1_expansion.py`: 10 → 18 (structure, kinds, remediation map for
+  positions 11–18, totals, roll-up now 18/17/94) and the review-attempt contract;
+  `test_progress_backfill.py` + `test_learning.py`: shared `_correct_answer_payload()`
+  helper (reads the stored accepted short-answer text from the DB) so every
+  "answer everything correctly" loop survives Lesson 1's second short-answer
+  question (position 15).
+- Frontend NEW `src/utils/lessonProgress.test.mjs` (`npm run test:progression`, 14
+  checks) and `src/utils/i18nParity.test.mjs` (`npm run test:i18n`, 3 checks).
+
+**Validation actually run (this session):**
+- `backend/.venv/Scripts/python.exe -m pytest app/tests -q` → **214 passed**,
+  exit 0 (focused learning+certificate run first: 82 passed, exit 0).
+- `npm run test:progression` (14 checks), `npm run test:i18n` (3 checks),
+  `npm run test:feedback` (10), `npm run test:review` (10) → all exit 0;
+  `npm run build` → built in 14.14s, exit 0.
+- **Manual verification on the REAL dev database** (fresh disposable learner
+  `hotfix-verify-…@example.com`, deleted afterwards; no real data touched), driven
+  through the real API with the exact reported flow:
+  PRE-heal DB = 18 rows / 10 unique positions `[1,2,3,3,4,4,…]`; POST-heal DB = 18
+  rows / 18 unique positions 1..18 with ids 1,2,77–84 unchanged and the duplicates
+  renumbered to 11–18 — **every attempt and review row preserved** (e.g. id 85 kept
+  its 6 attempts, id 77 its 5). Learner run: Q1 ✓, Q2 ✓, Q3 ✗ (remediation offered)
+  → Continue → item 4 is the DISTINCT `Question 4/18` (id 78, different text);
+  Q4–Q18 all ✓ → `{'status': 'completed', 'best_score': 94, 'questions_total': 18,
+  'questions_answered': 18, 'questions_correct': 17}`; review queue showed exactly
+  1 due card for the missed question id 77; answering it correctly returned
+  `correct: true, stage: 1, interval_days: 1`; due-only list became `[]` and the
+  summary `{'due_now': 0, 'scheduled': 1}` (caught-up state); re-fetching the lesson
+  page AND the Learn dashboard both returned **18/18, best_score 100**; the served
+  sequence had 18 unique ids / 18 unique positions and zero adjacent duplicates;
+  `GET /learning/completion` = 7 lessons, 1 completed, `locked` and
+  `POST /learning/certificate` → 403 (rule unchanged); the learner ended with 19
+  attempt rows (18 lesson answers + 1 review resolution).
+
+**Next session should:** run the app in a browser for a visual pass over the
+18-question Lesson 1 (both EN and FR), keep an eye on the 14-day C2 ladder copy for
+learners whose cards are already caught-up (their mastery only heals on their next
+review answer or lesson retry — by design, since review history is not stored), and
+re-run `pytest app/tests -q` after any learning-content change.
+
+## Session 17 (Hotfix) — Learning progress counts DISTINCT questions (not attempt rows)
+
+**Date:** 2026-09-25 — Progress-reporting bugs in the learning module only
+(Lesson 1 "What Accounting Is and Why It Matters" upgrade context). Curriculum
+content, sequencing, review scheduling (C2), remediation (C1), the accounting
+engine and the certificate RULE were untouched. Preserved as required: lesson
+id/slug, question ids, answer ids, existing attempts, progress rows, issued
+certificates.
+
+**Root cause (not guessed):** `backend/app/learning/service.py::_refresh_progress`
+rolled up progress with `answered = len(attempts)` / `correct = sum(is_correct)`
+— i.e. raw `attempts` rows. Every retry added to the counts, which produced the
+reported "55 answered / 18 total"-style over-count, let `answered >= total`
+(and therefore `status == "completed"`) fire without the learner visiting every
+question, and made `best_score == 100` mathematically unreachable after any
+single wrong answer (contradicting Session 16's "review and correctly answer
+missed questions to reach 100" copy).
+
+**Fix (deterministic, no AI):**
+- `_refresh_progress` now buckets this lesson's attempts per `question_id` and
+  keeps only each question's LATEST attempt (attempt ids are insertion-ordered):
+  `answered = len(latest)` (DISTINCT questions), `correct` = distinct questions
+  whose latest attempt is correct, `best_score = round(correct / answered * 100)`
+  over that set. Completion (`answered >= total`) now requires every question to
+  have been visited at least once. `practice_posted` still scans all rows
+  (unchanged).
+- Docstrings/comments updated to the new semantics: `learning/schemas.py`
+  (`LessonProgressOut` field comments) and `services/certificate_service.py`
+  (module docstring). The certificate LOGIC is unchanged — `_lesson_passed()`
+  still requires `status == "completed" AND best_score == 100`; it just consumes
+  a correct roll-up now.
+- Frontend needs NO change: `LearnPage.jsx`/`LessonDetailPage.jsx` only render
+  server-provided `questions_answered`/`questions_total`/`best_score`; there is
+  no client-side attempt counting to fix.
+
+**Tests (written this session):**
+- `test_learning.py::test_mcq_scoring_correct_and_incorrect` — expectation
+  corrected: wrong-then-right on ONE question is `questions_answered == 1`
+  (was `== 2`, i.e. the raw-row bug previously encoded as a passing assertion).
+- `test_lesson1_expansion.py::test_scoring_covers_formative_and_final_questions`
+  — final roll-up now `10 / 9 / 90` (14 raw rows → 10 distinct questions; Q7's
+  latest attempt was the wrong "not-a-word").
+- NEW `test_learning.py::test_progress_counts_distinct_questions_not_attempt_rows`
+  — 5 attempts on one question stay at 1 answered; counts never exceed
+  `questions_total`; retries alone cannot fake "completed"; latest attempt
+  drives `questions_correct`/`best_score`.
+- NEW `test_learning.py::test_corrected_miss_recovers_best_score` — miss → 0%,
+  corrected → 100%, later wrong retry → 0% again.
+- NEW `test_certificate.py::test_wrong_retry_relocks_course_until_corrected` —
+  a perfect course locks on one wrong retry and unlocks when corrected;
+  issuing still returns 200 (idempotency untouched).
+- NEW `backend/app/tests/test_progress_backfill.py` (3 tests, this resumption)
+  — covers the backfill script below: heal + dry-run-no-write + idempotency;
+  rebuild of a progress row missing entirely (attempts-side pair); and
+  `completed_at` preservation (changed == 0) for a legitimately-completed
+  lesson.
+
+**Backfill for rows at rest (checklist item 3 — DONE as a `scripts/` recompute,
+NOT an Alembic migration):** `backend/scripts/recompute_progress.py` walks
+EVERY `(user, lesson)` pair — stored progress rows PLUS any attempts-without-row
+legacy pair — and re-derives each through the API's own `_refresh_progress`, so
+the healed values can never diverge from live behavior. Script choice over a
+data migration: it is re-runnable, idempotent (second run reports 0 changed),
+and previews exact field-level diffs with `--dry-run` (rolls back; writes
+nothing) before touching data. Two verified nuances: `_refresh_progress` stamps
+`completed_at = now()` on EVERY completed recompute (service.py lines
+500–502/522), so the script restores the stored timestamp when a row was
+already `completed` and remains `completed`; conversely a falsely-completed row
+that regresses to `in_progress` gets its stale stamp cleared by
+`_refresh_progress` itself (unconditional `row.completed_at = completed_at`).
+Run from `backend/` with the venv active:
+`.venv/Scripts/python.exe -m scripts.recompute_progress --dry-run`, review the
+diff, then drop `--dry-run`. Actually running it against dev Postgres is left
+to next session (shell dead).
+
+**`lastfailed` cache verdict (checklist item 2 — DONE): STALE.** All 6 entries
+(`test_organizations.py::test_default_currency_is_xaf` + 5
+`test_learning.py::test_*_review*` names) reference test functions that no
+longer exist anywhere in the sources — a 204-file search hits only the two
+cache files (`.pytest_cache/v/cache/lastfailed` and `nodeids`). Entries for
+tests that cannot be collected never run, so they cannot fail; they will drop
+out of the cache on the next real pytest run (deleting
+`.pytest_cache/v/cache/lastfailed` is also safe). No test action needed.
+
+**Environment limitation (still active):** the shell has been dead across two
+sessions — 11+ attempts (`echo SHELL_OK`, `python --version`,
+`git status --short`, the pytest command) all exit code 1 with "Command
+completion could not be observed". **pytest has still NEVER been run for any
+Session 17 change** and git status is unverified; all validation so far is
+source re-reading (done for every edited/new file, including line-level
+confirmation of `_refresh_progress` return value and `completed_at` handling).
+
+**Next session MUST:**
+1. FIRST restore a working shell (restart terminal/VS Code if needed), then run:
+   `cd backend && python -m pytest app/tests/test_learning.py
+   app/tests/test_certificate.py app/tests/test_lesson1_expansion.py
+   app/tests/test_learning_sequencing.py app/tests/test_learning_reviews.py
+   app/tests/test_progress_backfill.py -q`, then the full `python -m pytest`.
+   All green required — none of the Session 17 tests have EVER been executed
+   (shell dead all along), so debug failures before moving on (watch that
+   `/learning/completion` still carries `certificate_status`).
+2. `git status --short` — expect only: `backend/app/learning/service.py`,
+   `backend/app/learning/schemas.py`,
+   `backend/app/services/certificate_service.py`,
+   `backend/app/tests/{test_learning,test_lesson1_expansion,test_certificate,test_progress_backfill}.py`,
+   `backend/scripts/recompute_progress.py` (new), `PROGRESS_LOG.md`.
+3. Backfill rollout: `cd backend && .venv/Scripts/python.exe
+   -m scripts.recompute_progress --dry-run`, review the per-row diff, then drop
+   `--dry-run` to heal inflated/falsely-completed rows at rest.
+   (Checklist items 2 and 3 from this entry are now RESOLVED — cache verdict:
+   stale; backfill: script + 3 tests built.)
+
+
+
 ## Session 16 (Hotfix) — Fix lesson progression and review completion flow
 
 **Date:** 2026-09-23 — Two learner-facing defects only. Accounting engine,

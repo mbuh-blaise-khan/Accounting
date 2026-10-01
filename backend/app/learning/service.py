@@ -59,7 +59,7 @@ def _normalise(text: str) -> str:
 
 
 def _progress_dict(user: User, lesson: Lesson, row: LessonProgress | None) -> dict:
-    total = len(lesson.questions)
+    total = len(_normal_questions(lesson))
     if row is None:
         return {
             "status": "not_started",
@@ -79,6 +79,72 @@ def _progress_dict(user: User, lesson: Lesson, row: LessonProgress | None) -> di
     }
 
 
+def _normal_questions(lesson: Lesson) -> list[Question]:
+    """The lesson's FIXED normal sequence: one row per seeded position.
+
+    Deduplicates by immutable question id AND by seeded position (first row
+    per position wins, ties broken by id) and returns them in ascending
+    position order. This is the single authority for "the normal lesson
+    sequence" — progress totals, the detail payload and every downstream
+    counter derive from it, so a legacy row duplicated at the same position
+    can never be served twice or counted twice (Session 18 hotfix). Review
+    cards never appear here; they live only on their own endpoints.
+    """
+    out: list[Question] = []
+    seen_ids: set[int] = set()
+    seen_positions: set[int] = set()
+    for q in sorted(lesson.questions, key=lambda x: (x.position, x.id)):
+        if q.id in seen_ids or q.position in seen_positions:
+            continue
+        seen_ids.add(q.id)
+        seen_positions.add(q.position)
+        out.append(q)
+    return out
+
+
+def _heal_duplicate_question_positions(db: Session) -> int:
+    """Renumber legacy questions sharing a position (never delete rows).
+
+    Session 18 root-cause fix: two concurrent seed runs (multi-worker startup)
+    could each insert the same position, leaving a lesson with duplicated
+    question rows — the dev database served Lesson 1 positions 3-10 twice
+    ("Question 3 == Question 4" in the UI: 18 rows for 10 seeded questions).
+    The lowest-id row per position is canonical and keeps its position; every
+    duplicate is RENUMBERED to the next free position. Question ids, answer
+    ids, attempts and review cards are all untouched, so history keeps its
+    referential integrity — positions are seeded order metadata only.
+
+    Deterministic and idempotent: a healed database performs no writes. It
+    runs BEFORE the seed upsert so a renumbered row picks up the seed content
+    for its new position in place (dev rows renumbered to 11-18 receive seed
+    questions 11-18 on the same ids, keeping every attempt and review card).
+    Returns the number of rows renumbered.
+    """
+    renumbered = 0
+    for lesson in db.query(Lesson).all():
+        ordered = sorted(lesson.questions, key=lambda x: (x.position, x.id))
+        taken: set[int] = set()
+        duplicates: list[Question] = []
+        for q in ordered:
+            if q.position not in taken:
+                taken.add(q.position)
+            else:
+                duplicates.append(q)
+        if not duplicates:
+            continue
+        next_free = 1
+        for q in duplicates:
+            while next_free in taken:
+                next_free += 1
+            q.position = next_free
+            taken.add(next_free)
+            next_free += 1
+            renumbered += 1
+    if renumbered:
+        db.flush()
+    return renumbered
+
+
 def ensure_default_lessons(db: Session) -> None:
     """Idempotent, history-preserving seed: create/update the 7-lesson curriculum
     by slug.
@@ -95,6 +161,9 @@ def ensure_default_lessons(db: Session) -> None:
     attempts may reference, so FK violations on attempts.selected_answer_id are
     impossible.
     """
+    # Session 18: heal legacy duplicate positions BEFORE the upsert so each
+    # seed position maps to exactly one row (see the helper's docstring).
+    _heal_duplicate_question_positions(db)
     for data in LESSONS:
         lesson = db.query(Lesson).filter(Lesson.slug == data["slug"]).first()
         if lesson is None:
@@ -396,7 +465,7 @@ def get_lesson(db: Session, user: User, lesson_id: int) -> LessonDetailOut:
                 ],
                 posts_demo_transaction=q.posts_demo_transaction,
             )
-            for q in lesson.questions
+            for q in _normal_questions(lesson)
         ],
         progress=LessonProgressOut(**_progress_dict(user, lesson, row)),
     )
@@ -464,7 +533,22 @@ def _apply_practice_posting(
         db.rollback()
         return None, "Could not post the practice transaction into the workspace"
 def _refresh_progress(db: Session, user: User, lesson: Lesson) -> LessonProgress:
-    """Recompute + persist the rolled-up progress row for (user, lesson)."""
+    """Recompute + persist the rolled-up progress row for (user, lesson).
+
+    Roll-up semantics (Session 17 progress-fix): every count is DISTINCT
+    questions, never raw attempt rows — retrying the same question must not
+    inflate `questions_answered` (the reported "55 answered / 18 total"
+    symptom) and must not flip a lesson to `completed` before every question
+    was actually visited. For a question attempted more than once, only its
+    LATEST attempt decides correctness: a corrected miss recovers best_score,
+    a later wrong retry drops it again (deterministic, no AI).
+
+    Review answers are part of the same stream (Session 18): `answer_review`
+    records each graded review as an attempt on the SAME immutable question
+    id, so "latest authoritative resolution" covers both lesson attempts and
+    review resolutions with one rule. `total` comes from the deduplicated
+    normal sequence, so counts can never exceed the denominator.
+    """
     attempts = (
         db.query(Attempt)
         .filter(
@@ -473,9 +557,15 @@ def _refresh_progress(db: Session, user: User, lesson: Lesson) -> LessonProgress
         )
         .all()
     )
-    answered = len(attempts)
-    correct = sum(1 for a in attempts if a.is_correct)
-    total = len(lesson.questions)
+    # Bucket this lesson's attempts per question, keeping only each
+    # question's LATEST attempt (attempt ids are insertion-ordered): retries
+    # never inflate the counts, and correctness reflects current standing.
+    latest: dict[int, Attempt] = {}
+    for a in sorted(attempts, key=lambda x: x.id):
+        latest[a.question_id] = a
+    answered = len(latest)
+    correct = sum(1 for a in latest.values() if a.is_correct)
+    total = len(_normal_questions(lesson))
     best_score = round(correct / answered * 100) if answered else 0
 
     status_name = "not_started"
@@ -864,8 +954,14 @@ def answer_review(
       interval ladder is 1 / 3 / 7 / 14 days (stage 3+ stays at 14);
     - incorrect -> stage reset to 0 and due_at = now (immediately).
 
-    Review answers create NO `attempts` rows and touch NO lesson progress —
-    completion and certificate eligibility are unaffected by construction.
+    Session 18 hotfix — mastery linkage: each review answer IS recorded as an
+    `attempts` row for the SAME immutable question id and that lesson's
+    progress is rolled up from it (append-only history — nothing is ever
+    deleted or rewritten), so correctly resolving a previously missed question
+    updates current mastery (17/18 -> 18/18, 94% -> 100%). Completion and
+    certificate eligibility still follow the UNCHANGED rule
+    `status == "completed" AND best_score == 100` — this endpoint never
+    bypasses it; it feeds it the learner's current resolved state.
     User scoping: the card is looked up by (id, user_id); anything else is a
     plain 404, so one user can neither read nor answer another user's card.
     The response NEVER carries the answer key (no correct option key/text, no
@@ -891,6 +987,22 @@ def answer_review(
         question, option_key, text
     )
 
+    # Session 18 hotfix: the review answer is this question's LATEST
+    # authoritative resolution. Record it as an attempt row for the SAME
+    # immutable question id (append-only — historical attempts are never
+    # touched) so `_refresh_progress` folds it into current mastery exactly
+    # like a lesson retry. No practice posting and no confidence-card logic
+    # runs here — the C2 scheduling below is untouched.
+    attempt = Attempt(
+        user_id=user.id,
+        lesson_id=lesson.id,
+        question_id=question.id,
+        selected_answer_id=_selected_answer_id,
+        submitted_text=text,
+        is_correct=is_correct,
+    )
+    db.add(attempt)
+
     now = datetime.now(timezone.utc)
     interval_days = None
     if is_correct:
@@ -906,6 +1018,11 @@ def answer_review(
         item.stage = 0
         item.due_at = now  # due again immediately
         item.last_outcome = "review_wrong"
+    # autoflush=False: flush the pending attempt first so the roll-up query
+    # sees it, then persist mastery in the SAME transaction as the schedule.
+    db.flush()
+    _refresh_progress(db, user, lesson)
+
     # Capture BEFORE commit: commit expires ORM attributes and a re-read would
     # return engine-dependent (naive on SQLite) datetimes.
     stage_after = item.stage

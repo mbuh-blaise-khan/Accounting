@@ -131,6 +131,11 @@ def answer_review(
     correct advances the stage (1 / 3 / 7 / 14-day ladder), incorrect resets to
     stage 0 and is due again immediately. The response never exposes the
     answer key — only the learner-safe feedback object from Part C1.
+
+    Session 18: the answer is also recorded as the question's latest
+    resolution (an attempt row on the SAME immutable question id) and rolls
+    that lesson's progress up, so a corrected miss moves current mastery.
+    The certificate rule itself is unchanged.
     """
     return learning_service.answer_review(
         db,

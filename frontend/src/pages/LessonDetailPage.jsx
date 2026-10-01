@@ -9,6 +9,12 @@ import {
   sectionAnchorId,
 } from '../utils/lessonFeedback.js';
 import { CONFIDENCE, confidencePayload } from '../utils/reviewQueue.js';
+import {
+  displayedQuestionNumber,
+  lessonProgressView,
+  safeQuestionIndex,
+  uniqueQuestionSequence,
+} from '../utils/lessonProgress.js';
 
 /**
  * Lesson detail — content sections, then one question at a time with instant
@@ -138,7 +144,11 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
   }
 
   const fr = lang === 'fr';
-  const questions = lesson.questions || [];
+  // Session 18: defensively project the server's FIXED sequence — one entry
+  // per immutable question id and per seeded position (see
+  // utils/lessonProgress.js). The server already heals/deduplicates, so on a
+  // healthy payload this is the unchanged list.
+  const questions = uniqueQuestionSequence(lesson.questions);
   // COMPLETION CONTRACT (hotfix): `done` means the last question of the fixed
   // list has been answered (even if incorrectly) — it is a statement about
   // POSITION in the sequence, never about mastery. Reaching here requires the
@@ -146,7 +156,10 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
   const total = questions.length;
   const done = qIndex >= total;
   const isFinal = !done && qIndex + 1 >= total;
-  const q = done ? null : questions[qIndex];
+  // The displayed number/position is always clamped into 1..total — it can
+  // never exceed the denominator or point past the served sequence.
+  const currentNumber = displayedQuestionNumber(qIndex, total);
+  const q = done ? null : questions[safeQuestionIndex(qIndex, total)];
 
   async function check() {
     if (checking || result || !q) return;
@@ -208,10 +221,12 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
     : '';
 
   const p = progress || {};
-  const answered = p.questions_answered || 0;
-  const lessonPct = p.questions_total
-    ? Math.round((answered / p.questions_total) * 100)
-    : 0;
+  // Session 18: every displayed number comes from the server payload (the
+  // review-correction flow updates that payload server-side); the view only
+  // bounds it for display.
+  const view = lessonProgressView(p, total);
+  const answered = view.answered;
+  const lessonPct = view.percent;
   const title = fr ? lesson.title_fr : lesson.title_en;
 
   return (
@@ -230,9 +245,9 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
             />
           </div>
           <span className="shrink-0 text-xs text-slate-500">
-            {answered}/{p.questions_total || total}
+            {answered}/{view.total}
             {p.best_score != null
-              ? ` · ${t('learn.score')} ${p.best_score}%`
+              ? ` · ${t('learn.score')} ${view.score}%`
               : ''}
           </span>
         </div>
@@ -269,7 +284,7 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
         ) : (
           <>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              {t('learn.question')} {qIndex + 1}/{total}
+              {t('learn.question')} {currentNumber}/{total}
             </p>
             <h2 className="mt-1 text-base font-semibold text-slate-900">
               {fr ? q.question_fr : q.question_en}
@@ -342,9 +357,9 @@ export default function LessonDetailPage({ lessonId, orgId, onBack, focusSection
               <Feedback
                 result={result}
                 question={q}
-                questionNumber={qIndex + 1}
+                questionNumber={currentNumber}
                 questionTotal={total}
-                isLastQuestion={qIndex + 1 >= total}
+                isLastQuestion={isFinal}
                 fr={fr}
                 t={t}
                 onNext={next}

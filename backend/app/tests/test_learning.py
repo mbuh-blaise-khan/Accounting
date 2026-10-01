@@ -98,6 +98,21 @@ def _attempt(client, lesson_id, question_id, lang=None, **extra):
     return r.json()
 
 
+def _correct_answer_payload(db, q):
+    """Deterministic CORRECT-answer payload for a question dict from the API.
+
+    MCQ: the stored correct option key (via `_answer_keys`). Short answer: the
+    stored accepted text read straight from the DB (the API never exposes it).
+    Keeps every "answer all questions correctly" loop correct as lessons grow
+    new short-answer questions (Session 18: Lesson 1 gained position 15).
+    """
+    if q["kind"] == "mcq":
+        correct, _wrong = _answer_keys(db, q["id"])
+        return {"option_key": correct}
+    row = db.query(Question).filter(Question.id == q["id"]).one()
+    return {"text": row.short_answer_en or row.short_answer_fr}
+
+
 EXPECTED_SLUGS = [
     "what-is-accounting",
     "the-accounting-equation",
@@ -172,7 +187,7 @@ def test_mcq_scoring_correct_and_incorrect(client):
     right = _attempt(client, lesson1["id"], q1["id"], option_key="A")
     assert right["is_correct"] is True
     assert right["correct_option_key"] == "A"
-    assert right["progress"]["questions_answered"] == 2
+    assert right["progress"]["questions_answered"] == 1  # ONE distinct question (2 attempt rows)
     assert right["progress"]["questions_correct"] == 1
 
 
@@ -621,3 +636,70 @@ def test_lesson_sync_is_idempotent(client, test_db_session):
         test_db_session.query(Lesson).filter(Lesson.slug == "what-is-accounting").count()
     )
     assert count_after_second == 1
+
+
+# --- 11) Progress roll-up counts DISTINCT questions, not raw attempt rows -------
+
+def test_progress_counts_distinct_questions_not_attempt_rows(client, test_db_session):
+    """Regression (Session 17): retries must never inflate progress — the
+    reported symptom showed "55 answered / 18 total". `questions_answered`
+    counts DISTINCT questions; `questions_correct`/`best_score` judge each
+    question by its LATEST attempt; a lesson can only complete after every
+    question was actually visited."""
+    _register(client)
+    lesson, detail = _lesson_by_slug(client, "what-is-accounting")
+    q1, q2 = detail["questions"][0], detail["questions"][1]
+    c1, w1 = _answer_keys(test_db_session, q1["id"])
+    c2, w2 = _answer_keys(test_db_session, q2["id"])
+
+    # Five attempts on the SAME question -> 5 raw rows, ONE distinct question.
+    for key in (w1, c1, w1, c1, c1):
+        _attempt(client, lesson["id"], q1["id"], option_key=key)
+    p = _lesson_by_slug(client, "what-is-accounting")[1]["progress"]
+    assert p["questions_answered"] == 1
+    assert p["questions_correct"] == 1  # latest attempt on Q1 is correct
+    assert p["best_score"] == 100  # round(1 / 1 * 100)
+    assert p["questions_answered"] <= p["questions_total"]
+    # Retries on ONE question must never fake completion (total is 18).
+    assert p["status"] == "in_progress"
+
+    # A second DISTINCT question adds exactly one to the counts.
+    _attempt(client, lesson["id"], q2["id"], option_key=c2)
+    p = _lesson_by_slug(client, "what-is-accounting")[1]["progress"]
+    assert p["questions_answered"] == 2
+    assert p["questions_correct"] == 2
+    assert p["best_score"] == 100
+
+    # Wrong retries on Q2 drag the score down without moving the counts.
+    for _ in range(3):
+        _attempt(client, lesson["id"], q2["id"], option_key=w2)
+    p = _lesson_by_slug(client, "what-is-accounting")[1]["progress"]
+    assert p["questions_answered"] == 2
+    assert p["questions_correct"] == 1  # Q2's LATEST attempt is wrong
+    assert p["best_score"] == 50  # round(1 / 2 * 100)
+    assert p["status"] == "in_progress"
+
+
+def test_corrected_miss_recovers_best_score(client, test_db_session):
+    """Session 16's promise made testable: a missed question answered correctly
+    restores best_score over everything answered so far; a later wrong attempt
+    on the same question regresses it again (latest attempt wins, deterministic).
+    """
+    _register(client)
+    lesson, detail = _lesson_by_slug(client, "what-is-accounting")
+    q = detail["questions"][0]
+    correct, wrong = _answer_keys(test_db_session, q["id"])
+
+    _attempt(client, lesson["id"], q["id"], option_key=wrong)
+    p = _lesson_by_slug(client, "what-is-accounting")[1]["progress"]
+    assert (p["questions_answered"], p["questions_correct"], p["best_score"]) == (1, 0, 0)
+
+    _attempt(client, lesson["id"], q["id"], option_key=correct)
+    p = _lesson_by_slug(client, "what-is-accounting")[1]["progress"]
+    assert (p["questions_answered"], p["questions_correct"], p["best_score"]) == (1, 1, 100)
+
+    _attempt(client, lesson["id"], q["id"], option_key=wrong)
+    p = _lesson_by_slug(client, "what-is-accounting")[1]["progress"]
+    assert (p["questions_answered"], p["questions_correct"], p["best_score"]) == (1, 0, 0)
+    assert p["status"] == "in_progress"
+
