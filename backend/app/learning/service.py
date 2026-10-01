@@ -77,15 +77,27 @@ _PRACTICE_DESCRIPTION = "Learn Mode: cash sale posted from Lesson 4 practice"
 # (a sequence, a timeline, ascending values the learner must read in order).
 # Shuffling those harms comprehension, so they are exempt. `_MEANINGFUL_...`
 # below is the documented exemption list, keyed by lesson slug -> the question
-# POSITIONS whose options keep their seeded order. Lesson 2 currently has NO
-# exempt questions: its numeric options (Q1, Q7, Q12, Q13, Q14) are competing
-# answers to "what is the figure", not a sequence whose order is being tested,
-# so reordering them improves assessment integrity without harming
-# comprehension. The mechanism is kept so a future ordered question can opt out
-# by adding its position here.
-_OPTION_ORDER_LESSON_SLUGS = frozenset({"the-accounting-equation"})
+# POSITIONS whose options keep their seeded order.
+#   - Lesson 2: none. Its numeric options (Q1, Q7, Q12, Q13, Q14) are competing
+#     answers to "what is the figure", not a sequence whose order is being
+#     tested, so reordering them improves assessment integrity without harming
+#     comprehension.
+#   - Lesson 3 (`debits-and-credits`): none, and this was checked explicitly.
+#     Every closed-ended question there offers ALTERNATIVE candidate entries or
+#     statements, so the order of the options never conveys the answer; the
+#     lesson contains no "list these steps in order", no chronological sequence
+#     and no ordered list whose sequence IS the correct answer. The order that
+#     matters (debit side vs credit side) lives INSIDE each option's text
+#     ("Dr X / Cr Y"), which the permutation never touches.
+# The mechanism is kept so a future genuinely ordered question can opt out by
+# adding its position here.
+_OPTION_ORDER_LESSON_SLUGS = frozenset({
+    "the-accounting-equation",
+    "debits-and-credits",
+})
 _MEANINGFUL_OPTION_ORDER: dict[str, frozenset[int]] = {
     "the-accounting-equation": frozenset(),
+    "debits-and-credits": frozenset(),
 }
 
 

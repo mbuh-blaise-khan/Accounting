@@ -12,6 +12,177 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
+## Session 21 — Expand Module 1 Lesson 3: debits and credits (in place)
+
+**Date:** 2026-10-01 — content expansion of Module 1 Lesson 3
+(`slug: debits-and-credits`, curriculum position 3) from 3 sections / 3
+questions to **10 sections / 18 questions**, EN + FR. No duplicate lesson, no
+parallel course, no replacement IDs, no new curriculum path. The only
+non-content change is adding the existing lesson slug to the deterministic
+option-display gate (already introduced for Lesson 2 in Session 20).
+
+**What was built — `backend/app/learning/seed_data/lesson_3.py`:**
+- **Identity preserved:** slug `debits-and-credits`, position 3,
+  `title_en` "Debits and credits" / `title_fr` "Le débit et le crédit"
+  unchanged. The three ORIGINAL questions keep their positions (1, 2, 3),
+  question ids, answer ids, option keys, correct answers and accepted
+  short-answer texts — verified byte-identical in the seed AND after upsert in
+  the database. Q3 deliberately remains the FIRST `short_answer` in served
+  order (`debited` / `débitée`), which the existing cross-file tests rely on.
+- **10 sections, EN + FR, all headed:** 1 What you will learn (objectives +
+  `BEFORE YOU START` prerequisite + how-this-lesson-works + honesty promise) ·
+  2 Debit and credit: the two sides of one entry (kills the "debit = money in"
+  myth; Dr/Cr are the two columns) · 3 The golden rule: total debits = total
+  credits · 4 Assets and expenses move on the debit side · 5 Liabilities,
+  equity and income move on the credit side · 6 The parts of an entry + the
+  vocabulary to know (account, journal, ledger, posting, balance, entry,
+  reversing entry; Dr/Cr written after the account name; the platform's
+  ILLUSTRATIVE demo codes 5711/7011, explicitly not an official chart) ·
+  7 The paper behind every entry (source documents per transaction) ·
+  8 Worked example: one day at the shop (four Wednesday entries, day totals
+  323 000 = 323 000) · 9 Your turn: Thursday at the shop (three more entries
+  with the answers worked out) · 10 Going further + one honest note.
+- **Cameroon / local-small-business context throughout:** the same
+  "Manka'a Provisions" Bamenda shop used in Lessons 1 and 2 — Nkwen Market as
+  supplier, Mama Ndifor as a credit customer, the unpaid ENEO electricity
+  bill, Mobile Money float, a delivery bicycle, a bank loan, XAF with zero
+  decimals throughout.
+- **Arithmetic is internally consistent and was verified programmatically:**
+  Wednesday debits 150 000 + 120 000 + 45 000 + 8 000 = **323 000**, credits
+  323 000. Thursday entries (credit sale 22 000, supplier payment 30 000,
+  drawings 5 000) each balance individually. Q13 asks for the Wednesday debit
+  total.
+- **18 questions, unique fixed positions 1..18:** Q1–Q3 original; Q4 asset
+  side; Q5 liability side; Q6 a balanced cash purchase; Q7 an expense entry;
+  Q8 an unbalanced entry; Q9 the income side; Q10 the parts of an entry;
+  Q11 owner capital; Q12 the "money in / money out" myth; Q13 the worked-example
+  day total; Q14 guided practice B (paying a supplier); Q15 guided practice C
+  (drawings); Q16 the French term (short answer); Q17 a posted entry may only
+  be corrected by a reversing entry; Q18 the honest boundary. Every question
+  carries `explanation_en/fr`, `correction_en/fr` and a
+  `remediation_section_position` inside this lesson (2, 3, 2, 4, 5, 4, 4, 3, 5,
+  6, 5, 2, 8, 9, 9, 2, 6, 10).
+- **Sources (Section 10), named by title, nothing reproduced:** OHADA
+  SYSCOHADA (ohada.org, named as the source of the debit/credit convention),
+  IFRS Foundation / IASB (ifrs.org), IFAC / IAESB International Education
+  Standards (ifac.org), ACCA Foundations in Accountancy (accaglobal.com).
+  OPTIONAL ACADEMIC READING is a clearly separated block: Neba, Akoso Wilfred
+  (UBa) and Kueda Wamba, Berthelo (FEMS) — public listable work only, with the
+  explicit sentence that NO UBa endorsement is claimed or implied and nothing
+  from their papers is copied, in EN and FR. The honest note states in EN and
+  FR that the course does **not** make anyone a professional or regulated
+  accountant (recognised study + supervised experience + professional body
+  membership; ONECCA named for Cameroon).
+
+**Data / progression safeguards (verified, not assumed):**
+- Upsert is by immutable identity, never position alone (the existing
+  `(question_id, option_key)` answer upsert and by-position question upsert
+  were not modified). A **double repeat seed/upsert is now a test**: it creates
+  no extra lesson/section/question/answer rows and preserves every question id
+  and every answer id.
+- One normal question row per immutable ID: 18 unique ids, positions unique and
+  contiguous 1..18, and `(position, id)` ordering contains no adjacent duplicate
+  ids.
+- Deterministic normal ordering: `position` with the immutable-id tie-breaker
+  (unchanged Session 18 behavior; no question can ever occupy a second
+  position).
+- Remediation pointers validated in BOTH representations: the seed's
+  `remediation_section_position` (authored position) and the persisted
+  `remediation_section_id` (stored FK) — every persisted FK resolves to a
+  Section row that belongs to Lesson 3 and carries the expected unique
+  position. The seed-position → section-id translation is the sync's job; the
+  two are different representations of the same pointer, not a defect.
+- Progress/mastery uses distinct immutable question ids, never raw attempts;
+  displayed progress can never exceed the fixed total of 18 (asserted after
+  every answer in the full-walk test and in the manual flow).
+- Correct review resolution updates mastery for the SAME original question id.
+- Certificate rule unchanged: `status == "completed" AND best_score == 100`
+  for ALL seven lessons (verified: two completed lessons still leave the course
+  locked, `POST /learning/certificate` → 403).
+- Lesson 1 and Lesson 2 content, ids, question rows and learner history were not
+  touched; both still serve 18 unique questions at positions 1..18.
+**Answer-option integrity (`_OPTION_ORDER_LESSON_SLUGS` in
+`backend/app/learning/service.py`):** `debits-and-credits` was added to the
+deterministic display-order gate (BLAKE2b permutation seeded from the immutable
+question/answer ids — never a clock, random seed or session). This was a
+deliberate compatibility decision, checked explicitly: **every** closed-ended
+Lesson 3 question offers ALTERNATIVE candidate entries or statements, so the
+order of the options never conveys the answer — there is no "list these steps in
+order", no chronological sequence and no ordered list whose sequence IS the
+correct answer. The order that matters (debit side vs credit side) lives INSIDE
+each option's text (`Dr X / Cr Y`), which the permutation never touches. The
+meaningful-order exemption list `_MEANINGFUL_OPTION_ORDER` is documented and
+empty for this lesson; the mechanism remains for a future genuinely ordered
+question. Display order is stable across repeat fetch, refresh, navigation
+away/back and review cards, and identical in EN and FR, while grading continues
+to resolve the submitted `option_key` to its `Answer` row by id — the stored
+answer positions and any historic `attempts.selected_answer_id` are untouched.
+Correct answers are not systematically revealed: they land in all three visible
+slots.
+
+**Regression checks actually run:**
+- Integrity checker (seed + freshly seeded disposable DB): slug/position, 10
+  sections at 1..10, 18 questions at 1..18, unique ids, unique contiguous
+  positions, `(position, id)` no adjacent duplicates, EN/FR prompt + answer +
+  explanation + correction content, exactly one correct answer per closed-ended
+  question, seed pointers resolve, persisted FKs resolve to Lesson 3 sections
+  matching the authored positions, originals unchanged, double seed idempotent,
+  Lessons 1 and 2 unchanged — **all PASS**.
+- `pytest app/tests/test_lesson3_expansion.py app/tests/test_lesson2_option_order.py
+  app/tests/test_lesson2_expansion.py app/tests/test_lesson1_expansion.py -q`
+  → **51 passed, RC=0**.
+- `cd backend && .venv/Scripts/python.exe -m pytest app/tests -q` →
+  **252 passed, 13 warnings in 892.64s (0:14:52), RC=0**.
+- `cd frontend && npm run test:progression` → **14 checks passed, RC=0**;
+  `npm run test:feedback` → **10 checks passed, RC=0**;
+  `npm run test:review` → **10 checks passed, RC=0**;
+  `npm run test:i18n` → **3 checks passed, RC=0**;
+  `npm run build` → **RC=0, vite 6.4.3, 79 modules, built in 56.19s**;
+  overall **OVERALL_RC=0**.
+- Two stale assertions in MY OWN new test file were corrected before the final
+  run (a `[1:]` slice that skipped position 1, and a `completed_lessons == 1`
+  expectation that should be 2 once two lessons are completed). One scope
+  assertion in `test_lesson2_option_order.py` was widened because Lesson 3
+  legitimately joined the display gate; it now asserts every lesson OUTSIDE
+  the gate keeps seed order. No production behavior was changed to satisfy any
+  test.
+
+**Manual flow with a disposable learner** (real dev Postgres, learner
+`manual-l3-flow@example.com` created then deleted with its attempts, reviews and
+progress): opened Lesson 3 → 10 sections, 18 questions, all ids distinct,
+numbered 1..18 with no gaps/duplicates, no adjacent duplicates. Answered Q1 and
+Q2 correctly; Q3 incorrectly → feedback with explanation + correction, C1
+remediation to Lesson 3 section 2, one due review card linked to the same
+question id, and no answer-key leak in feedback. Continued to Q4 → a DISTINCT
+question, the served sequence unchanged. Continued through Q9 (progress 9
+answered / 18 total, numerator never exceeded total). Refreshed three times →
+same ids/order and authoritative resumed progress (9 answered, 8 correct, 89%).
+Finished the remaining normal questions → 18/18, 17 correct, 94%, `completed`.
+Completed the due review for the missed Q3 → review `correct=True`, stage 1 /
++1 day, exactly ONE new attempt row on the SAME immutable question id, mastery
+→ 18/18 at **100%**, and the queue caught up (no due cards left). Lesson 1 and
+Lesson 2 were unaffected (18 questions each, unique ids, positions 1..18,
+progress unchanged; 247 pre-existing attempts untouched). Certificate rule
+intact: `completed_lessons 1/7`, `certificate_status "locked"`, POST → 403,
+while Lesson 3 itself now satisfies `status == "completed" AND best_score == 100`.
+
+**Files changed (intentionally, only these):**
+- `backend/app/learning/seed_data/lesson_3.py` (content only)
+- `backend/app/learning/service.py` (Lesson 3 slug added to the existing
+  display-order gate + documented exemption comment)
+- `backend/app/tests/test_lesson3_expansion.py` (new, 14 tests)
+- `backend/app/tests/test_lesson2_option_order.py` (one scope assertion updated)
+- `PROGRESS_LOG.md` (this entry)
+No seed deletion, migration, schema, model or frontend file changed. All
+temporary checker/verification scripts and output files were removed before
+staging.
+
+**Next session suggestion:** Lesson 4 (`journal-entries`) is next (3 sections /
+3 questions) and additionally carries the Learn→Practice connector: its correct
+answer on the flagged practice question posts a real balanced transaction. That
+connector must keep working after expansion; its `posts_demo_transaction` flag
+and the 5711/7011 codes are asserted in `test_learning.py`.
+
 ## Session 20 (Hotfix) — Lesson 2 answer options are balanced, not always correct-first
 
 **Date:** 2026-10-01 — focused assessment-quality hotfix for Module 1 Lesson 2

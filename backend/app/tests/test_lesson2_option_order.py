@@ -304,20 +304,27 @@ def test_attempts_review_mastery_and_certificate_still_work(client,
     assert client.post("/learning/certificate").status_code == 403
 
 
-# --- 7) Lesson 1 (and every other lesson) is untouched -----------------------
-def test_lesson1_and_other_lessons_keep_seed_answer_order(client,
-                                                           test_db_session):
+# --- 7) Lessons OUTSIDE the display-order gate are untouched ----------------
+def test_lessons_outside_the_gate_keep_seed_answer_order(client,
+                                                         test_db_session):
+    """Only lessons listed in the gate are permuted; every other lesson is
+    still served in its stored seed order, byte for byte."""
     _register(client)
-    for slug in (L1_SLUG, "debits-and-credits", "journal-entries"):
+    gated = set(_OPTION_ORDER_LESSON_SLUGS)
+    # "debits-and-credits" joined the gate in the Lesson 3 expansion, so the
+    # untouched set here is Lesson 1 and the still-unexpanded Lessons 4-7.
+    for slug in (L1_SLUG, "journal-entries", "journal-to-ledger",
+                 "the-trial-balance", "reading-financial-statements"):
+        assert slug not in gated, slug
         _lesson, detail = _lesson_by_slug(client, slug)
         for q in detail["questions"]:
             stored, _correct = _stored_keys(test_db_session, q["id"])
             assert [a["option_key"] for a in q["answers"]] == stored, (
-                "%s question %s was reordered — only Lesson 2 may be"
+                "%s question %s was reordered but it is not in the gate"
                 % (slug, q["id"])
             )
     assert L1_SLUG not in _OPTION_ORDER_LESSON_SLUGS
-    assert SLUG in _OPTION_ORDER_LESSON_SLUGS
+    assert SLUG in _OPTION_ORDER_LESSON_SLUGS  # Lesson 2 is gated
 
 
 def test_lesson1_integrity_safeguards_unchanged(client, test_db_session):
