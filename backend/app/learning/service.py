@@ -15,6 +15,7 @@ Deterministic engine rule (see .clinerules): nothing here decides a
 debit/credit outcome with AI. The practice posting uses fixed, balanced
 double-entry lines against the org's own chart (Cash Dr / Sales Cr).
 """
+import hashlib
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -52,6 +53,82 @@ from app.services import posting_service, transaction_service
 from app.services.organization_service import get_organization_for_user
 
 _PRACTICE_DESCRIPTION = "Learn Mode: cash sale posted from Lesson 4 practice"
+
+# --- Assessment-quality option display order (Lesson 2 hotfix) ----------------
+#
+# ROOT CAUSE: `Question.answers` is loaded `ORDER BY position`, i.e. straight
+# from seed order, and both read paths (`get_lesson` and `_review_item_out`)
+# serialized that list verbatim. In Lesson 2 every closed-ended question was
+# authored with `is_correct: True` on the FIRST option, so the correct answer
+# was rendered in displayed position 1 for EVERY question — a positional
+# pattern a learner can exploit without understanding the accounting.
+#
+# FIX (deterministic, display-only): the stored answer rows are never touched.
+# Only the ORDER OF THE SERIALIZED LIST changes, computed from the immutable
+# `questions.id` and `answers.id` — never from a clock, a random seed or the
+# user's session — so the same question always renders the same option order on
+# first render, refresh, navigation away/back, retry, feedback, the review queue
+# and both EN/FR renderings. `option_key` values are unchanged, and grading
+# still resolves the submitted `option_key` to its `Answer` row by id in
+# `_score_submission`, so correctness, attempts, review items, progress,
+# remediation and the certificate rule are all unaffected.
+#
+# MEANINGFUL-ORDER EXCEPTION: an option list can have a genuine intrinsic order
+# (a sequence, a timeline, ascending values the learner must read in order).
+# Shuffling those harms comprehension, so they are exempt. `_MEANINGFUL_...`
+# below is the documented exemption list, keyed by lesson slug -> the question
+# POSITIONS whose options keep their seeded order. Lesson 2 currently has NO
+# exempt questions: its numeric options (Q1, Q7, Q12, Q13, Q14) are competing
+# answers to "what is the figure", not a sequence whose order is being tested,
+# so reordering them improves assessment integrity without harming
+# comprehension. The mechanism is kept so a future ordered question can opt out
+# by adding its position here.
+_OPTION_ORDER_LESSON_SLUGS = frozenset({"the-accounting-equation"})
+_MEANINGFUL_OPTION_ORDER: dict[str, frozenset[int]] = {
+    "the-accounting-equation": frozenset(),
+}
+
+
+def _stable_rank(*parts: object) -> int:
+    """A process-stable integer derived from `parts`.
+
+    Uses BLAKE2b, not Python's built-in `hash()`, because `hash()` of a str is
+    randomized per process (PYTHONHASHSEED) and would give a different option
+    order after every server restart — i.e. non-deterministic across refreshes.
+    """
+    joined = "\x1f".join(str(p) for p in parts)
+    digest = hashlib.blake2b(joined.encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, "big")
+
+
+def _display_answers(question: Question, lesson_slug: str) -> list[Answer]:
+    """The option rows to SERIALIZE for one question, in display order.
+
+    Returns a NEW list; the ORM collection is never mutated, so the stored
+    `answers.position`, `option_key`, `is_correct` and every attempt/review row
+    that references an `answers.id` are untouched.
+    """
+    answers = list(question.answers)  # stored order (position, id) — untouched
+    if question.kind != "mcq" or len(answers) < 2:
+        return answers
+    if lesson_slug not in _OPTION_ORDER_LESSON_SLUGS:
+        return answers
+    if question.position in _MEANINGFUL_OPTION_ORDER.get(lesson_slug, frozenset()):
+        return answers  # documented meaningful-order exemption
+
+    # Seed from the immutable question id and the immutable answer ids, so the
+    # permutation is a pure function of stored identity: identical on every
+    # fetch, in both languages, and in the review queue (same question id).
+    seed = (question.id, tuple(sorted(a.id for a in answers)))
+    n = len(answers)
+    order = list(range(n))
+    # Deterministic Fisher-Yates: every swap is drawn from the stable rank, and
+    # ties fall back to the previous index order, so a collision can never make
+    # the result depend on dict/list iteration order.
+    for i in range(n - 1, 0, -1):
+        j = _stable_rank(seed, "swap", i) % (i + 1)
+        order[i], order[j] = order[j], order[i]
+    return [answers[i] for i in order]
 
 
 def _normalise(text: str) -> str:
@@ -461,7 +538,7 @@ def get_lesson(db: Session, user: User, lesson_id: int) -> LessonDetailOut:
                         text_en=a.text_en,
                         text_fr=a.text_fr,
                     )
-                    for a in q.answers
+                    for a in _display_answers(q, lesson.slug)
                 ],
                 posts_demo_transaction=q.posts_demo_transaction,
             )
@@ -895,7 +972,7 @@ def _review_item_out(item: ReviewItem, now: datetime) -> ReviewItemOut:
             QuestionAnswerOut(
                 option_key=a.option_key, text_en=a.text_en, text_fr=a.text_fr
             )
-            for a in question.answers
+            for a in _display_answers(question, lesson.slug)
         ],
         stage=item.stage,
         due_at=due_at,

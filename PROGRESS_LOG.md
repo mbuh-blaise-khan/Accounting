@@ -12,6 +12,168 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
+## Session 20 (Hotfix) — Lesson 2 answer options are balanced, not always correct-first
+
+**Date:** 2026-10-01 — focused assessment-quality hotfix for Module 1 Lesson 2
+only (`slug: the-accounting-equation`). Content, wording, question positions,
+answer text, correct-answer semantics, scoring, the seed/upsert, the duplicate-
+position healing, review-to-mastery, C1/C2/C3, the certificate rule, Lesson 1,
+the accounting engine, workspaces, payments, AI and QR/public verification were
+all left exactly as Session 19 left them.
+
+**Root cause (verified, not guessed).** `Question.answers` is declared
+`order_by="Answer.position"` in `app/models/learning.py`, so both read paths —
+`get_lesson` and `_review_item_out` (the review payload) — serialized the
+options **in stored seed position order**. In Lesson 2 every closed-ended
+question was authored with `is_correct: True` on the FIRST option
+(`option_key: "A"`, `position: 1`). The frontend renders options by iterating
+that array and has no index-based letter labels (it uses `option_key` as the
+radio value/key), so the learner saw the correct answer as the first option on
+EVERY closed-ended question: a positional pattern scoreable by guessing, with no
+accounting understood. Nothing was wrong with scoring, the seed, or the
+frontend — the correct option simply happened to be stored first everywhere.
+
+**Deterministic ordering approach (smallest safe change).** Added
+`_display_answers(question, lesson_slug)` and `_stable_rank(...)` to
+`app/learning/service.py`, used in the two option-serialization lists. The
+function returns a **NEW list**; the ORM collection is never mutated, so
+`answers.position`, `option_key`, `is_correct` and every attempt / review-item
+row referencing an `answers.id` are untouched. The permutation is a
+deterministic Fisher–Yates seeded from the immutable `questions.id` and the
+sorted immutable `answers.id` — never from a clock, a random seed, the request
+or the session. `_stable_rank` uses **BLAKE2b, not Python's built-in
+`hash()`**, because `hash()` of a string is randomized per process
+(`PYTHONHASHSEED`) and would hand a learner a different option order after every
+server restart — non-deterministic across refreshes, exactly what this hotfix
+had to avoid. Because both read paths call the same helper with the same
+immutable ids, the lesson view and the review view always agree.
+**Grading is unchanged and still never uses the displayed index.** The server
+resolves the submitted `option_key` to its `Answer` row by id in
+`_score_submission`; `option_key` values were not modified. Display order and
+grading order are now fully independent, which is the point.
+
+**Scope and exemptions.** `_OPTION_ORDER_LESSON_SLUGS` is an explicit
+frozenset containing only `"the-accounting-equation"`, so Lesson 1 and Lessons
+3–7 keep their seeded option order byte-for-byte. `_MEANINGFUL_OPTION_ORDER` is
+the documented meaningful-order exemption list, keyed by lesson slug → the
+question POSITIONS that must keep their seeded order. **Lesson 2 currently has
+no exempt question**, and that is a deliberate, documented decision rather than
+an omission: its numeric option sets (Q1 150,000/250,000/50,000; Q7
+300,000/560,000/130,000; Q12 250,000/254,000/258,000; Q13
+250,000/686,000/218,000; Q14 245,000/250,000/711,000) are competing answers to
+"what is the figure", not a sequence, timeline or ordering the learner is being
+asked to read — none was authored in ascending order, so reordering improves
+assessment integrity without harming comprehension. No "all of the
+above"/"none of the above" option exists in Lesson 2, and none was introduced.
+The mechanism stays so a future genuinely ordered question can opt out by adding
+its position to that dict.
+
+**Effect (measured, not asserted).** Because the permutation derives from the
+immutable answer ids, each database gets its own stable order — the intended
+compatibility-safe behaviour (identical forever within a database, independent
+of content edits and of any past attempt). Against the real dev Postgres
+database the 15 closed-ended Lesson 2 questions now place the correct answer at
+displayed positions **{1: 5, 2: 5, 3: 5}** (previously {1: 15}). A freshly
+seeded throwaway SQLite database (different answer ids) produced {1: 8, 2: 5,
+3: 2} — all three slots used, none dominant, never all first. Short-answer
+questions (Q2, Q6, Q16) are untouched by construction: they have no option rows
+and the helper returns early for `kind != "mcq"`.
+
+**Tests — `backend/app/tests/test_lesson2_option_order.py` (10 tests, new):**
+1. every closed-ended question has valid, unique answer ids (unique ids, unique
+   option keys, contiguous stored positions, exactly one `is_correct`, all
+   options served) and the served option set equals the stored option set;
+2/3. the correct answer is NOT always in displayed position 1, all three slots
+   are used, and no single slot dominates — excluding documented meaningful-order
+   questions;
+4. grading is by option key, not display position: the correct key scores
+   correct, any other key scores wrong, and the graded key still resolves to the
+   same stored EN/FR text the learner saw;
+5. stored answer rows are never reordered or rewritten — id, position and
+   `is_correct` for every row byte-identical after twelve wrong/correct
+   submissions;
+6. the display order is identical across repeated fetch, refresh/resume, after a
+   wrong answer (feedback + retry), in the review payload for the same question,
+   and after that card is answered; also identical between EN and FR rendering
+   (order language-independent, texts localized);
+7. `_display_answers` is a pure function of the immutable ids (five identical
+   runs, a genuine permutation, storage untouched);
+8. attempts, review items, progress, mastery and the certificate rule still work
+   end to end (wrong answer → card → review correct → 94% → 100%,
+   `completed_lessons == 1` of 7, certificate `locked`, POST → 403);
+9. Lesson 1, Lesson 3 and Lesson 4 are all still served in their stored seed
+   order, and the slug gate contains only Lesson 2;
+10. Lesson 1's integrity safeguards unchanged: 18 unique ids at positions 1..18,
+    seeded option order preserved, correct/wrong grading by option key, 18/18
+    answered with 17/18 correct (94%), review correction → 100%, and
+    `POST /learning/certificate` still 403.
+**One existing assertion updated.** `test_lesson2_expansion.py::
+test_original_three_questions_preserved` asserted the SERVED option order was
+`["A","B","C"]` — it had pinned the very defect being fixed. It now asserts the
+option-key SET (`{"A","B","C"}`) on the API payload and that the STORED rows are
+still the original `A,B,C` with `[True, False, False]`, which is the property
+that actually protects historical attempts.
+
+**Test / build output actually observed:**
+- Focused: `pytest app/tests/test_lesson2_option_order.py
+  app/tests/test_lesson2_expansion.py -q` → **24 passed, RC=0**. Earlier
+  iterations failed 3× then 1×, always on the NEW test code and never on the
+  fix: a helper assuming every question has answer rows (short-answer questions
+  have none), an over-strict "Lesson 1 is always correct-first" claim (Lesson 1
+  Q4 has its correct option at C), an invalid `option_key` access on a dict, and
+  a review card picked by index instead of by `question_id`. Each was corrected
+  to assert the property that actually matters.
+- `cd backend && .venv/Scripts/python.exe -m pytest app/tests -q` →
+  **238 passed, 13 warnings in 337.96s (0:05:37), RC=0.**
+- `cd frontend && npm run test:progression` → **14 checks passed, RC=0**;
+  `npm run test:feedback` → **10 checks passed, RC=0**;
+  `npm run test:review` → **10 checks passed, RC=0**;
+  `npm run test:i18n` → **3 checks passed, RC=0**;
+  `npm run build` → **RC=0, vite 6.4.3, 79 modules transformed, built in
+  31.90s** (only the pre-existing chunk-size advisory).
+- No frontend change was needed: `LessonDetailPage.jsx` and `ReviewPage.jsx`
+  both render `(q.answers || []).map(...)` in array order and submit
+  `a.option_key`, so they follow the server's order with no code change and no
+  index assumption to break.
+
+**Manual verification with a disposable learner** (`MODE: postgres (real
+configured DATABASE_URL)`, learner `manual-optorder@example.com` created and
+then deleted together with its attempts, review cards and progress row):
+- Lesson 2 identity unchanged: `slug=the-accounting-equation position=2
+  questions_total=18`.
+- Correct-option display positions: **#1 ×5, #2 ×5, #3 ×5** across the 15
+  closed-ended questions (e.g. Q1 displayed `C,B,A` correct at #3; Q4 displayed
+  `B,A,C` correct at #2; Q5 displayed `B,C,A` correct at #3) — varied positions,
+  no longer guessable from the layout.
+- Refresh / resume / navigation away-and-back: order **identical** after 3
+  re-fetches plus a navigate-away-and-back cycle.
+- EN and FR render the **same option order** (texts localized as before).
+- Answer selection still works when the correct option is not first: submitting
+  the WRONG option key on Q5 → `is_correct=False`, explanation + correction
+  present, remediation to `section_position=5`; the review card for that
+  question rendered the **identical** option order; answering it correctly →
+  `correct=True`; the lesson order was still identical afterwards.
+- **Lesson 1 untouched:** 18 questions, all still served in stored seed order,
+  progress `not_started`; completion `completed_lessons: 0 / 7`,
+  `certificate_status: "locked"`; `POST /learning/certificate` → **403**.
+
+**Files changed (intentionally, only these):**
+- `backend/app/learning/service.py` (the two option-serialization lists plus the
+  new `_stable_rank` / `_display_answers` helpers and their configuration)
+- `backend/app/tests/test_lesson2_option_order.py` (new)
+- `backend/app/tests/test_lesson2_expansion.py` (one assertion updated)
+- `PROGRESS_LOG.md` (this entry)
+No seed data, migration, schema, model or frontend file was touched. All
+temporary verification scripts and output files were removed before staging.
+
+**Next session suggestion:** Lesson 3 (`debits-and-credits`) still has all three
+closed-ended questions correct-first and will show the same pattern to learners.
+Because the gate `_OPTION_ORDER_LESSON_SLUGS` is a plain frozenset, enabling it
+there is a one-line change once that lesson's meaningful-order questions are
+reviewed — Lesson 3 Q1 asks which two sides a cash sale has and Q3 asks whether
+cash is debited or credited, so those need an explicit exemption decision before
+the slug is added.
+
 ## Session 19 — Expand Module 1 Lesson 2: the accounting equation (in place)
 
 **Date:** 2026-10-01 — content-only lesson expansion. NO engine change, NO

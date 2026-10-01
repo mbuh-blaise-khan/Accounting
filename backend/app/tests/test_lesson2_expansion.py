@@ -106,7 +106,19 @@ def test_original_three_questions_preserved(client, test_db_session):
     q1, q2, q3 = detail["questions"][:3]
     assert (q1["kind"], q1["position"]) == ("mcq", 1)
     assert "200,000" in q1["question_en"] and "200 000" in q1["question_fr"]
-    assert [a["option_key"] for a in q1["answers"]] == ["A", "B", "C"]
+    # The SET of option keys is unchanged. (Their DISPLAY order is a
+    # deterministic function of the immutable answer ids — see the option-order
+    # hotfix — so it is asserted in the option-order tests, not here.)
+    assert {a["option_key"] for a in q1["answers"]} == {"A", "B", "C"}
+    # ...and the STORED rows are still the original A/B/C, correct-first.
+    stored1 = (
+        test_db_session.query(Answer)
+        .filter(Answer.question_id == q1["id"])
+        .order_by(Answer.position)
+        .all()
+    )
+    assert [a.option_key for a in stored1] == ["A", "B", "C"]
+    assert [a.is_correct for a in stored1] == [True, False, False]
     correct1, _w1 = _answer_keys(test_db_session, q1["id"])
     assert correct1 == "A"
     # The FIRST short answer in served order stays position 2 with the
