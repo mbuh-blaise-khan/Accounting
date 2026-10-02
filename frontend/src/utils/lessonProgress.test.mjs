@@ -256,6 +256,51 @@ check('the caught-up review state still works after answering all due cards', ()
   assert.equal(reviewSummaryState(null), null)
 })
 
+// --- 8) Lesson 4 (journal entries) uses the same fixed-sequence contract ------
+// Lesson 4 is the expanded lesson that also carries the Learn->Practice
+// connector. The UI helpers are lesson-agnostic, so the SAME contract must hold
+// for its 18-question payload, including the connector question at position 1.
+const lesson4Questions = healthy18.map((q, i) => ({
+  ...q,
+  posts_demo_transaction: i === 0,
+}))
+
+check('the Lesson 4 sequence is 18 unique ids/positions with the connector at 1', () => {
+  const seq = uniqueQuestionSequence(lesson4Questions)
+  assert.equal(seq.length, 18)
+  assert.deepEqual(seq.map((q) => q.position), [...Array(18).keys()].map((n) => n + 1))
+  assert.equal(new Set(seq.map((q) => q.id)).size, 18)
+  assert.equal(seq[0].posts_demo_transaction, true)
+  assert.equal(seq.filter((q) => q.posts_demo_transaction).length, 1)
+})
+
+check('Lesson 4 never renders an adjacent duplicate after a wrong answer', () => {
+  // A buggy server echoing the just-answered question twice must still render
+  // one row per immutable id / position.
+  const withEcho = [lesson4Questions[4], lesson4Questions[4], ...lesson4Questions]
+  const seq = uniqueQuestionSequence(withEcho)
+  assert.equal(new Set(seq.map((q) => q.id)).size, seq.length)
+  for (let i = 1; i < seq.length; i += 1) {
+    assert.notEqual(seq[i].id, seq[i - 1].id)
+    assert.notEqual(seq[i].position, seq[i - 1].position)
+  }
+})
+
+check('Lesson 4 numbering stays inside 1..18 and practicePosted is a stable flag', () => {
+  assert.equal(displayedQuestionNumber(0, 18), 1)
+  assert.equal(displayedQuestionNumber(17, 18), 18)
+  assert.equal(displayedQuestionNumber(17, 18) <= 18, true)
+  const posted = lessonProgressView({
+    questions_total: 18,
+    questions_answered: 18,
+    questions_correct: 18,
+    best_score: 100,
+    practice_posted: true,
+  })
+  assert.equal(posted.practicePosted, true)
+  assert.equal(posted.percent, 100)
+})
+
 console.log(`\n${passed} checks passed`)
 
 

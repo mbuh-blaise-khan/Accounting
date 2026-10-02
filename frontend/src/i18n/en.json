@@ -390,7 +390,7 @@
     "loading": "Loading lessons…",
     "loadError": "Could not load the lessons. Please try again.",
     "yourAnswer": "Your answer",
-    "practiceHint": "Answer correctly and a practice transaction is posted to your demo workspace.",
+    "practiceHint": "Answer this correctly and the lesson posts one real practice transaction into your demo workspace. Answering again will not post a second one.",
     "lesson": "Lesson",
     "backToLessons": "All lessons",
     "question": "Question",

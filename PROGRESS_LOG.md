@@ -12,6 +12,221 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
+## Session 22 — Expand Module 1 Lesson 4: journal entries (in place)
+
+**Date:** 2026-10-02 — content expansion of Module 1 Lesson 4
+(`slug: journal-entries`, curriculum position 4) from 3 sections / 2 questions to
+**10 sections / 18 questions**, EN + FR. No duplicate lesson, no duplicate
+course, no duplicate slug, no replacement IDs, no new curriculum path — the
+existing lesson was expanded in place.
+
+**Identity confirmed before writing anything (nothing was invented):**
+- slug `journal-entries`, position 4,
+- `title_en` "Recording a transaction (journal entries)" /
+  `title_fr` "Enregistrer une opération (écritures de journal)" — unchanged,
+- original questions: Q1 at **position 1** (mcq, options A–D, **A** correct)
+  and Q2 at **position 2** (mcq, options A–C, **A** correct),
+- **Practice connector** lives on Q1 only: `posts_demo_transaction = True`,
+  `practice_amount = 25000` — both unchanged and still at position 1,
+- C1 integration: every question carries `explanation_*`, `correction_*` and a
+  `remediation_section_position` that resolves to a section **of this lesson**,
+- downstream assumptions found and honoured: `test_learning.py` (curriculum
+  order, connector end-to-end OHADA + IFRS), `test_lesson1_expansion.py::
+  test_lesson4_connector_assumptions_unchanged` (exactly one flagged question,
+  at position 1), `test_lesson2_option_order.py` (Lesson 4 was NOT in the
+  display-order gate).
+
+**What was built — `backend/app/learning/seed_data/lesson_4.py`:**
+- **Originals preserved byte-for-byte in meaning:** Q1 and Q2 keep their
+  positions, question ids, answer ids, option keys, correct answers,
+  explanations and corrections. Only their **remediation pointers** were
+  re-aimed at the sections that now carry the same meaning (Q1 → section 5 "the
+  anatomy of a journal entry", Q2 → section 2 "the journal: the diary of the
+  business"), because the old section 1/2 no longer exist as such. No question
+  or answer identity changed.
+- **10 sections, EN + FR, all headed:** 1 What you will learn (objectives +
+  BEFORE YOU START + the shop we follow + how this lesson works + AN HONEST
+  PROMISE) · 2 The journal: the diary of the business (chronological,
+  append-only) · 3 Source documents: the paper behind the entry (sales
+  receipt, supplier invoice, bank/Mobile Money slip, ENEO/Camwater/Camtel
+  bill, credit note, owner's note) · 4 Transaction analysis: four questions
+  before you write (what happened → which accounts → which way → does it
+  balance) · 5 The anatomy of a journal entry (date = the transaction's date,
+  narration/libellé, exact account names, Dr/Cr written AFTER the account name,
+  amounts, totals) · 6 Two columns (debit left / credit right, indenting,
+  dating) · 7 Worked example: Thursday at the shop (three documents → three
+  balanced entries) · 8 Your turn: two more documents (settlement pair) ·
+  9 When you get it wrong (correcting vs reversing entries, C1 remediation, C2
+  review, confidence flagging) · 10 Going further — sources and one honest note.
+- **Cameroon / local small-business context throughout:** the same
+  "Manka'a Provisions" Bamenda shop used in Lessons 1–3 — Nkwen Market as
+  supplier, Mama Ndifor as the slow-paying customer, ENEO electricity, Mobile
+  Money, XAF with zero decimals.
+- **Arithmetic verified programmatically:** Thursday 3 March debits
+  25,000 + 120,000 + 15,000 = **160,000** = credits. Q12 asks for that total.
+- **18 questions, unique fixed positions 1..18:** Q1–Q2 original; Q3 supplier
+  invoice; Q4 short answer ("invoice"/"facture"); Q5 first analysis question;
+  Q6 which date to use; Q7 short answer ("libellé"); Q8 useful vs useless
+  narration; Q9 where Dr/Cr go; Q10 an unbalanced entry is refused; Q11 credit
+  purchase; Q12 day debit total; Q13 credit sale (receivables vs cash); Q14
+  drawings are not an expense; Q15 the settlement pair; Q16 correcting vs
+  reversing a posted entry; Q17 what "I guessed" does; Q18 the honest scope
+  question. Correct options are authored at DIFFERENT positions
+  (A,A,C,–,C,B,–,C,C,B,C,C,C,B,B,C,B,C) so the answer is never revealed by
+  layout.
+- **Sources, correctly framed:** OHADA / SYSCOHADA (Acte uniforme relatif au
+  droit comptable et à l'information financière, adopted 26 January 2017) named
+  as a signpost only and explicitly flagged as **not** the law being taught and
+  **not** an official chart (this platform's charts are an illustrative demo
+  subset); IFRS Foundation/IASB; IFAC/IAESB; ACCA FIA — all by name and URL
+  with **nothing reproduced**. **OPTIONAL** academic reading (Neba, UBa; Kueda
+  Wamba, FEMS) is clearly labelled, listed by public work only, with **no UBa or
+  FEMS endorsement claimed or implied**. Section 10 and Q18 state plainly that a
+  perfect score does **not** make anyone a professional or regulated accountant
+  and does not authorise signing or filing (ONECCA named as the Cameroon
+  professional body).
+
+**Safeguards (all permanent ones preserved):**
+- Seed/upsert by immutable identity, never position alone; insert/update only,
+  never delete.
+- Original questions/answers and every historic attempt, review card, progress
+  row and certificate keep their meaning and ids.
+- Unique immutable question id + unique contiguous position 1..18; served order
+  is position then immutable-id tie-break (`_normal_questions`).
+- No duplicate rows and no adjacent duplicate questions after repeated seed.
+- Wrong answer → C1 feedback/correction/remediation + C2 review card → the NEXT
+  DISTINCT question; never an immediate repeat.
+- Progress/mastery counts DISTINCT question ids, bounded by the fixed total.
+- Refresh/navigation resumes from authoritative persisted server progress.
+- A correct review answer updates mastery for the SAME original question id.
+- Grading resolves the submitted `option_key` to an Answer row **by id**, never
+  by display index.
+- `journal-entries` was **added to the deterministic display-order gate**
+  (`_OPTION_ORDER_LESSON_SLUGS`) with an EMPTY meaningful-order exemption. This
+  was checked question by question: no Lesson 4 option list is chronological,
+  procedural or order-bearing — every list is alternative candidate entries,
+  documents, dates, narrations, amounts or statements. The order that matters
+  (Dr vs Cr, date vs narration) lives INSIDE each option's text, which the
+  permutation never touches. Lesson and Review render the identical order (same
+  immutable ids, same `_display_answers`).
+- The certificate rule is untouched: `status == "completed" AND
+  best_score == 100`.
+**Defect found and fixed — the Practice connector was NOT idempotent.**
+`_apply_practice_posting` created and posted a NEW transaction on **every**
+correct submission, so a refresh, a retry, a double-click or a duplicate
+submission would quietly post the same business event twice into the user's own
+workspace and inflate their trial balance — the connector would have been the
+one place in this platform where one business event could be counted twice.
+Added `_existing_practice_post()`, which looks up prior attempts by **immutable
+identity** (user id + question id + organization id + `practice_posted`) and
+returns the SAME transaction id when it still exists, so the connector is now
+exactly-once. If that transaction no longer exists (workspace deleted, or the
+posting rolled back) it posts afresh rather than leaving a dangling reference.
+`_apply_practice_posting` now also takes the question so the guard runs inside
+the same membership-checked context (`get_organization_for_user`) — a caller can
+never post into a workspace they do not belong to. The response contract is
+unchanged (`practice_posted`, `practice_transaction_id`, `practice_error`); the
+id is now a stable confirmation handle instead of a per-click value. The
+frontend hint (`learn.practiceHint`) was reworded in EN and FR to say that
+exactly one transaction is posted and that answering again does not post a
+second one.
+
+**Tests (written this session):** `backend/app/tests/test_lesson4_expansion.py`,
+**14 tests** covering the nine required areas: (1) identity, curriculum order and
+exactly one lesson row/slug; (2) original ids, option keys, correct answers and
+connector data; (3) 10 sections / 18 unique ids / unique contiguous positions,
+no adjacent duplicates, reads never expose `is_correct`; (4) EN/FR parity,
+explanations, corrections, every remediation pointer resolving inside the lesson,
+no claim of professional status anywhere; (5) repeated re-sync changes no
+question id, no answer id, no attempt, no progress, no review card and no
+transaction; (6) wrong answer → remediation + review card → next DISTINCT
+question, and a second wrong answer never creates a new slot or a second card;
+(7) bounded progress (never exceeds 18), review correction lands on the SAME
+question id and lifts 94 → 100, refresh resumes from persisted progress;
+(8) stable answer-identity grading and deterministic, non-revealing option
+display in both languages; (9) Review renders the identical option order;
+(10) connector posts exactly one balanced transaction (25,000, OHADA 5711/7011),
+is idempotent across retries with an un-inflated trial balance, and refuses a
+non-member's workspace; (11) certificate rule unchanged; (12) Lessons 1–3
+invariants unchanged. Frontend `lessonProgress.test.mjs` gained 3 Lesson 4
+checks (17 checks total).
+**Validation actually run (this session):**
+- Backend, run as `cd backend && .venv/Scripts/python.exe -m pytest app/tests -q`.
+  The shell in this environment terminates a single foreground run, so the suite
+  was executed as four consecutive chunks covering **all 24 test files**, each
+  to completion:
+  - accounts + auth + certificate + health + ledger + reference_query +
+    reversal + trial_balance → **68 passed** (450.54s)
+  - learning + learning_reviews + learning_sequencing + progress_backfill +
+    lesson1_expansion → **67 passed** (197.26s)
+  - lesson2_expansion + lesson2_option_order + lesson3_expansion +
+    lesson4_expansion → **52 passed** (338.91s)
+  - business_profile + financial_statements + journal + organizations +
+    pdf_export + transactions + workspace_archive_delete → **79 passed**
+    (45.28s)
+  - **Total: 266 passed, 0 failed.** Focused run of the new file on its own:
+    **14 passed in 89.37s**; the four connector tests on their own: **4 passed
+    in 9.61s**. Only pre-existing third-party deprecation warnings
+    (starlette/httpx, reportlab, and the pre-existing
+    `HTTP_422_UNPACKABLE_ENTITY` warnings in accounts/organizations/
+    transactions) were emitted — no new warnings.
+- `npm run test:progression` → **17 checks passed**, exit 0 (14 pre-existing
+  + 3 new Lesson 4 checks).
+- `npm run test:feedback` → **10 checks passed**, exit 0.
+- `npm run test:review` → **10 checks passed**, exit 0.
+- `npm run test:i18n` → **3 checks passed**, exit 0.
+- `npm run build` → `✓ 79 modules transformed`, **`✓ built in 41.72s`**, exit 0
+  (the "chunks are larger than 500 kB" note is pre-existing and unrelated).
+- **Manual verification with a disposable learner** was driven through the real
+  API by the new tests, each against its own throwaway user/workspace in the
+  isolated test database (no real data touched, nothing to clean up):
+  - *Fixed distinct sequence and numbering* — Lesson 4 serves 18 questions,
+    18 unique ids, positions exactly 1..18 in order, no adjacent duplicate;
+    the UI helper keeps the displayed number inside 1..18.
+  - *Wrong answer then next distinct question* — position 5 answered wrong
+    returned `is_correct: false`, a C1 `remediation` block pointing at section 4,
+    and exactly one C2 review card for that question id; the following item was
+    the DISTINCT question 6 (position + 1). Answering it wrong again created no
+    new slot and no second card.
+  - *Refresh/resume* — re-fetching the lesson page and the Learn dashboard after
+    every step returned the same authoritative persisted progress; a review
+    correction re-fetched the lesson and returned the identical progress object.
+  - *Progress never exceeds the total* — after 18 questions: `questions_total
+    18 / answered 18 / correct 17 / best_score 94 / status completed`; retrying
+    the missed question correctly still reported `answered: 18` (not 19) and
+    `best_score: 100`.
+  - *Review correction updates mastery* — answering the due card correctly
+    returned `correct: true` and added exactly ONE attempt row, on the SAME
+    question id; progress went 17 → 18 correct and 94 → 100.
+  - *Lesson/review answer order is stable and does not reveal the answer* — the
+    served option order was byte-identical across repeat fetches, refresh,
+    `?lang=fr`, and after answering; the review card rendered the identical
+    order for the same question; the correct option was not always in displayed
+    position 1, and grading was verified to follow the stable `option_key`.
+  - *Practice connector posts exactly one transaction and never duplicates* —
+    a wrong answer posted nothing; the first correct answer returned
+    `practice_posted: true`, `practice_error: null` and a transaction id, with
+    the workspace holding exactly one POSTED transaction with 2 balanced lines
+    (OHADA 5711 debit 25,000 / 7011 credit 25,000) and a balanced trial balance
+    at 25,000. Three further identical correct submissions (retry / double-click /
+    refreshed page re-submitting) all returned the **SAME** transaction id, the
+    workspace still held **exactly one** transaction row, and the trial balance
+    was **not** inflated. A second, non-member user was refused (grading still
+    correct, `practice_posted: false`, a `practice_error`, and zero transactions
+    created anywhere).
+  - *Lessons 1–3 unaffected* — all three still serve 18 unique questions at
+    positions 1..18 with unchanged content, option-display gating and full
+    correct passes reaching `completed` / `best_score 100`; none of them carries
+    the connector. The course certificate stayed LOCKED
+    (`completed_lessons < 7`, `certificate_status: "locked"`,
+    `POST /learning/certificate` → 403).
+
+**Next session suggestion:** Lesson 5 (`journal-to-ledger`, still 3 sections /
+2 questions) is next, with no connector. Lesson 4's remediation re-aiming is the
+pattern to reuse: keep the original questions' ids, keys and meaning, and point
+their remediation pointers at whichever expanded section now carries that same
+meaning.
+
 ## Session 21 — Expand Module 1 Lesson 3: debits and credits (in place)
 
 **Date:** 2026-10-01 — content expansion of Module 1 Lesson 3

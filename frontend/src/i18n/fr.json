@@ -390,7 +390,7 @@
     "loading": "Chargement des leçons…",
     "loadError": "Impossible de charger les leçons. Veuillez réessayer.",
     "yourAnswer": "Votre réponse",
-    "practiceHint": "Répondez correctement et une écriture d'exercice est enregistrée dans votre espace de démonstration.",
+    "practiceHint": "Répondez correctement et la leçon enregistre une seule écriture d'exercice réelle dans votre espace de démonstration. Répondre à nouveau n'en registrera pas une deuxième.",
     "lesson": "Leçon",
     "backToLessons": "Toutes les leçons",
     "question": "Question",

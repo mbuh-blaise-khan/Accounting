@@ -49,10 +49,52 @@ from app.models.learning import (
     ReviewItem,
 )
 from app.models.user import User
+from app.models.transaction import Transaction
 from app.services import posting_service, transaction_service
 from app.services.organization_service import get_organization_for_user
 
+#: Immutable marker of the connector's posting intent. It is part of the posted
+#: transaction's plain-language description, so an existing practice transaction
+#: stays recognisable forever (posted records are never edited or deleted).
 _PRACTICE_DESCRIPTION = "Learn Mode: cash sale posted from Lesson 4 practice"
+
+
+def _existing_practice_post(
+    db: Session, user: User, question: Question, org_id: int
+) -> int | None:
+    """The transaction id this user ALREADY got from this connector, or None.
+
+    IDEMPOTENCY GUARD (Lesson 4 expansion). `submit_attempt` is reachable from a
+    retry, a double-click, a duplicate submission or a refreshed page that
+    re-submits the same correct answer. Without this guard, each of those would
+    post ANOTHER balanced cash sale into the user's own workspace and quietly
+    inflate their trial balance - the connector would be the one place in this
+    platform where the same business event could be counted twice.
+
+    The lookup is by IMMUTABLE IDENTITY - (user, question id, organization id) -
+    never by position, never by date and never by a caller-supplied flag, so a
+    re-seed, a re-order or a renamed question cannot re-arm the connector. Only a
+    transaction that still EXISTS is returned: if the workspace was deleted or
+    the posting was rolled back, `None` is returned and the connector posts
+    afresh, which is correct behaviour rather than a dangling reference.
+    """
+    prior = (
+        db.query(Attempt)
+        .filter(
+            Attempt.user_id == user.id,
+            Attempt.question_id == question.id,
+            Attempt.organization_id == org_id,
+            Attempt.practice_posted.is_(True),
+            Attempt.practice_transaction_id.isnot(None),
+        )
+        .order_by(Attempt.id.asc())
+        .all()
+    )
+    for attempt in prior:
+        txn = db.get(Transaction, attempt.practice_transaction_id)
+        if txn is not None:
+            return txn.id
+    return None
 
 # --- Assessment-quality option display order (Lesson 2 hotfix) ----------------
 #
@@ -89,15 +131,28 @@ _PRACTICE_DESCRIPTION = "Learn Mode: cash sale posted from Lesson 4 practice"
 #     and no ordered list whose sequence IS the correct answer. The order that
 #     matters (debit side vs credit side) lives INSIDE each option's text
 #     ("Dr X / Cr Y"), which the permutation never touches.
+#   - Lesson 4 (`journal-entries`): none, and this was checked explicitly. Every
+#     closed-ended question there offers ALTERNATIVE candidate entries,
+#     documents, dates, narrations, amounts or statements - never a set whose
+#     order IS the answer. The lesson contains no "list these steps in order"
+#     question: the four analysis steps and the five parts of an entry are taught
+#     in the SECTION BODY prose (which the engine never reorders), never as
+#     options the learner is asked to read in sequence. Amount options such as
+#     "145,000 / 155,000 / 160,000 / 175,000" are competing answers to "what is
+#     the figure", not an ascending sequence being tested. The order that matters
+#     (Dr vs Cr, date vs narration) lives INSIDE each option's text, which the
+#     permutation never touches.
 # The mechanism is kept so a future genuinely ordered question can opt out by
 # adding its position here.
 _OPTION_ORDER_LESSON_SLUGS = frozenset({
     "the-accounting-equation",
     "debits-and-credits",
+    "journal-entries",
 })
 _MEANINGFUL_OPTION_ORDER: dict[str, frozenset[int]] = {
     "the-accounting-equation": frozenset(),
     "debits-and-credits": frozenset(),
+    "journal-entries": frozenset(),
 }
 
 
@@ -561,17 +616,30 @@ def get_lesson(db: Session, user: User, lesson_id: int) -> LessonDetailOut:
 
 
 def _apply_practice_posting(
-    db: Session, user: User, org_id: int, amount
+    db: Session, user: User, question: Question, org_id: int, amount
 ) -> tuple[int | None, str | None]:
     """Lesson 4 connector: post the fixed, balanced cash-sale entry.
 
     Returns (transaction_id, error). Uses the org's OWN chart: OHADA by real
     SYSCOHADA codes (5711 Cash / 7011 Sales of goods - local), IFRS by the
-    IAS-1 template names. Never raises into the grading path — an inability
+    IAS-1 template names. Never raises into the grading path - an inability
     to post is surfaced as practice_error, not a failed attempt.
+
+    IDEMPOTENT: an already-posted transaction for this (user, question,
+    organization) is returned unchanged instead of posting a second one, so a
+    refresh, a retry, a double-click or a duplicate submission can never post the
+    same business event twice (see `_existing_practice_post`). The returned id is
+    identical on every call, so the client can treat it as a stable
+    confirmation handle.
     """
     try:
         org = get_organization_for_user(db, user, org_id)
+        # Correct org/workspace context: membership is enforced here by
+        # `get_organization_for_user`, so a caller can never post the practice
+        # entry into a workspace they do not belong to.
+        existing = _existing_practice_post(db, user, question, org.id)
+        if existing is not None:
+            return existing, None
         accounts = db.query(Account).filter(Account.organization_id == org.id).all()
         if org.framework == "OHADA":
             cash = next((a for a in accounts if a.code == "5711"), None)
@@ -848,8 +916,11 @@ def submit_attempt(
     if is_correct and question.posts_demo_transaction and organization_id:
         amount = question.practice_amount if question.practice_amount is not None else 0
         practice_transaction_id, practice_error = _apply_practice_posting(
-            db, user, organization_id, amount
+            db, user, question, organization_id, amount
         )
+        # A repeat submission re-reports the SAME transaction rather than
+        # creating a second one, so `practice_posted` stays a truthful "this
+        # workspace has this transaction" flag instead of a per-click counter.
         attempt.practice_posted = practice_transaction_id is not None
         attempt.practice_transaction_id = practice_transaction_id
 

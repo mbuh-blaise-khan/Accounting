@@ -311,9 +311,10 @@ def test_lessons_outside_the_gate_keep_seed_answer_order(client,
     still served in its stored seed order, byte for byte."""
     _register(client)
     gated = set(_OPTION_ORDER_LESSON_SLUGS)
-    # "debits-and-credits" joined the gate in the Lesson 3 expansion, so the
-    # untouched set here is Lesson 1 and the still-unexpanded Lessons 4-7.
-    for slug in (L1_SLUG, "journal-entries", "journal-to-ledger",
+    # "debits-and-credits" joined the gate in the Lesson 3 expansion and
+    # "journal-entries" in the Lesson 4 expansion, so the untouched set here is
+    # Lesson 1 and the still-unexpanded Lessons 5-7.
+    for slug in (L1_SLUG, "journal-to-ledger",
                  "the-trial-balance", "reading-financial-statements"):
         assert slug not in gated, slug
         _lesson, detail = _lesson_by_slug(client, slug)
@@ -325,6 +326,9 @@ def test_lessons_outside_the_gate_keep_seed_answer_order(client,
             )
     assert L1_SLUG not in _OPTION_ORDER_LESSON_SLUGS
     assert SLUG in _OPTION_ORDER_LESSON_SLUGS  # Lesson 2 is gated
+    # Lesson 4 joined the gate in the Lesson 4 expansion (documented in
+    # service.py: no question there asks the learner to read options in order).
+    assert "journal-entries" in _OPTION_ORDER_LESSON_SLUGS
 
 
 def test_lesson1_integrity_safeguards_unchanged(client, test_db_session):
