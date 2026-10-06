@@ -148,11 +148,13 @@ _OPTION_ORDER_LESSON_SLUGS = frozenset({
     "the-accounting-equation",
     "debits-and-credits",
     "journal-entries",
+    "journal-to-ledger",
 })
 _MEANINGFUL_OPTION_ORDER: dict[str, frozenset[int]] = {
     "the-accounting-equation": frozenset(),
     "debits-and-credits": frozenset(),
     "journal-entries": frozenset(),
+    "journal-to-ledger": frozenset(),
 }
 
 

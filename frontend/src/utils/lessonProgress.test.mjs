@@ -301,6 +301,54 @@ check('Lesson 4 numbering stays inside 1..18 and practicePosted is a stable flag
   assert.equal(posted.percent, 100)
 })
 
+// --- 9) Lesson 5 (journal to ledger) uses the same fixed-sequence contract ----
+// Lesson 5 is the expanded 14-question lesson with NO practice connector. The
+// UI helpers are lesson-agnostic, so the SAME contract must hold for its
+// 14-question payload: unique ids/positions, no adjacent duplicates, bounded
+// numbering and progress.
+const lesson5Questions = Array.from({ length: 14 }, (_, i) => ({
+  id: 500 + i,
+  position: i + 1,
+  question_en: `L5 Question ${i + 1}`,
+  question_fr: `L5 Question ${i + 1} FR`,
+  kind: i === 1 || i === 4 ? 'short_answer' : 'mcq',
+  answers: [{ option_key: 'A', text_en: 'A', text_fr: 'A' }],
+  posts_demo_transaction: false,
+}))
+
+check('the Lesson 5 sequence is 14 unique ids/positions with no connector', () => {
+  const seq = uniqueQuestionSequence(lesson5Questions)
+  assert.equal(seq.length, 14)
+  assert.deepEqual(seq.map((q) => q.position), [...Array(14).keys()].map((n) => n + 1))
+  assert.equal(new Set(seq.map((q) => q.id)).size, 14)
+  assert.equal(seq.filter((q) => q.posts_demo_transaction).length, 0)
+})
+
+check('Lesson 5 never renders an adjacent duplicate after a wrong answer', () => {
+  const withEcho = [lesson5Questions[4], lesson5Questions[4], ...lesson5Questions]
+  const seq = uniqueQuestionSequence(withEcho)
+  assert.equal(new Set(seq.map((q) => q.id)).size, seq.length)
+  for (let i = 1; i < seq.length; i += 1) {
+    assert.notEqual(seq[i].id, seq[i - 1].id)
+    assert.notEqual(seq[i].position, seq[i - 1].position)
+  }
+})
+
+check('Lesson 5 numbering stays inside 1..14 and progress is bounded', () => {
+  assert.equal(displayedQuestionNumber(0, 14), 1)
+  assert.equal(displayedQuestionNumber(13, 14), 14)
+  assert.equal(displayedQuestionNumber(13, 14) <= 14, true)
+  const view = lessonProgressView({
+    questions_total: 14,
+    questions_answered: 14,
+    questions_correct: 13,
+    best_score: 93,
+  })
+  assert.equal(view.answered, 14)
+  assert.equal(view.score, 93)
+  assert.equal(view.percent, 100)
+})
+
 console.log(`\n${passed} checks passed`)
 
 

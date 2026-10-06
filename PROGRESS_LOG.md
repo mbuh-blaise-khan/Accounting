@@ -12,6 +12,101 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
+## Session 23 — Expand Module 1 Lesson 5: journal to ledger (in place, DRAFT — validation NOT yet run)
+
+**Date:** 2026-10-06 — content expansion of Module 1 Lesson 5
+(`slug: journal-to-ledger`, curriculum position 5) from 2 sections / 2
+questions to **10 sections / 14 questions**, EN + FR. No duplicate lesson, no
+duplicate course, no duplicate slug, no replacement IDs, no new curriculum
+path — the existing lesson was expanded in place.
+
+**Identity confirmed before writing anything (nothing was invented):**
+- slug `journal-to-ledger`, position 5,
+- `title_en` "From journal to ledger" /
+  `title_fr` "Du journal au grand livre" — unchanged,
+- original questions: Q1 at **position 1** (mcq, options A–C, **A** correct)
+  and Q2 at **position 2** (short_answer, accepted answers **account** /
+  **compte**),
+- **No practice connector on Lesson 5**: the Learn→Practice connector lives
+  ONLY on Lesson 4 position 1 (`posts_demo_transaction = True`,
+  `practice_amount = 25000`) and is untouched by this expansion,
+- Downstream contracts honoured: 7-lesson curriculum order in
+  `test_learning.py`, Lessons 1–4 pinned at 18 questions each,
+  `_OPTION_ORDER_LESSON_SLUGS` gate semantics, and the certificate rule
+  `status == "completed" AND best_score == 100`.
+
+**Scope (checked against the full outline so nothing duplicates or leaks):**
+- Lesson 4 = dated/narrated/balanced journal entries from source documents;
+- Lesson 5 = posting each balanced line into its own ledger account
+  (T-account, debit/credit balances, reading one account, correcting by a NEW
+  entry — never erasing);
+- Lesson 6 = trial balance (all closing balances in one totals table);
+- Lesson 7 = income statement + balance sheet.
+- Lesson 5 never teaches the trial-balance totals test or statements.
+
+**What was built:**
+- `backend/app/learning/seed_data/lesson_5.py`: 10 headed sections
+  (objectives + BEFORE YOU START + shop; journal-vs-ledger; posting rule;
+  T-account; normal balances; Friday worked example; Saturday guided practice;
+  reading one account; correcting by new entry; sources + honest note) and 14
+  questions at contiguous positions 1..14 (Q1–Q2 originals with re-aimed
+  remediation 1→2, 2→3; Q3 posting rule; Q4 T-balance; Q5–Q6 normal balances;
+  Q7–Q8 Friday figures Cash 67,000 Dr / Supplier 85,000 Cr; Q9–Q11 Saturday
+  figures Cash 62,000 Dr / Supplier 50,000 Cr / Sales 55,000 Cr; Q12 reading a
+  supplier balance; Q13 correcting a wrong-account posting; Q14 honest scope).
+  Authored correct keys spread A×4 / B×5 / C×5; every question has
+  explanation/correction EN+FR and an in-lesson remediation pointer.
+- `backend/app/learning/service.py`: `journal-to-ledger` added to
+  `_OPTION_ORDER_LESSON_SLUGS` with an EMPTY meaningful-order exemption (all
+  option lists are alternative postings/balances/statements; Dr-vs-Cr lives
+  inside option text, never in option order).
+- `backend/app/tests/test_lesson2_option_order.py`: gate comment + untouched
+  set updated (Lesson 5 is now gated; untouched = Lesson 1 + Lessons 6–7).
+- `backend/app/tests/test_lesson5_expansion.py` (NEW, 11 tests): identity +
+  curriculum order; originals preserved (incl. short-answer meaning) + no
+  connector; 10 sections + 14 unique ids/positions; EN/FR parity + feedback +
+  remediation map {1:2,2:3,3:3,4:4,5:5,6:5,7:6,8:6,9:7,10:7,11:7,12:8,13:9,
+  14:10}; reseed idempotency + history; wrong-answer → remediation + review →
+  next distinct; bounded progress 13/14 → 93% then 14/14 → 100%, review
+  correction on the same question id; stable grading + deterministic display
+  (lesson == review == refresh == FR); Lessons 1–4 invariants + Lesson 4
+  connector intact; certificate rule unchanged.
+- `frontend/src/utils/lessonProgress.test.mjs`: Lesson-5 contract block
+  (14 unique ids/positions, no connector, no adjacent duplicates, numbering
+  1..14, bounded progress).
+
+**Verified sources (opened 2026-10-06; cited by title/URL, nothing
+reproduced):** ohada.org (OHADA — Organisation pour l'harmonisation en Afrique
+du droit des affaires; Uniform Act on Accounting Law and Financial Information
+/ SYSCOHADA signpost); ifrs.org (IFRS Foundation; IFRS Accounting Standards +
+Conceptual Framework); ifac.org (IFAC; International Education Standards);
+accaglobal.com (ACCA Global; Foundations in Accountancy syllabus overview).
+Optional academic reading is clearly labelled: Neba, Akoso Wilfred (UBa) and
+Kueda Wamba, Berthelo (FEMS) — public listable work only via Google Scholar /
+AJOL; no endorsement claimed; nothing reproduced. No claim that completion
+confers professional status (ONECCA named as example body).
+
+**Validation status (HONEST — commands could not run in this environment):**
+- `run_commands` (pytest, node, npm build) repeatedly returned "command
+  completion could not be observed / exit code 1" WITHOUT output, so NO test
+  or build result is claimed: focused backend suite, full backend suite,
+  `test:progression`, `test:feedback`, `test:review`, `test:i18n`, and `build`
+  are all UNVERIFIED.
+- File-level verification done instead: 14 questions at positions 1..14 with
+  unique EN/FR texts, kinds map, remediation map, original Q1 keys/meanings
+  and Q2 accepted answers preserved, no `posts_demo_transaction` in Lesson 5,
+  Lesson 4 connector still the only one, gate registration present.
+- Manual disposable-learner browser verification: NOT done. No commit made;
+  `git status --short` NOT observed (terminal unavailable).
+
+**Next session MUST:** run `test_lesson5_expansion.py`, the full backend
+suite, the four npm suites + build from a working terminal; do the
+disposable-learner browser pass (distinct sequence, wrong→next, refresh,
+bounded progress, review→mastery, completion, Lessons 1–4 unchanged); then
+review the diff, stage only intended files, and commit
+`Expand Module 1 Lesson 5: From journal to ledger`.
+
+
 ## Session 22 — Expand Module 1 Lesson 4: journal entries (in place)
 
 **Date:** 2026-10-02 — content expansion of Module 1 Lesson 4

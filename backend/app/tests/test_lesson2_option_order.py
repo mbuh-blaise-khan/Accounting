@@ -311,11 +311,11 @@ def test_lessons_outside_the_gate_keep_seed_answer_order(client,
     still served in its stored seed order, byte for byte."""
     _register(client)
     gated = set(_OPTION_ORDER_LESSON_SLUGS)
-    # "debits-and-credits" joined the gate in the Lesson 3 expansion and
-    # "journal-entries" in the Lesson 4 expansion, so the untouched set here is
-    # Lesson 1 and the still-unexpanded Lessons 5-7.
-    for slug in (L1_SLUG, "journal-to-ledger",
-                 "the-trial-balance", "reading-financial-statements"):
+    # "debits-and-credits" joined the gate in the Lesson 3 expansion,
+    # "journal-entries" in the Lesson 4 expansion and "journal-to-ledger" in
+    # the Lesson 5 expansion, so the untouched set here is Lesson 1 and the
+    # still-unexpanded Lessons 6-7.
+    for slug in (L1_SLUG, "the-trial-balance", "reading-financial-statements"):
         assert slug not in gated, slug
         _lesson, detail = _lesson_by_slug(client, slug)
         for q in detail["questions"]:
