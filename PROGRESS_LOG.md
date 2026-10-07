@@ -12,6 +12,65 @@ HOW TO USE THIS FILE:
   relevant Session X prompt from the build guide.
 - Do not delete old entries. This is a running history, not just a status.
 
+## Session 24 — Lesson 5 validation hotfix: answer-identity test defects
+
+**Date:** 2026-10-06 — Lesson 5 was committed as `c968a47`; the user-observed
+backend run showed `274 passed, 3 failed`. This session fixes ONLY those three
+test/data defects. Lesson 6 NOT started.
+
+**Root cause 1 — wording assertion too literal:**
+`test_original_questions_answers_preserved_and_no_connector` asserted the
+substring `"individual ledger account"` in Q2's `question_en`, but the
+PRESERVED original wording is `Each journal line is 'posted' to an individual
+ledger ______(page/account/section).` — the phrase "individual ledger account"
+only appears in `correction_en`, not the question. The question identity and
+meaning were never broken; the assertion was wrong.
+**Fix:** assert stable concept markers on the preserved text instead:
+`"posted"` + `"individual ledger"` (EN) and `"reportée"` +
+`"individuel du grand livre"` (FR). `short_answer_en == "account"` /
+`short_answer_fr == "compte"` assertions unchanged (still the original
+accepted answers).
+
+**Root cause 2/3 — tests assumed position 5 is an MCQ:**
+`test_reseed_is_idempotent_and_preserves_all_history` and
+`test_wrong_answer_remediation_review_and_next_distinct_question` selected
+`qs[4]` (position 5) and called `_answer_keys()`. The Lesson 5 seed defines
+position 5 as `kind: "short_answer"` ("Assets and expenses normally carry a
+______ balance"), which correctly has ZERO answer rows — so
+`next(a.option_key for a in rows if a.is_correct)` raised `StopIteration`.
+**Investigation result:** position 5 is INTENDED short-answer (seed
+`lesson_5.py` line ~196 `kind: "short_answer"`, and the test's own
+`EXPECTED_KINDS[5] == "short_answer"`). Therefore per the short-answer
+branch: NO option rows fabricated, seed untouched, IDs untouched.
+**Fix:** both tests now pick a closed-ended question BY KIND
+(`next(q for q in qs if q["kind"] == "mcq" and q["position"] > 2)` →
+position 3, an MCQ); remediation expectation keyed by
+`EXPECTED_REMEDIATION[missed["position"]]` (generic, not hardcoded `[5]`);
+next-question index derived from the chosen position; the reseed test's
+skip-condition keys on the chosen question's `id` rather than `position == 5`.
+No seed/data change was needed or made — so idempotent upsert, stable
+question/answer IDs, history, C1/C2/C3, Practice connector, certificate rule
+and Lessons 1–5 are all untouched by construction.
+
+**Validation attempts OBSERVED (all FAILED to execute):**
+- `cd backend && .venv/Scripts/python.exe -m pytest app/tests/test_lesson5_expansion.py -q`
+  → tool reported "command completion could not be observed / exit code 1",
+  no stdout.
+- `cd backend && .venv/Scripts/python.exe -m pytest app/tests -q` → same.
+- `npm run test:progression`, `test:feedback`, `test:review`, `test:i18n`,
+  `npm run build` → all same (one call surfaced unrelated terminal scrollback,
+  NOT command output). Probe `echo probe-1` also failed → shell is dead.
+- **No test result or exit code is claimed green.** The three fixes are
+  file-verified only (root cause traced to the exact failing lines above).
+
+**Status: fixes applied — validation pending.** No commit created (cannot
+observe `git diff`, `git status`, or a hash). Lesson 6 deliberately NOT
+started. Next session: run the focused + full backend suites and the four
+frontend suites + build, and if green commit
+`Fix Lesson 5 validation and answer integrity`, report hash + empty
+`git status --short`, THEN begin Lesson 6.
+
+
 ## Session 23 — Expand Module 1 Lesson 5: journal to ledger (in place, DRAFT — validation NOT yet run)
 
 **Date:** 2026-10-06 — content expansion of Module 1 Lesson 5
@@ -105,6 +164,19 @@ disposable-learner browser pass (distinct sequence, wrong→next, refresh,
 bounded progress, review→mastery, completion, Lessons 1–4 unchanged); then
 review the diff, stage only intended files, and commit
 `Expand Module 1 Lesson 5: From journal to ledger`.
+
+**Validation re-attempt OBSERVED (appended later, history above unchanged):**
+- A subsequent session retried the terminal with the minimal probe
+  `echo terminal-alive`: the tool again reported "Command completion could not
+  be observed / exit code 1" with NO stdout. Earlier probes (`git status
+  --short`, `git log --oneline -3`, `pwd`, pytest, node, npm) failed the same
+  way. The shell is unavailable, so the gap is NOT closed: no commit hash, no
+  repository status, no test exit code, and no build result has been observed
+  for this session's work.
+- Status remains: **draft — validation pending. Lesson 5 is not committed.**
+  Lesson 6 expansion was deliberately NOT started, per the rule to close this
+  gap first and to stop at "draft—validation pending" when execution is
+  unavailable.
 
 
 ## Session 22 — Expand Module 1 Lesson 4: journal entries (in place)

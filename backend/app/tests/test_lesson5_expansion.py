@@ -107,7 +107,14 @@ def test_original_questions_answers_preserved_and_no_connector(client, test_db_s
     assert [a.option_key for a in rows1] == ["A", "B", "C"]
     assert [a.is_correct for a in rows1] == [True, False, False]
     assert (q2["position"], q2["kind"]) == (2, "short_answer")
-    assert "individual ledger account" in q2["question_en"]
+    # Stable concept markers (not the full string): the PRESERVED original
+    # wording is "Each journal line is 'posted' to an individual ledger
+    # ______(page/account/section)." — asserting substrings keeps identity
+    # pinned without coupling to punctuation.
+    assert "posted" in q2["question_en"]
+    assert "individual ledger" in q2["question_en"]
+    assert "reportée" in q2["question_fr"]
+    assert "individuel du grand livre" in q2["question_fr"]
     row2 = test_db_session.get(Question, q2["id"])
     assert row2.short_answer_en == "account"
     assert row2.short_answer_fr == "compte"
@@ -189,11 +196,14 @@ def test_reseed_is_idempotent_and_preserves_all_history(client, test_db_session)
     _register(client)
     lesson, detail = _lesson_by_slug(client, SLUG)
     qs = detail["questions"]
-    wrong_q = qs[4]  # position 5
+    # Position 5 is a SHORT-ANSWER question (seed kind == "short_answer": it
+    # has NO answer rows, so _answer_keys would raise StopIteration). Select a
+    # known MCQ by KIND instead of assuming a position is closed-ended.
+    wrong_q = next(q for q in qs if q["kind"] == "mcq" and q["position"] > 2)
     _attempt(client, lesson["id"], wrong_q["id"],
              option_key=_answer_keys(test_db_session, wrong_q["id"])[1])
     for q in qs:
-        if q["position"] == 5:
+        if q["id"] == wrong_q["id"]:
             continue
         _attempt(client, lesson["id"], q["id"],
                  **_correct_answer_payload(test_db_session, q))
@@ -238,7 +248,9 @@ def test_wrong_answer_remediation_review_and_next_distinct_question(
     _register(client)
     lesson, detail = _lesson_by_slug(client, SLUG)
     qs = detail["questions"]
-    missed = qs[4]  # position 5
+    # Position 5 is SHORT-ANSWER (no option rows → no correct key). Pick a
+    # real MCQ by KIND so _answer_keys can grade a wrong option.
+    missed = next(q for q in qs if q["kind"] == "mcq" and q["position"] > 2)
     res = _attempt(client, lesson["id"], missed["id"],
                    option_key=_answer_keys(test_db_session, missed["id"])[1])
     assert res["is_correct"] is False
@@ -247,14 +259,15 @@ def test_wrong_answer_remediation_review_and_next_distinct_question(
     assert fb["explanation"] and fb["correction"]
     rem = fb["remediation"]
     assert rem is not None and rem["lesson_id"] == lesson["id"]
-    assert rem["section_position"] == EXPECTED_REMEDIATION[5]
+    assert rem["section_position"] == EXPECTED_REMEDIATION[missed["position"]]
     cards = _reviews(client)
     assert len(cards) == 1
     assert cards[0]["question_id"] == missed["id"]
     assert cards[0]["is_due"] is True
     detail2 = _lesson_by_slug(client, SLUG)[1]
     assert [x["id"] for x in detail2["questions"]] == [x["id"] for x in qs]
-    nxt = detail2["questions"][5]
+    # 0-based index of the NEXT position = the missed question's 1-based position.
+    nxt = detail2["questions"][missed["position"]]
     assert nxt["id"] != missed["id"]
     assert nxt["position"] == missed["position"] + 1
     _attempt(client, lesson["id"], missed["id"],
